@@ -1,0 +1,36 @@
+name: hadraniel_admin
+description: "A new Flutter project."
+publish_to: 'none'
+
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.8.1
+
+dependencies:
+  flutter:
+    sdk: flutter
+  supabase_flutter: ^1.10.9
+  sqflite_common_ffi: ^2.3.0
+  path_provider: ^2.1.2
+  provider: ^6.1.1
+  uuid: ^3.0.7
+  intl: ^0.19.0
+  flutter_dotenv: ^5.1.0
+  fl_chart: ^0.63.0
+  csv: ^5.0.1
+  pdf: ^3.10.7
+  flutter_secure_storage: ^9.0.0
+  path: ^1.8.3
+
+  cupertino_icons: ^1.0.8
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^5.0.0
+
+flutter:
+  uses-material-design: true
+  assets:
+    - .env
