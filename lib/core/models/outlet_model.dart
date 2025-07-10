@@ -2,34 +2,34 @@ class Outlet {
   final String id;
   final String name;
   final String? location;
-  final DateTime createdAt;
+  final DateTime? createdAt;
 
   Outlet({
     required this.id,
     required this.name,
     this.location,
-    required this.createdAt,
+    this.createdAt,
   });
 
   factory Outlet.fromJson(Map<String, dynamic> json) => Outlet(
     id: json['id'],
     name: json['name'],
     location: json['location'],
-    createdAt: DateTime.parse(json['created_at']),
+    createdAt: json['created_at'] != null ? DateTime.parse(json['created_at']) : null,
   );
 
   Map<String, dynamic> toMap() => {
     'id': id,
     'name': name,
     'location': location,
-    'created_at': createdAt.toIso8601String(),
+    'created_at': createdAt?.toIso8601String(),
   };
 
   factory Outlet.fromMap(Map<String, dynamic> map) => Outlet(
     id: map['id'],
     name: map['name'],
     location: map['location'],
-    createdAt: DateTime.parse(map['created_at']),
+    createdAt: map['created_at'] != null ? DateTime.parse(map['created_at']) : null,
   );
 
   Outlet copyWith({

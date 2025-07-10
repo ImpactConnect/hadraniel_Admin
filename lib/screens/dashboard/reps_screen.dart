@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
+import '../../core/models/outlet_model.dart';
 import '../../core/models/rep_model.dart';
 import '../../core/services/rep_service.dart';
 import '../../core/services/sync_service.dart';
+import '../../widgets/loading_overlay.dart';
 import 'rep_form_screen.dart';
+import 'rep_profile_screen.dart';
 import 'sidebar.dart';
 
 class RepsScreen extends StatefulWidget {
@@ -16,52 +19,76 @@ class _RepsScreenState extends State<RepsScreen> {
   final RepService _repService = RepService();
   final SyncService _syncService = SyncService();
   List<Rep> _reps = [];
+  List<Rep> _filteredReps = [];
+  List<Outlet> _outlets = [];
   String _searchQuery = '';
   bool _isLoading = false;
+  bool _isSyncing = false;
+  
+  // Metrics
+  int get totalReps => _reps.where((rep) => !rep.isAdmin).length;
+  int get totalAdmins => _reps.where((rep) => rep.isAdmin).length;
+
+  String _getOutletName(String? outletId) {
+    if (outletId == null) return 'Not assigned';
+    final outlet = _outlets.firstWhere(
+      (o) => o.id == outletId,
+      orElse: () => Outlet(
+        id: outletId,
+        name: 'Unknown',
+        createdAt: null,
+      ),
+    );
+    return outlet.name;
+  }
 
   @override
   void initState() {
     super.initState();
-    _loadReps();
-    _syncReps(); // Sync data when screen loads
+    _loadData();
+    _syncData();
   }
 
-  Future<void> _loadReps() async {
-    setState(() => _isLoading = true);
+  Future<void> _loadData() async {
     try {
+      setState(() => _isLoading = true);
       final reps = await _repService.getAllReps();
+      final outlets = await _syncService.getAllLocalOutlets();
       setState(() {
         _reps = reps;
-        _isLoading = false;
+        _filteredReps = reps;
+        _outlets = outlets;
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error loading reps: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading data: $e')),
+        );
       }
+    } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  Future<void> _syncReps() async {
-    setState(() => _isLoading = true);
+  Future<void> _syncData() async {
     try {
+      setState(() => _isSyncing = true);
       await _syncService.syncRepsToLocalDb();
-      await _loadReps();
+      await _syncService.syncOutletsToLocalDb();
+      await _loadData();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Reps synced successfully')),
+          const SnackBar(content: Text('Data synced successfully')),
         );
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error syncing reps: $e')));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error syncing data: $e')),
+        );
       }
     } finally {
-      setState(() => _isLoading = false);
+      setState(() => _isSyncing = false);
     }
   }
 
@@ -72,7 +99,7 @@ class _RepsScreenState extends State<RepsScreen> {
     );
 
     if (result == true) {
-      _loadReps();
+      _loadData();
     }
   }
 
@@ -101,7 +128,7 @@ class _RepsScreenState extends State<RepsScreen> {
       try {
         final success = await _repService.deleteRep(rep.id);
         if (success) {
-          _loadReps();
+          _loadData();
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               const SnackBar(content: Text('Rep deleted successfully')),
@@ -129,9 +156,7 @@ class _RepsScreenState extends State<RepsScreen> {
           (rep) =>
               rep.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
               rep.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-              (rep.outletId?.toLowerCase() ?? '').contains(
-                _searchQuery.toLowerCase(),
-              ),
+              _getOutletName(rep.outletId).toLowerCase().contains(_searchQuery.toLowerCase()),
         )
         .toList();
 
@@ -141,88 +166,108 @@ class _RepsScreenState extends State<RepsScreen> {
         actions: [
           IconButton(
             icon: const Icon(Icons.sync),
-            onPressed: _isLoading ? null : _syncReps,
-            tooltip: 'Sync Reps',
+            onPressed: _isLoading ? null : _syncData,
+            tooltip: 'Sync Data',
           ),
         ],
       ),
       drawer: Sidebar(),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      labelText: 'Search Reps',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (value) => setState(() => _searchQuery = value),
+      body: LoadingOverlay(
+        isLoading: _isLoading,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                children: [
+                  _buildMetricCard(
+                    'Total Reps',
+                    totalReps.toString(),
+                    Icons.people,
                   ),
-                ),
-                Expanded(
-                  child: filteredReps.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'No representatives found',
-                            style: TextStyle(fontSize: 16),
-                          ),
-                        )
-                      : SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            columns: const [
-                              DataColumn(label: Text('Name')),
-                              DataColumn(label: Text('Outlet Assigned')),
-                              DataColumn(label: Text('Date Created')),
-                              DataColumn(label: Text('Actions')),
-                            ],
-                            rows: filteredReps.map((rep) {
-                              return DataRow(
-                                cells: [
-                                  DataCell(
-                                    Text(rep.fullName),
-                                    onTap: () => _showRepDetails(rep),
-                                  ),
-                                  DataCell(
-                                    Text(rep.outletId ?? 'Not assigned'),
-                                    onTap: () => _showRepDetails(rep),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      rep.createdAt?.toString().split('.')[0] ??
-                                          'N/A',
-                                    ),
-                                    onTap: () => _showRepDetails(rep),
-                                  ),
-                                  DataCell(
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.edit),
-                                          onPressed: () =>
-                                              _navigateToRepForm(rep: rep),
-                                          tooltip: 'Edit Rep',
-                                        ),
-                                        IconButton(
-                                          icon: const Icon(Icons.delete),
-                                          onPressed: () => _deleteRep(rep),
-                                          tooltip: 'Delete Rep',
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
-                          ),
-                        ),
-                ),
-              ],
+                  const SizedBox(width: 16),
+                  _buildMetricCard(
+                    'Admin Users',
+                    totalAdmins.toString(),
+                    Icons.admin_panel_settings,
+                  ),
+                ],
+              ),
             ),
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: TextField(
+                decoration: const InputDecoration(
+                  labelText: 'Search Reps',
+                  prefixIcon: Icon(Icons.search),
+                  border: OutlineInputBorder(),
+                ),
+                onChanged: (value) => setState(() => _searchQuery = value),
+              ),
+            ),
+            Expanded(
+              child: filteredReps.isEmpty
+                  ? const Center(
+                      child: Text(
+                        'No representatives found',
+                        style: TextStyle(fontSize: 16),
+                      ),
+                    )
+                  : SingleChildScrollView(
+                      scrollDirection: Axis.horizontal,
+                      child: DataTable(
+                        columns: const [
+                          DataColumn(label: Text('Name')),
+                          DataColumn(label: Text('Outlet Assigned')),
+                          DataColumn(label: Text('Date Created')),
+                          DataColumn(label: Text('Actions')),
+                        ],
+                        rows: filteredReps.map((rep) {
+                          return DataRow(
+                            cells: [
+                              DataCell(
+                                Text(rep.fullName),
+                                onTap: () => _showRepDetails(rep),
+                              ),
+                              DataCell(
+                                Text(_getOutletName(rep.outletId)),
+                                onTap: () => _showRepDetails(rep),
+                              ),
+                              DataCell(
+                                Text(
+                                  rep.createdAt?.toString().split('.')[0] ??
+                                      'N/A',
+                                ),
+                                onTap: () => _showRepDetails(rep),
+                              ),
+                              DataCell(
+                                Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    IconButton(
+                                      icon: const Icon(Icons.edit),
+                                      onPressed: () =>
+                                          _navigateToRepForm(rep: rep),
+                                      tooltip: 'Edit Rep',
+                                    ),
+                                    IconButton(
+                                      icon: const Icon(Icons.delete),
+                                      onPressed: () => _deleteRep(rep),
+                                      tooltip: 'Delete Rep',
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          );
+                        }).toList(),
+                      ),
+                    ),
+            ),
+          ],
+        ),
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddRepDialog,
         tooltip: 'Add New Rep',
@@ -231,36 +276,43 @@ class _RepsScreenState extends State<RepsScreen> {
     );
   }
 
-  void _showRepDetails(Rep rep) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(rep.fullName),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Email: ${rep.email}'),
-            const SizedBox(height: 8),
-            Text('Outlet ID: ${rep.outletId ?? 'Not assigned'}'),
-            const SizedBox(height: 8),
-            Text(
-              'Created: ${rep.createdAt?.toString().split('.')[0] ?? 'N/A'}',
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Sales History:',
-              style: TextStyle(fontWeight: FontWeight.bold),
-            ),
-            const Text('Coming soon...'),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Close'),
+
+
+  Widget _buildMetricCard(String title, String value, IconData icon) {
+    return Expanded(
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Padding(
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            children: [
+              Icon(icon, size: 32, color: Theme.of(context).primaryColor),
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
+                  color: Theme.of(context).primaryColor,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                title,
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ],
           ),
-        ],
+        ),
+      ),
+    );
+  }
+
+  void _showRepDetails(Rep rep) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => RepProfileScreen(rep: rep),
       ),
     );
   }
@@ -350,7 +402,7 @@ class _RepsScreenState extends State<RepsScreen> {
 
                           if (rep != null) {
                             Navigator.pop(context, true);
-                            _loadReps();
+                            _loadData();
                           } else {
                             throw Exception('Failed to create rep');
                           }

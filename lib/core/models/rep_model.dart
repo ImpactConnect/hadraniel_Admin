@@ -6,6 +6,8 @@ class Rep {
   final String role;
   final String? createdAt;
 
+  bool get isAdmin => role == 'admin';
+
   Rep({
     required this.id,
     required this.fullName,
