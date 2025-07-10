@@ -215,6 +215,19 @@ class _ProductsScreenState extends State<ProductsScreen> {
   void initState() {
     super.initState();
     _loadProducts();
+    _loadOutlets();
+  }
+
+  Future<void> _loadOutlets() async {
+    try {
+      await _syncService.syncOutletsToLocalDb();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading outlets: $e')));
+      }
+    }
   }
 
   Future<void> _deleteProduct(Product product) async {
@@ -600,97 +613,114 @@ class _ProductsScreenState extends State<ProductsScreen> {
             ),
           ),
           Expanded(
-            child: SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
+            child: PrimaryScrollController(
+              controller: ScrollController(),
               child: SingleChildScrollView(
-                child: DataTable(
-                  columns: const [
-                    DataColumn(label: Text('Product Name')),
-                    DataColumn(label: Text('Unit')),
-                    DataColumn(label: Text('Quantity')),
-                    DataColumn(label: Text('Cost/Unit')),
-                    DataColumn(label: Text('Assigned Outlet')),
-                    DataColumn(label: Text('Total Cost')),
-                    DataColumn(label: Text('Date Added')),
-                    DataColumn(label: Text('Date Updated')),
-                    DataColumn(label: Text('Sync Status')),
-                    DataColumn(label: Text('Actions')),
-                  ],
-                  rows: filteredProducts.map((product) {
-                    final totalCost = product.quantity * product.costPerUnit;
-                    return DataRow(
-                      cells: [
-                        DataCell(Text(product.productName)),
-                        DataCell(Text(product.unit)),
-                        DataCell(Text(product.quantity.toString())),
-                        DataCell(
-                          Text('\$${product.costPerUnit.toStringAsFixed(2)}'),
+                scrollDirection: Axis.horizontal,
+                child: SingleChildScrollView(
+                  controller: ScrollController(),
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      dataTableTheme: DataTableThemeData(
+                        headingRowColor: MaterialStateProperty.all(
+                          Theme.of(context).colorScheme.primary.withOpacity(0.1),
                         ),
-                        DataCell(
-                          FutureBuilder<String>(
-                            future: _syncService.getOutletName(
-                              product.outletId,
+                      ),
+                    ),
+                    child: DataTable(
+                    columns: const [
+                      DataColumn(label: Text('Product Name')),
+                      DataColumn(label: Text('Unit')),
+                      DataColumn(label: Text('Quantity')),
+                      DataColumn(label: Text('Cost/Unit')),
+                      DataColumn(label: Text('Assigned Outlet')),
+                      DataColumn(label: Text('Total Cost')),
+                      DataColumn(label: Text('Date Added')),
+                      DataColumn(label: Text('Date Updated')),
+                      DataColumn(label: Text('Sync Status')),
+                      DataColumn(label: Text('Actions')),
+                    ],
+                    rows: filteredProducts.map((product) {
+                      final totalCost = product.quantity * product.costPerUnit;
+                      return DataRow(
+                        cells: [
+                          DataCell(Text(product.productName)),
+                          DataCell(Text(product.unit)),
+                          DataCell(Text(product.quantity.toString())),
+                          DataCell(
+                            Text('\$${product.costPerUnit.toStringAsFixed(2)}'),
+                          ),
+                          DataCell(
+                            FutureBuilder<String>(
+                              future: _syncService.getOutletName(
+                                product.outletId,
+                              ),
+                              builder: (context, snapshot) {
+                                if (snapshot.hasData) {
+                                  return Text(snapshot.data!);
+                                }
+                                return const Text('Loading...');
+                              },
                             ),
-                            builder: (context, snapshot) {
-                              if (snapshot.hasData) {
-                                return Text(snapshot.data!);
-                              }
-                              return const Text('Loading...');
-                            },
                           ),
-                        ),
-                        DataCell(Text('\$${totalCost.toStringAsFixed(2)}')),
-                        DataCell(
-                          Text(
-                            DateFormat('yyyy-MM-dd').format(product.dateAdded),
+                          DataCell(Text('\$${totalCost.toStringAsFixed(2)}')),
+                          DataCell(
+                            Text(
+                              DateFormat(
+                                'yyyy-MM-dd',
+                              ).format(product.dateAdded),
+                            ),
                           ),
-                        ),
-                        DataCell(
-                          Text(
-                            DateFormat('yyyy-MM-dd').format(product.createdAt),
+                          DataCell(
+                            Text(
+                              DateFormat(
+                                'yyyy-MM-dd',
+                              ).format(product.createdAt),
+                            ),
                           ),
-                        ),
-                        DataCell(
-                          Icon(
-                            product.isSynced
-                                ? Icons.cloud_done
-                                : Icons.cloud_off,
-                            color: product.isSynced
-                                ? Colors.green
-                                : Colors.grey,
+                          DataCell(
+                            Icon(
+                              product.isSynced
+                                  ? Icons.cloud_done
+                                  : Icons.cloud_off,
+                              color: product.isSynced
+                                  ? Colors.green
+                                  : Colors.grey,
+                            ),
                           ),
-                        ),
-                        DataCell(
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              IconButton(
-                                icon: const Icon(Icons.visibility, size: 20),
-                                onPressed: () => showDialog(
-                                  context: context,
-                                  builder: (context) =>
-                                      ProductDetailPopup(product: product),
+                          DataCell(
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                IconButton(
+                                  icon: const Icon(Icons.visibility, size: 20),
+                                  onPressed: () => showDialog(
+                                    context: context,
+                                    builder: (context) =>
+                                        ProductDetailPopup(product: product),
+                                  ),
                                 ),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.edit, size: 20),
-                                onPressed: () =>
-                                    _showProductDialog(product: product),
-                              ),
-                              IconButton(
-                                icon: const Icon(Icons.delete, size: 20),
-                                onPressed: () => _deleteProduct(product),
-                              ),
-                            ],
+                                IconButton(
+                                  icon: const Icon(Icons.edit, size: 20),
+                                  onPressed: () =>
+                                      _showProductDialog(product: product),
+                                ),
+                                IconButton(
+                                  icon: const Icon(Icons.delete, size: 20),
+                                  onPressed: () => _deleteProduct(product),
+                                ),
+                              ],
+                            ),
                           ),
-                        ),
-                      ],
-                    );
-                  }).toList(),
+                        ],
+                      );
+                    }).toList(),
+                  ),
                 ),
               ),
             ),
           ),
+          )
         ],
       ),
       floatingActionButton: FloatingActionButton(
