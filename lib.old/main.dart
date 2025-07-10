@@ -2,7 +2,6 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
-import 'core/services/auth_service.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/dashboard/reps_screen.dart';
@@ -28,49 +27,15 @@ void main() async {
   runApp(const MyApp());
 }
 
-class MyApp extends StatefulWidget {
+class MyApp extends StatelessWidget {
   const MyApp({super.key});
-
-  @override
-  State<MyApp> createState() => _MyAppState();
-}
-
-class _MyAppState extends State<MyApp> {
-  final _authService = AuthService();
-  bool _isLoading = true;
-  bool _isAuthenticated = false;
-
-  @override
-  void initState() {
-    super.initState();
-    _checkSession();
-  }
-
-  Future<void> _checkSession() async {
-    final currentUser = await _authService.getCurrentUser();
-    if (currentUser != null) {
-      final profile = await _authService.getUserProfile(currentUser.id);
-      if (profile != null && profile.role == 'admin') {
-        setState(() {
-          _isAuthenticated = true;
-        });
-      }
-    }
-    setState(() {
-      _isLoading = false;
-    });
-  }
 
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Hadraniel Admin',
       theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
-      home: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : _isAuthenticated
-          ? const DashboardScreen()
-          : const LoginScreen(),
+      initialRoute: '/login',
       routes: {
         '/login': (context) => const LoginScreen(),
         '/dashboard': (context) => const DashboardScreen(),

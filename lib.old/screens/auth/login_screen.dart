@@ -46,10 +46,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
         // Navigate to dashboard on successful admin login
         if (mounted) {
-          Navigator.of(context).pushNamedAndRemoveUntil(
-            '/dashboard',
-            (route) => false, // Clear the entire navigation stack
-          );
+          Navigator.pushReplacementNamed(context, '/dashboard');
         }
 
         // Test: Print local profiles after sync

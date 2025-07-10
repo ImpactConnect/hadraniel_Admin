@@ -87,13 +87,12 @@ class RepService {
   }) async {
     try {
       // Create user in Supabase Auth
-      final authResponse = await supabase.auth.signUp(
-        email: email,
-        password: password,
-        data: {
-          'full_name': fullName,
-          'role': 'rep',
-        },
+      final authResponse = await supabase.auth.admin.createUser(
+        AdminUserAttributes(
+          email: email,
+          password: password,
+          userMetadata: {'full_name': fullName},
+        ),
       );
 
       if (authResponse.user == null) throw 'Failed to create user';
@@ -107,14 +106,8 @@ class RepService {
         createdAt: DateTime.now().toIso8601String(),
       );
 
-      // Add to profiles table with correct schema
-      await supabase.from('profiles').insert({
-        'id': rep.id,
-        'outlet_id': rep.outletId,
-        'full_name': rep.fullName,
-        'role': rep.role,
-        'created_at': rep.createdAt
-      });
+      // Add to profiles table
+      await supabase.from('profiles').insert(rep.toMap());
 
       // Add to local database
       await addRepLocally(rep);
@@ -122,7 +115,7 @@ class RepService {
       return rep;
     } catch (e) {
       print('Error creating rep: $e');
-      throw e; // Re-throw to handle in UI
+      return null;
     }
   }
 

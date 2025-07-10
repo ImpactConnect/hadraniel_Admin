@@ -51,41 +51,26 @@ class _RepFormScreenState extends State<RepFormScreen> {
     try {
       if (widget.rep == null) {
         // Creating new rep
-        await _repService.createRep(
+        final rep = await _repService.createRep(
           fullName: _fullNameController.text,
           email: _emailController.text,
           password: _passwordController.text,
           outletId: _selectedOutletId,
         );
 
-        if (mounted) {
-          await showDialog(
-            context: context,
-            builder: (context) => AlertDialog(
-              title: const Text('Success'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text('Sales representative account created successfully!'),
-                  const SizedBox(height: 8),
-                  Text('Name: ${_fullNameController.text}'),
-                  Text('Email: ${_emailController.text}'),
-                  if (_selectedOutletId != null)
-                    Text('Outlet: ${_outlets.firstWhere((o) => o.id == _selectedOutletId).name}')
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () {
-                    Navigator.of(context).pop(); // Close dialog
-                    Navigator.of(context).pop(true); // Return to previous screen
-                  },
-                  child: const Text('OK'),
-                ),
-              ],
-            ),
-          );
+        if (rep != null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Rep created successfully')),
+            );
+            Navigator.pop(context, true);
+          }
+        } else {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Failed to create rep')),
+            );
+          }
         }
       } else {
         // Updating existing rep
@@ -99,33 +84,10 @@ class _RepFormScreenState extends State<RepFormScreen> {
 
         if (success) {
           if (mounted) {
-            await showDialog(
-              context: context,
-              builder: (context) => AlertDialog(
-                title: const Text('Success'),
-                content: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const Text('Sales representative account updated successfully!'),
-                    const SizedBox(height: 8),
-                    Text('Name: ${_fullNameController.text}'),
-                    Text('Email: ${_emailController.text}'),
-                    if (_selectedOutletId != null)
-                      Text('Outlet: ${_outlets.firstWhere((o) => o.id == _selectedOutletId).name}')
-                  ],
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () {
-                      Navigator.of(context).pop(); // Close dialog
-                      Navigator.of(context).pop(true); // Return to previous screen
-                    },
-                    child: const Text('OK'),
-                  ),
-                ],
-              ),
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(content: Text('Rep updated successfully')),
             );
+            Navigator.pop(context, true);
           }
         } else {
           if (mounted) {
@@ -137,31 +99,12 @@ class _RepFormScreenState extends State<RepFormScreen> {
       }
     } catch (e) {
       if (mounted) {
-        String errorMessage = 'An error occurred';
-        if (e.toString().contains('User not allowed')) {
-          errorMessage = 'You do not have permission to create users. Please check your admin privileges.';
-        } else if (e.toString().contains('already exists')) {
-          errorMessage = 'A user with this email already exists.';
-        }
-        
-        await showDialog(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: const Text('Error'),
-            content: Text(errorMessage),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('OK'),
-              ),
-            ],
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error: $e')));
       }
     } finally {
-      if (mounted) {
-        setState(() => _isLoading = false);
-      }
+      setState(() => _isLoading = false);
     }
   }
 

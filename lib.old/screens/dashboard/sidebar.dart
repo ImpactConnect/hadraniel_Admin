@@ -70,10 +70,7 @@ class Sidebar extends StatelessWidget {
             onTap: () async {
               await _authService.signOut();
               if (context.mounted) {
-                Navigator.of(context).pushNamedAndRemoveUntil(
-                  '/login',
-                  (route) => false, // Clear the entire navigation stack
-                );
+                Navigator.pushReplacementNamed(context, '/login');
               }
             },
           ),
