@@ -76,6 +76,19 @@ class DatabaseHelper {
         created_at TEXT
       )
     ''');
+
+    // Sales table
+    await db.execute('''
+      CREATE TABLE sales (
+        id TEXT PRIMARY KEY,
+        outlet_id TEXT NOT NULL,
+        customer_id TEXT,
+        total_amount REAL,
+        is_paid INTEGER DEFAULT 0,
+        created_at TEXT,
+        FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+      )
+    ''');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/models/outlet_model.dart';
 import '../../core/services/sync_service.dart';
 import 'sidebar.dart';
+import 'outlet_profile_screen.dart';
 
 class OutletsScreen extends StatefulWidget {
   const OutletsScreen({super.key});
@@ -15,6 +16,10 @@ class _OutletsScreenState extends State<OutletsScreen> {
   List<Outlet> _outlets = [];
   String _searchQuery = '';
   bool _isLoading = false;
+
+  // Metrics
+  int get totalOutlets => _outlets.length;
+  int get activeOutlets => _outlets.length; // TODO: Add active status to outlets
 
   @override
   void initState() {
@@ -110,7 +115,7 @@ class _OutletsScreenState extends State<OutletsScreen> {
                             createdAt: outlet?.createdAt ?? DateTime.now(),
                           );
 
-                          await _syncService.syncOutletsToLocalDb();
+                          await _syncService.syncOutletsToLocalDb([newOutlet]);
                           Navigator.pop(context);
                           _loadOutlets();
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -145,6 +150,40 @@ class _OutletsScreenState extends State<OutletsScreen> {
   }
 
   @override
+  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Row(
+          children: [
+            Icon(icon, color: color, size: 24),
+            const SizedBox(width: 12),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(color: color.withOpacity(0.7), fontSize: 14),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: TextStyle(color: color, fontSize: 24, fontWeight: FontWeight.bold),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final filteredOutlets = _outlets
         .where(
@@ -170,7 +209,28 @@ class _OutletsScreenState extends State<OutletsScreen> {
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: Row(
+                    children: [
+                      _buildMetricCard(
+                        'Total Outlets',
+                        totalOutlets.toString(),
+                        Icons.store,
+                        Colors.blue,
+                      ),
+                      const SizedBox(width: 16),
+                      _buildMetricCard(
+                        'Active Outlets',
+                        activeOutlets.toString(),
+                        Icons.store,
+                        Colors.green,
+                      ),
+                    ],
+                  ),
+                ),
                 Padding(
                   padding: const EdgeInsets.all(16.0),
                   child: TextField(
@@ -202,7 +262,15 @@ class _OutletsScreenState extends State<OutletsScreen> {
                             rows: filteredOutlets.map((outlet) {
                               return DataRow(
                                 cells: [
-                                  DataCell(Text(outlet.name)),
+                                  DataCell(
+                                    Text(outlet.name),
+                                    onTap: () => Navigator.push(
+                                      context,
+                                      MaterialPageRoute(
+                                        builder: (context) => OutletProfileScreen(outlet: outlet),
+                                      ),
+                                    ),
+                                  ),
                                   DataCell(
                                     Text(outlet.location ?? 'No location'),
                                   ),

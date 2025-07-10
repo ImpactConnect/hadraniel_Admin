@@ -4,9 +4,39 @@ import '../models/profile_model.dart';
 import '../models/outlet_model.dart';
 import '../models/product_model.dart';
 import '../models/rep_model.dart';
+import '../models/sale_model.dart';
 import '../database/database_helper.dart';
 
 class SyncService {
+  // Sales methods
+  Future<List<Sale>> getAllLocalSales() async {
+    final db = await _dbHelper.database;
+    final List<Map<String, dynamic>> maps = await db.query('sales');
+    return List.generate(maps.length, (i) => Sale.fromMap(maps[i]));
+  }
+
+  Future<void> syncSalesToLocalDb() async {
+    try {
+      final response = await supabase.from('sales').select();
+      final sales = response as List<dynamic>;
+
+      final db = await _dbHelper.database;
+      final batch = db.batch();
+
+      // Clear existing sales
+      batch.delete('sales');
+
+      // Insert new sales
+      for (final saleData in sales) {
+        batch.insert('sales', Sale.fromMap(saleData as Map<String, dynamic>).toMap());
+      }
+
+      await batch.commit();
+    } catch (e) {
+      print('Error syncing sales: $e');
+      rethrow;
+    }
+  }
   final supabase = Supabase.instance.client;
   final DatabaseHelper _dbHelper = DatabaseHelper();
 
@@ -35,16 +65,15 @@ class SyncService {
   }
 
   // Outlets Sync
-  Future<void> syncOutletsToLocalDb() async {
+  Future<void> syncOutletsToLocalDb([List<Outlet>? outlets]) async {
     try {
-      final response = await supabase.from('outlets').select();
-      final outlets = (response as List)
+      final outletsToSync = outlets ?? (await supabase.from('outlets').select() as List)
           .map((data) => Outlet.fromMap(data))
           .toList();
 
       final db = await _dbHelper.database;
       await db.transaction((txn) async {
-        for (var outlet in outlets) {
+        for (var outlet in outletsToSync) {
           await txn.insert(
             'outlets',
             outlet.toMap(),

@@ -34,8 +34,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
     final formKey = GlobalKey<FormState>();
     String name = product?.name ?? '';
     String unit = product?.unit ?? '';
-    double price = product?.price ?? 0.0;
-    List<String> selectedOutlets = product?.outletIds ?? [];
+    double? price = product?.price;
+    List<String>? selectedOutlets = product?.outletIds;
 
     showDialog(
       context: context,
@@ -61,7 +61,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 onSaved: (value) => unit = value ?? '',
               ),
               TextFormField(
-                initialValue: price.toString(),
+                initialValue: price?.toString() ?? '0.0',
                 decoration: const InputDecoration(labelText: 'Price'),
                 keyboardType: TextInputType.number,
                 validator: (value) {
@@ -105,7 +105,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
     if (_selectedOutlet != null) {
       filteredProducts = filteredProducts.where(
-        (product) => product.outletIds.contains(_selectedOutlet),
+        (product) => product.outletIds?.contains(_selectedOutlet) ?? false,
       );
     }
 
@@ -175,7 +175,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                   leading: const Icon(Icons.inventory),
                   title: Text(product.name),
                   subtitle: Text(
-                    '${product.unit} - \$${product.price.toStringAsFixed(2)}',
+                    '${product.unit ?? 'N/A'} - \$${product.price?.toStringAsFixed(2) ?? '0.00'}',
                   ),
                   trailing: Row(
                     mainAxisSize: MainAxisSize.min,
