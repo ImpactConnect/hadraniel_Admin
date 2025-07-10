@@ -19,7 +19,8 @@ class _OutletsScreenState extends State<OutletsScreen> {
 
   // Metrics
   int get totalOutlets => _outlets.length;
-  int get activeOutlets => _outlets.length; // TODO: Add active status to outlets
+  int get activeOutlets =>
+      _outlets.length; // TODO: Add active status to outlets
 
   @override
   void initState() {
@@ -37,9 +38,9 @@ class _OutletsScreenState extends State<OutletsScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading outlets: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading outlets: $e')));
       }
       setState(() => _isLoading = false);
     }
@@ -57,9 +58,9 @@ class _OutletsScreenState extends State<OutletsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error syncing outlets: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error syncing outlets: $e')));
       }
     } finally {
       setState(() => _isLoading = false);
@@ -69,7 +70,9 @@ class _OutletsScreenState extends State<OutletsScreen> {
   void _showOutletDialog({Outlet? outlet}) {
     final formKey = GlobalKey<FormState>();
     final nameController = TextEditingController(text: outlet?.name ?? '');
-    final locationController = TextEditingController(text: outlet?.location ?? '');
+    final locationController = TextEditingController(
+      text: outlet?.location ?? '',
+    );
     bool isLoading = false;
 
     showDialog(
@@ -128,9 +131,9 @@ class _OutletsScreenState extends State<OutletsScreen> {
                             ),
                           );
                         } catch (e) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(content: Text('Error: $e')),
-                          );
+                          ScaffoldMessenger.of(
+                            context,
+                          ).showSnackBar(SnackBar(content: Text('Error: $e')));
                           setState(() => isLoading = false);
                         }
                       }
@@ -150,7 +153,12 @@ class _OutletsScreenState extends State<OutletsScreen> {
   }
 
   @override
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+  Widget _buildMetricCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -173,7 +181,11 @@ class _OutletsScreenState extends State<OutletsScreen> {
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  style: TextStyle(color: color, fontSize: 24, fontWeight: FontWeight.bold),
+                  style: TextStyle(
+                    color: color,
+                    fontSize: 24,
+                    fontWeight: FontWeight.bold,
+                  ),
                 ),
               ],
             ),
@@ -189,8 +201,9 @@ class _OutletsScreenState extends State<OutletsScreen> {
         .where(
           (outlet) =>
               outlet.name.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-              (outlet.location?.toLowerCase() ?? '')
-                  .contains(_searchQuery.toLowerCase()),
+              (outlet.location?.toLowerCase() ?? '').contains(
+                _searchQuery.toLowerCase(),
+              ),
         )
         .toList();
 
@@ -267,7 +280,8 @@ class _OutletsScreenState extends State<OutletsScreen> {
                                     onTap: () => Navigator.push(
                                       context,
                                       MaterialPageRoute(
-                                        builder: (context) => OutletProfileScreen(outlet: outlet),
+                                        builder: (context) =>
+                                            OutletProfileScreen(outlet: outlet),
                                       ),
                                     ),
                                   ),

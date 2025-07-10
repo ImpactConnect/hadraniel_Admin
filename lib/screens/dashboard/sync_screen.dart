@@ -37,6 +37,56 @@ class _SyncScreenState extends State<SyncScreen> {
     }
   }
 
+  Future<void> _resetDatabase() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Reset Database'),
+        content: const Text(
+          'This will delete all local data. The data will be re-synced from the server on next sync. Are you sure you want to continue?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        _isSyncing = true;
+        _syncError = null;
+      });
+
+      try {
+        await _syncService.resetDatabase();
+        setState(() {
+          _lastSyncTime = null;
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Database reset successfully')),
+          );
+        }
+      } catch (e) {
+        setState(() {
+          _syncError = e.toString();
+        });
+      } finally {
+        setState(() {
+          _isSyncing = false;
+        });
+      }
+    }
+  }
+
   Widget _buildSyncStatus(String title, DateTime? lastSync) {
     return ListTile(
       title: Text(title),
@@ -116,19 +166,33 @@ class _SyncScreenState extends State<SyncScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _isSyncing ? null : _syncAll,
-        icon: _isSyncing
-            ? const SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2,
-                  valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                ),
-              )
-            : const Icon(Icons.sync),
-        label: Text(_isSyncing ? 'Syncing...' : 'Sync All'),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton.extended(
+            heroTag: 'resetDb',
+            onPressed: _isSyncing ? null : _resetDatabase,
+            icon: const Icon(Icons.restore),
+            label: const Text('Reset Database'),
+            backgroundColor: Colors.red,
+          ),
+          const SizedBox(height: 16),
+          FloatingActionButton.extended(
+            heroTag: 'syncAll',
+            onPressed: _isSyncing ? null : _syncAll,
+            icon: _isSyncing
+                ? const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2,
+                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                    ),
+                  )
+                : const Icon(Icons.sync),
+            label: Text(_isSyncing ? 'Syncing...' : 'Sync All'),
+          ),
+        ],
       ),
     );
   }

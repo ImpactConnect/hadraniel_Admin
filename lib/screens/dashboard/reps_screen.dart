@@ -24,7 +24,7 @@ class _RepsScreenState extends State<RepsScreen> {
   String _searchQuery = '';
   bool _isLoading = false;
   bool _isSyncing = false;
-  
+
   // Metrics
   int get totalReps => _reps.where((rep) => !rep.isAdmin).length;
   int get totalAdmins => _reps.where((rep) => rep.isAdmin).length;
@@ -33,11 +33,7 @@ class _RepsScreenState extends State<RepsScreen> {
     if (outletId == null) return 'Not assigned';
     final outlet = _outlets.firstWhere(
       (o) => o.id == outletId,
-      orElse: () => Outlet(
-        id: outletId,
-        name: 'Unknown',
-        createdAt: null,
-      ),
+      orElse: () => Outlet(id: outletId, name: 'Unknown', createdAt: null),
     );
     return outlet.name;
   }
@@ -61,9 +57,9 @@ class _RepsScreenState extends State<RepsScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading data: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading data: $e')));
       }
     } finally {
       setState(() => _isLoading = false);
@@ -83,9 +79,9 @@ class _RepsScreenState extends State<RepsScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error syncing data: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error syncing data: $e')));
       }
     } finally {
       setState(() => _isSyncing = false);
@@ -156,7 +152,9 @@ class _RepsScreenState extends State<RepsScreen> {
           (rep) =>
               rep.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
               rep.email.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-              _getOutletName(rep.outletId).toLowerCase().contains(_searchQuery.toLowerCase()),
+              _getOutletName(
+                rep.outletId,
+              ).toLowerCase().contains(_searchQuery.toLowerCase()),
         )
         .toList();
 
@@ -276,8 +274,6 @@ class _RepsScreenState extends State<RepsScreen> {
     );
   }
 
-
-
   Widget _buildMetricCard(String title, String value, IconData icon) {
     return Expanded(
       child: Card(
@@ -297,10 +293,7 @@ class _RepsScreenState extends State<RepsScreen> {
                 ),
               ),
               const SizedBox(height: 4),
-              Text(
-                title,
-                style: TextStyle(color: Colors.grey[600]),
-              ),
+              Text(title, style: TextStyle(color: Colors.grey[600])),
             ],
           ),
         ),
@@ -311,9 +304,7 @@ class _RepsScreenState extends State<RepsScreen> {
   void _showRepDetails(Rep rep) {
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => RepProfileScreen(rep: rep),
-      ),
+      MaterialPageRoute(builder: (context) => RepProfileScreen(rep: rep)),
     );
   }
 

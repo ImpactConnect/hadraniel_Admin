@@ -23,13 +23,20 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
   List<Product> _lowStockProducts = [];
 
   // Metrics
-  double get totalRevenue => _sales.fold(0, (sum, sale) => sum + (sale.totalAmount ?? 0));
-  double get totalOutstanding => _sales.where((sale) => !(sale.isPaid ?? false)).fold(0, (sum, sale) => sum + (sale.totalAmount ?? 0));
+  double get totalRevenue =>
+      _sales.fold(0, (sum, sale) => sum + (sale.totalAmount ?? 0));
+  double get totalOutstanding => _sales
+      .where((sale) => !(sale.isPaid ?? false))
+      .fold(0, (sum, sale) => sum + (sale.totalAmount ?? 0));
   int get totalReps => _reps.length;
   int get totalProducts => _products.length;
   int get totalSales => _sales.length;
   double get operatingCost => 0; // TODO: Implement operating cost calculation
-  int get totalCustomers => _sales.map((sale) => sale.customerId ?? '').where((id) => id.isNotEmpty).toSet().length;
+  int get totalCustomers => _sales
+      .map((sale) => sale.customerId ?? '')
+      .where((id) => id.isNotEmpty)
+      .toSet()
+      .length;
 
   @override
   void initState() {
@@ -47,21 +54,30 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
       setState(() {
         _reps = reps.where((rep) => rep.outletId == widget.outlet.id).toList();
         _products = products;
-        _sales = sales.where((sale) => sale.outletId == widget.outlet.id).toList();
-        _lowStockProducts = products.where((product) => (product.quantity ?? 0) < 10).toList();
+        _sales = sales
+            .where((sale) => sale.outletId == widget.outlet.id)
+            .toList();
+        _lowStockProducts = products
+            .where((product) => (product.quantity ?? 0) < 10)
+            .toList();
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading data: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading data: $e')));
       }
     } finally {
       setState(() => _isLoading = false);
     }
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+  Widget _buildMetricCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Card(
       elevation: 2,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -79,10 +95,7 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
               ),
             ),
             const SizedBox(height: 4),
-            Text(
-              title,
-              style: TextStyle(color: Colors.grey[600]),
-            ),
+            Text(title, style: TextStyle(color: Colors.grey[600])),
           ],
         ),
       ),
@@ -112,7 +125,9 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                   // Outlet Info Card
                   Card(
                     elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: Padding(
                       padding: const EdgeInsets.all(16.0),
                       child: Column(
@@ -126,13 +141,18 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                           ListTile(
                             leading: const Icon(Icons.location_on),
                             title: const Text('Location'),
-                            subtitle: Text(widget.outlet.location ?? 'Not specified'),
+                            subtitle: Text(
+                              widget.outlet.location ?? 'Not specified',
+                            ),
                           ),
                           ListTile(
                             leading: const Icon(Icons.calendar_today),
                             title: const Text('Created'),
                             subtitle: Text(
-                              widget.outlet.createdAt?.toString().split('.')[0] ?? 'Not specified',
+                              widget.outlet.createdAt?.toString().split(
+                                    '.',
+                                  )[0] ??
+                                  'Not specified',
                             ),
                           ),
                         ],
@@ -203,7 +223,9 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                   const SizedBox(height: 8),
                   Card(
                     elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: _lowStockProducts.isEmpty
                         ? const Padding(
                             padding: EdgeInsets.all(16.0),
@@ -216,9 +238,14 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                             itemBuilder: (context, index) {
                               final product = _lowStockProducts[index];
                               return ListTile(
-                                title: Text(product.name),
+                                title: Text(
+                                  product.productName ?? 'Unnamed Product',
+                                ),
                                 subtitle: Text('Quantity: ${product.quantity}'),
-                                leading: const Icon(Icons.warning, color: Colors.orange),
+                                leading: const Icon(
+                                  Icons.warning,
+                                  color: Colors.orange,
+                                ),
                               );
                             },
                           ),
@@ -233,7 +260,9 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                   const SizedBox(height: 8),
                   Card(
                     elevation: 2,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
                     child: SingleChildScrollView(
                       scrollDirection: Axis.horizontal,
                       child: DataTable(
@@ -246,9 +275,18 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                         rows: _sales.map((sale) {
                           return DataRow(
                             cells: [
-                              DataCell(Text(sale.createdAt?.toString().split('.')[0] ?? 'No date')),
+                              DataCell(
+                                Text(
+                                  sale.createdAt?.toString().split('.')[0] ??
+                                      'No date',
+                                ),
+                              ),
                               DataCell(Text(sale.customerId ?? 'Unknown')),
-                              DataCell(Text('₦${(sale.totalAmount ?? 0).toStringAsFixed(2)}')),
+                              DataCell(
+                                Text(
+                                  '₦${(sale.totalAmount ?? 0).toStringAsFixed(2)}',
+                                ),
+                              ),
                               DataCell(
                                 Container(
                                   padding: const EdgeInsets.symmetric(
@@ -256,13 +294,17 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                                     vertical: 4,
                                   ),
                                   decoration: BoxDecoration(
-                                    color: (sale.isPaid ?? false) ? Colors.green[100] : Colors.red[100],
+                                    color: (sale.isPaid ?? false)
+                                        ? Colors.green[100]
+                                        : Colors.red[100],
                                     borderRadius: BorderRadius.circular(12),
                                   ),
                                   child: Text(
                                     (sale.isPaid ?? false) ? 'Paid' : 'Unpaid',
                                     style: TextStyle(
-                                      color: (sale.isPaid ?? false) ? Colors.green[900] : Colors.red[900],
+                                      color: (sale.isPaid ?? false)
+                                          ? Colors.green[900]
+                                          : Colors.red[900],
                                     ),
                                   ),
                                 ),

@@ -55,11 +55,7 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
           IconButton(
             icon: const Icon(Icons.edit),
             onPressed: () {
-              Navigator.pushNamed(
-                context,
-                '/rep-form',
-                arguments: widget.rep,
-              );
+              Navigator.pushNamed(context, '/rep-form', arguments: widget.rep);
             },
           ),
         ],
@@ -78,7 +74,9 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                           tag: 'rep-avatar-${widget.rep.id}',
                           child: CircleAvatar(
                             radius: 50,
-                            backgroundColor: Theme.of(context).colorScheme.primary,
+                            backgroundColor: Theme.of(
+                              context,
+                            ).colorScheme.primary,
                             child: Text(
                               widget.rep.fullName.substring(0, 1).toUpperCase(),
                               style: const TextStyle(
@@ -91,9 +89,8 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                         const SizedBox(height: 16),
                         Text(
                           widget.rep.fullName,
-                          style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                fontWeight: FontWeight.bold,
-                              ),
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(fontWeight: FontWeight.bold),
                         ),
                         const SizedBox(height: 8),
                         Container(
@@ -110,8 +107,9 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                           child: Text(
                             widget.rep.isAdmin ? 'Admin' : 'Sales Rep',
                             style: TextStyle(
-                              color:
-                                  widget.rep.isAdmin ? Colors.purple : Colors.blue,
+                              color: widget.rep.isAdmin
+                                  ? Colors.purple
+                                  : Colors.blue,
                               fontWeight: FontWeight.w500,
                             ),
                           ),
@@ -133,9 +131,7 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                               const SizedBox(width: 8),
                               Text(
                                 'Contact Information',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleLarge
+                                style: Theme.of(context).textTheme.titleLarge
                                     ?.copyWith(fontWeight: FontWeight.bold),
                               ),
                             ],
@@ -159,7 +155,8 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                           _buildInfoRow(
                             Icons.calendar_today_outlined,
                             'Created',
-                            widget.rep.createdAt?.toString().split('.')[0] ?? 'N/A',
+                            widget.rep.createdAt?.toString().split('.')[0] ??
+                                'N/A',
                           ),
                         ],
                       ),
@@ -179,9 +176,7 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                               const SizedBox(width: 8),
                               Text(
                                 'Performance Metrics',
-                                style: Theme.of(context)
-                                    .textTheme
-                                    .titleLarge
+                                style: Theme.of(context).textTheme.titleLarge
                                     ?.copyWith(fontWeight: FontWeight.bold),
                               ),
                             ],
@@ -245,16 +240,16 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
               children: [
                 Text(
                   label,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey[600],
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  style: Theme.of(context).textTheme.bodyLarge?.copyWith(
-                        fontWeight: FontWeight.w500,
-                      ),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
                 ),
               ],
             ),
@@ -264,7 +259,12 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, MaterialColor color) {
+  Widget _buildMetricCard(
+    String title,
+    String value,
+    IconData icon,
+    MaterialColor color,
+  ) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(16),
@@ -280,18 +280,18 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
             Text(
               title,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                    color: color.shade700,
-                    fontWeight: FontWeight.w500,
-                  ),
+                color: color.shade700,
+                fontWeight: FontWeight.w500,
+              ),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
               value,
               style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    color: color.shade700,
-                    fontWeight: FontWeight.bold,
-                  ),
+                color: color.shade700,
+                fontWeight: FontWeight.bold,
+              ),
             ),
           ],
         ),

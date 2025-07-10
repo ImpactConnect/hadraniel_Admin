@@ -20,11 +20,12 @@ class DatabaseHelper {
   Future<Database> _initDatabase() async {
     final databasePath = await databaseFactoryFfi.getDatabasesPath();
     final path = join(databasePath, 'admin_app.db');
+    print('Database path: $path'); // Debug log
 
     return await databaseFactoryFfi.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 1,
+        version: 2,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       ),
@@ -57,11 +58,18 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE products (
         id TEXT PRIMARY KEY,
-        name TEXT,
-        unit TEXT,
-        price REAL,
-        outlet_ids TEXT,
-        created_at TEXT
+        product_name TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        unit TEXT NOT NULL,
+        cost_per_unit REAL NOT NULL,
+        total_cost REAL NOT NULL,
+        date_added TEXT NOT NULL,
+        last_updated TEXT,
+        description TEXT,
+        outlet_id TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        is_synced INTEGER DEFAULT 0,
+        FOREIGN KEY (outlet_id) REFERENCES outlets (id)
       )
     ''');
 
@@ -92,7 +100,12 @@ class DatabaseHelper {
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    // Handle database upgrades here
+    if (oldVersion < 2) {
+      // Add is_synced column to products table if it doesn't exist
+      await db.execute('''
+        ALTER TABLE products ADD COLUMN is_synced INTEGER DEFAULT 0
+      ''');
+    }
   }
 
   Future<void> clearAllTables() async {
@@ -103,5 +116,19 @@ class DatabaseHelper {
       await txn.delete('products');
       await txn.delete('reps');
     });
+  }
+
+  Future<void> deleteDatabase() async {
+    // Close the database
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+    }
+
+    // Get the database path and delete the file
+    final databasePath = await databaseFactoryFfi.getDatabasesPath();
+    final path = join(databasePath, 'admin_app.db');
+    print('Deleting database at: $path');
+    await databaseFactoryFfi.deleteDatabase(path);
   }
 }

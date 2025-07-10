@@ -67,19 +67,25 @@ class _RepFormScreenState extends State<RepFormScreen> {
                 mainAxisSize: MainAxisSize.min,
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const Text('Sales representative account created successfully!'),
+                  const Text(
+                    'Sales representative account created successfully!',
+                  ),
                   const SizedBox(height: 8),
                   Text('Name: ${_fullNameController.text}'),
                   Text('Email: ${_emailController.text}'),
                   if (_selectedOutletId != null)
-                    Text('Outlet: ${_outlets.firstWhere((o) => o.id == _selectedOutletId).name}')
+                    Text(
+                      'Outlet: ${_outlets.firstWhere((o) => o.id == _selectedOutletId).name}',
+                    ),
                 ],
               ),
               actions: [
                 TextButton(
                   onPressed: () {
                     Navigator.of(context).pop(); // Close dialog
-                    Navigator.of(context).pop(true); // Return to previous screen
+                    Navigator.of(
+                      context,
+                    ).pop(true); // Return to previous screen
                   },
                   child: const Text('OK'),
                 ),
@@ -107,19 +113,25 @@ class _RepFormScreenState extends State<RepFormScreen> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text('Sales representative account updated successfully!'),
+                    const Text(
+                      'Sales representative account updated successfully!',
+                    ),
                     const SizedBox(height: 8),
                     Text('Name: ${_fullNameController.text}'),
                     Text('Email: ${_emailController.text}'),
                     if (_selectedOutletId != null)
-                      Text('Outlet: ${_outlets.firstWhere((o) => o.id == _selectedOutletId).name}')
+                      Text(
+                        'Outlet: ${_outlets.firstWhere((o) => o.id == _selectedOutletId).name}',
+                      ),
                   ],
                 ),
                 actions: [
                   TextButton(
                     onPressed: () {
                       Navigator.of(context).pop(); // Close dialog
-                      Navigator.of(context).pop(true); // Return to previous screen
+                      Navigator.of(
+                        context,
+                      ).pop(true); // Return to previous screen
                     },
                     child: const Text('OK'),
                   ),
@@ -139,11 +151,12 @@ class _RepFormScreenState extends State<RepFormScreen> {
       if (mounted) {
         String errorMessage = 'An error occurred';
         if (e.toString().contains('User not allowed')) {
-          errorMessage = 'You do not have permission to create users. Please check your admin privileges.';
+          errorMessage =
+              'You do not have permission to create users. Please check your admin privileges.';
         } else if (e.toString().contains('already exists')) {
           errorMessage = 'A user with this email already exists.';
         }
-        
+
         await showDialog(
           context: context,
           builder: (context) => AlertDialog(

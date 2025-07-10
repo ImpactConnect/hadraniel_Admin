@@ -21,7 +21,7 @@ class Sale {
       outletId: map['outlet_id'] as String,
       customerId: map['customer_id'] as String,
       totalAmount: map['total_amount'] as double?,
-      isPaid: map['is_paid'] as bool?,
+      isPaid: map['is_paid'] != null ? (map['is_paid'] as int) == 1 : null,
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at'] as String)
           : null,
@@ -34,7 +34,7 @@ class Sale {
       'outlet_id': outletId,
       'customer_id': customerId,
       'total_amount': totalAmount,
-      'is_paid': isPaid,
+      'is_paid': isPaid == null ? null : (isPaid! ? 1 : 0),
       'created_at': createdAt?.toIso8601String(),
     };
   }

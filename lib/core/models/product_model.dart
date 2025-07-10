@@ -1,85 +1,105 @@
 class Product {
   final String id;
-  final String name;
-  final double? price;
-  final int? quantity;
-  final String? unit;
+  final String productName;
+  final double quantity;
+  final String unit;
+  final double costPerUnit;
+  final double totalCost;
+  final DateTime dateAdded;
+  final DateTime? lastUpdated;
   final String? description;
-  final String? category;
-  final String? imageUrl;
-  final DateTime? createdAt;
-  final List<String>? outletIds;
+  final String outletId;
+  final DateTime createdAt;
+  final bool isSynced;
 
   Product({
     required this.id,
-    required this.name,
-    this.price,
-    this.quantity,
-    this.unit,
+    required this.productName,
+    required this.quantity,
+    required this.unit,
+    required this.costPerUnit,
+    required this.totalCost,
+    required this.dateAdded,
+    this.lastUpdated,
     this.description,
-    this.category,
-    this.imageUrl,
-    this.createdAt,
-    this.outletIds,
+    required this.outletId,
+    required this.createdAt,
+    this.isSynced = false,
   });
 
   factory Product.fromMap(Map<String, dynamic> map) {
     return Product(
-      id: map['id'] as String,
-      name: map['name'] as String,
-      unit: map['unit'] as String?,
-      price: map['price'] != null ? (map['price'] as num).toDouble() : null,
-      quantity: map['quantity'] as int?,
-      description: map['description'] as String?,
-      category: map['category'] as String?,
-      imageUrl: map['image_url'] as String?,
-      outletIds: map['outlet_ids'] != null
-          ? List<String>.from(map['outlet_ids'] as List)
+      id: map['id']?.toString() ?? '',
+      productName: map['product_name']?.toString() ?? '',
+      quantity: map['quantity'] != null
+          ? (map['quantity'] as num).toDouble()
+          : 0.0,
+      unit: map['unit']?.toString() ?? '',
+      costPerUnit: map['cost_per_unit'] != null
+          ? (map['cost_per_unit'] as num).toDouble()
+          : 0.0,
+      totalCost: map['total_cost'] != null
+          ? (map['total_cost'] as num).toDouble()
+          : 0.0,
+      dateAdded: map['date_added'] != null
+          ? DateTime.parse(map['date_added'] as String)
+          : DateTime.now(),
+      lastUpdated: map['last_updated'] != null
+          ? DateTime.parse(map['last_updated'] as String)
           : null,
+      description: map['description']?.toString(),
+      outletId: map['outlet_id']?.toString() ?? '',
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at'] as String)
-          : null,
+          : DateTime.now(),
+      isSynced: (map['is_synced'] as int? ?? 0) == 1,
     );
   }
 
   Map<String, dynamic> toMap() {
     return {
       'id': id,
-      'name': name,
-      'unit': unit,
-      'price': price,
+      'product_name': productName,
       'quantity': quantity,
+      'unit': unit,
+      'cost_per_unit': costPerUnit,
+      'total_cost': totalCost,
+      'date_added': dateAdded.toIso8601String(),
+      'last_updated': lastUpdated?.toIso8601String(),
       'description': description,
-      'category': category,
-      'image_url': imageUrl,
-      'outlet_ids': outletIds,
-      'created_at': createdAt?.toIso8601String(),
+      'outlet_id': outletId,
+      'created_at': createdAt.toIso8601String(),
+      'is_synced': isSynced ? 1 : 0,
     };
   }
 
   Product copyWith({
     String? id,
-    String? name,
+    String? productName,
+    double? quantity,
     String? unit,
-    double? price,
-    int? quantity,
+    double? costPerUnit,
+    double? totalCost,
+    DateTime? dateAdded,
+    DateTime? lastUpdated,
     String? description,
-    String? category,
-    String? imageUrl,
-    List<String>? outletIds,
+    String? outletId,
     DateTime? createdAt,
+    bool? isSynced,
   }) {
     return Product(
       id: id ?? this.id,
-      name: name ?? this.name,
-      unit: unit ?? this.unit,
-      price: price ?? this.price,
+      productName: productName ?? this.productName,
       quantity: quantity ?? this.quantity,
+      unit: unit ?? this.unit,
+      costPerUnit: costPerUnit ?? this.costPerUnit,
+      totalCost: totalCost ?? this.totalCost,
+      dateAdded: dateAdded ?? this.dateAdded,
+      lastUpdated: lastUpdated ?? this.lastUpdated,
       description: description ?? this.description,
-      category: category ?? this.category,
-      imageUrl: imageUrl ?? this.imageUrl,
-      outletIds: outletIds ?? this.outletIds,
+      outletId: outletId ?? this.outletId,
       createdAt: createdAt ?? this.createdAt,
+      isSynced: isSynced ?? this.isSynced,
     );
   }
 }

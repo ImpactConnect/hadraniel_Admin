@@ -28,7 +28,10 @@ class SyncService {
 
       // Insert new sales
       for (final saleData in sales) {
-        batch.insert('sales', Sale.fromMap(saleData as Map<String, dynamic>).toMap());
+        batch.insert(
+          'sales',
+          Sale.fromMap(saleData as Map<String, dynamic>).toMap(),
+        );
       }
 
       await batch.commit();
@@ -37,8 +40,21 @@ class SyncService {
       rethrow;
     }
   }
+
   final supabase = Supabase.instance.client;
   final DatabaseHelper _dbHelper = DatabaseHelper();
+
+  // Reset Database
+  Future<void> resetDatabase() async {
+    try {
+      print('Resetting database...');
+      await _dbHelper.deleteDatabase();
+      print('Database reset completed.');
+    } catch (e) {
+      print('Error resetting database: $e');
+      throw e;
+    }
+  }
 
   // Profiles Sync
   Future<void> syncProfilesToLocalDb() async {
@@ -67,9 +83,11 @@ class SyncService {
   // Outlets Sync
   Future<void> syncOutletsToLocalDb([List<Outlet>? outlets]) async {
     try {
-      final outletsToSync = outlets ?? (await supabase.from('outlets').select() as List)
-          .map((data) => Outlet.fromMap(data))
-          .toList();
+      final outletsToSync =
+          outlets ??
+          (await supabase.from('outlets').select() as List)
+              .map((data) => Outlet.fromMap(data))
+              .toList();
 
       final db = await _dbHelper.database;
       await db.transaction((txn) async {
@@ -87,22 +105,139 @@ class SyncService {
     }
   }
 
+  // Products Management
+  Future<void> insertProduct(Product product) async {
+    try {
+      final db = await _dbHelper.database;
+      await db.insert('products', product.toMap());
+    } catch (e) {
+      print('Error inserting product: $e');
+      throw e;
+    }
+  }
+
+  Future<void> updateProduct(Product product) async {
+    try {
+      final db = await _dbHelper.database;
+      await db.update(
+        'products',
+        product.toMap(),
+        where: 'id = ?',
+        whereArgs: [product.id],
+      );
+    } catch (e) {
+      print('Error updating product: $e');
+      throw e;
+    }
+  }
+
+  Future<void> deleteProduct(String productId) async {
+    try {
+      final db = await _dbHelper.database;
+      await db.delete('products', where: 'id = ?', whereArgs: [productId]);
+    } catch (e) {
+      print('Error deleting product: $e');
+      throw e;
+    }
+  }
+
+  Future<List<Outlet>> getAllLocalOutlets() async {
+    try {
+      final db = await _dbHelper.database;
+      final List<Map<String, dynamic>> maps = await db.query('outlets');
+      return List.generate(maps.length, (i) => Outlet.fromMap(maps[i]));
+    } catch (e) {
+      print('Error getting all local outlets: $e');
+      return [];
+    }
+  }
+
+  Future<String> getOutletName(String outletId) async {
+    try {
+      final db = await _dbHelper.database;
+      final results = await db.query(
+        'outlets',
+        columns: ['name'],
+        where: 'id = ?',
+        whereArgs: [outletId],
+        limit: 1,
+      );
+      if (results.isNotEmpty) {
+        return results.first['name'] as String;
+      }
+      return 'Unknown Outlet';
+    } catch (e) {
+      print('Error getting outlet name: $e');
+      return 'Error';
+    }
+  }
+
+  Future<Product?> getProductById(String productId) async {
+    try {
+      final db = await _dbHelper.database;
+      final results = await db.query(
+        'products',
+        where: 'id = ?',
+        whereArgs: [productId],
+        limit: 1,
+      );
+      if (results.isNotEmpty) {
+        return Product.fromMap(results.first);
+      }
+      return null;
+    } catch (e) {
+      print('Error getting product by id: $e');
+      throw e;
+    }
+  }
+
   // Products Sync
   Future<void> syncProductsToLocalDb() async {
     try {
-      final response = await supabase.from('products').select();
-      final products = (response as List)
-          .map((data) => Product.fromMap(data))
-          .toList();
-
+      // Get all local products that need syncing
       final db = await _dbHelper.database;
+      final unsyncedProducts = await db.query(
+        'products',
+        where: 'is_synced = ?',
+        whereArgs: [0],
+      );
+
+      // Push unsynced products to Supabase
+      for (var productMap in unsyncedProducts) {
+        final product = Product.fromMap(productMap);
+        await supabase.from('products').upsert(product.toMap());
+
+        // Mark as synced locally
+        await db.update(
+          'products',
+          {'is_synced': 1},
+          where: 'id = ?',
+          whereArgs: [product.id],
+        );
+      }
+
+      // Pull latest products from Supabase
+      final response = await supabase.from('products').select();
+      print('Supabase products response: $response');
+
+      final products = (response as List).map((data) {
+        print('Processing product data: $data');
+        try {
+          return Product.fromMap(data);
+        } catch (e) {
+          print('Error processing product: $data');
+          print('Error details: $e');
+          rethrow;
+        }
+      }).toList();
+
+      // Update local database
       await db.transaction((txn) async {
         for (var product in products) {
-          await txn.insert(
-            'products',
-            product.toMap(),
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          await txn.insert('products', {
+            ...product.toMap(),
+            'is_synced': 1,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
     } catch (e) {
@@ -182,7 +317,7 @@ class SyncService {
     }
   }
 
-  Future<List<Outlet>> getAllLocalOutlets() async {
+  Future<List<Outlet>> fetchAllLocalOutlets() async {
     try {
       final db = await _dbHelper.database;
       final results = await db.query('outlets');
