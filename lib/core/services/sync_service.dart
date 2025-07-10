@@ -345,6 +345,148 @@ class SyncService {
     await syncOutletsToLocalDb();
     await syncProductsToLocalDb();
     await syncRepsToLocalDb();
-    // TODO: Add sync methods for sales, customers, and stock balances
+    await syncCustomersToLocalDb();
+    // TODO: Add sync methods for sales and stock balances
+  }
+
+  // Customers Sync
+  Future<void> syncCustomersToLocalDb() async {
+    try {
+      // Get all local customers that need syncing
+      final db = await _dbHelper.database;
+      final unsyncedCustomers = await db.query(
+        'customers',
+        where: 'is_synced = ?',
+        whereArgs: [0],
+      );
+
+      // Push unsynced customers to Supabase
+      for (var customerMap in unsyncedCustomers) {
+        await supabase.from('customers').upsert({
+          'id': customerMap['id'],
+          'full_name': customerMap['full_name'],
+          'phone': customerMap['phone'],
+          'outlet_id': customerMap['outlet_id'],
+          'total_outstanding': customerMap['total_outstanding'],
+          'created_at': customerMap['created_at'],
+        });
+
+        // Mark as synced locally
+        await db.update(
+          'customers',
+          {'is_synced': 1},
+          where: 'id = ?',
+          whereArgs: [customerMap['id']],
+        );
+      }
+
+      // Pull latest customers from Supabase
+      final response = await supabase.from('customers').select();
+      final customers = response as List<dynamic>;
+
+      // Update local database
+      await db.transaction((txn) async {
+        for (var customerData in customers) {
+          await txn.insert(
+            'customers',
+            {
+              'id': customerData['id'],
+              'full_name': customerData['full_name'],
+              'phone': customerData['phone'],
+              'outlet_id': customerData['outlet_id'],
+              'total_outstanding': customerData['total_outstanding'],
+              'created_at': customerData['created_at'],
+              'is_synced': 1,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      });
+    } catch (e) {
+      print('Error syncing customers: $e');
+      throw e;
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> getAllLocalCustomers() async {
+    try {
+      final db = await _dbHelper.database;
+      return await db.query('customers');
+    } catch (e) {
+      print('Error getting all local customers: $e');
+      return [];
+    }
+  }
+
+  Future<bool> isOnline() async {
+    try {
+      await supabase.from('customers').select().limit(1);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  Future<void> markForSync(
+    String table,
+    String id, {
+    bool isDelete = false,
+  }) async {
+    try {
+      final db = await _dbHelper.database;
+      await db.insert('sync_queue', {
+        'table_name': table,
+        'record_id': id,
+        'is_delete': isDelete ? 1 : 0,
+        'created_at': DateTime.now().toIso8601String(),
+      }, conflictAlgorithm: ConflictAlgorithm.replace);
+    } catch (e) {
+      print('Error marking for sync: $e');
+      throw e;
+    }
+  }
+
+  Future<void> processSyncQueue() async {
+    if (!await isOnline()) return;
+
+    try {
+      final db = await _dbHelper.database;
+      final queue = await db.query('sync_queue');
+
+      for (var item in queue) {
+        final table = item['table_name'] as String;
+        final recordId = item['record_id'] as String;
+        final isDelete = item['is_delete'] == 1;
+
+        if (isDelete) {
+          await supabase.from(table).delete().eq('id', recordId);
+        } else {
+          final record = await db.query(
+            table,
+            where: 'id = ?',
+            whereArgs: [recordId],
+            limit: 1,
+          );
+
+          if (record.isNotEmpty) {
+            await supabase.from(table).upsert(record.first);
+          }
+        }
+
+        await db.delete(
+          'sync_queue',
+          where: 'table_name = ? AND record_id = ?',
+          whereArgs: [table, recordId],
+        );
+      }
+    } catch (e) {
+      print('Error processing sync queue: $e');
+      throw e;
+    }
+  }
+
+  @override
+  void dispose() {
+    // Clean up resources if needed
   }
 }

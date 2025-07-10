@@ -9,6 +9,10 @@ import 'screens/dashboard/reps_screen.dart';
 import 'screens/dashboard/outlets_screen.dart';
 import 'screens/dashboard/products_screen.dart';
 import 'screens/dashboard/sync_screen.dart';
+import 'screens/dashboard/sales_screen.dart';
+import 'screens/dashboard/customers_screen.dart';
+import 'screens/dashboard/stock_screen.dart';
+import 'screens/dashboard/settings_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -78,7 +82,10 @@ class _MyAppState extends State<MyApp> {
         '/outlets': (context) => const OutletsScreen(),
         '/products': (context) => const ProductsScreen(),
         '/sync': (context) => const SyncScreen(),
-        // TODO: Add routes for Sales, Stock Balance, Customers, and Settings screens
+        '/sales': (context) => const SalesScreen(),
+        '/stock': (context) => const StockScreen(),
+        '/customers': (context) => const CustomersScreen(),
+        '/settings': (context) => const SettingsScreen(),
       },
       debugShowCheckedModeBanner: false,
     );

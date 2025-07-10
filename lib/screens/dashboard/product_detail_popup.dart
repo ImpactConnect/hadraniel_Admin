@@ -3,15 +3,22 @@ import '../../core/models/product_model.dart';
 
 class ProductDetailPopup extends StatelessWidget {
   final Product product;
+  final Function() onEdit;
+  final Function() onDelete;
 
-  const ProductDetailPopup({super.key, required this.product});
+  const ProductDetailPopup({
+    super.key,
+    required this.product,
+    required this.onEdit,
+    required this.onDelete,
+  });
 
   @override
   Widget build(BuildContext context) {
     return Dialog(
       child: Container(
         padding: const EdgeInsets.all(16.0),
-        constraints: const BoxConstraints(maxWidth: 400),
+        constraints: const BoxConstraints(maxWidth: 500),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -19,9 +26,12 @@ class ProductDetailPopup extends StatelessWidget {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Text(
-                  product.productName,
-                  style: Theme.of(context).textTheme.headlineSmall,
+                Expanded(
+                  child: Text(
+                    product.productName,
+                    style: Theme.of(context).textTheme.headlineSmall,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close),
@@ -40,7 +50,7 @@ class ProductDetailPopup extends StatelessWidget {
               'Total Cost',
               '\$${product.totalCost.toStringAsFixed(2)}',
             ),
-            if (product.description != null)
+            if (product.description != null && product.description!.isNotEmpty)
               _buildDetailRow('Description', product.description!),
             _buildDetailRow('Date Added', _formatDate(product.dateAdded)),
             if (product.lastUpdated != null)
@@ -52,14 +62,42 @@ class ProductDetailPopup extends StatelessWidget {
             _buildDetailRow(
               'Sync Status',
               product.isSynced ? 'Synced' : 'Not Synced',
-            ),
-            const SizedBox(height: 16),
-            Align(
-              alignment: Alignment.centerRight,
-              child: TextButton(
-                onPressed: () => Navigator.of(context).pop(),
-                child: const Text('Close'),
+              trailing: Icon(
+                product.isSynced ? Icons.cloud_done : Icons.cloud_off,
+                color: product.isSynced ? Colors.green : Colors.grey,
+                size: 20,
               ),
+            ),
+            const SizedBox(height: 24),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                TextButton.icon(
+                  icon: const Icon(Icons.edit),
+                  label: const Text('Edit'),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    onEdit();
+                  },
+                ),
+                const SizedBox(width: 8),
+                TextButton.icon(
+                  icon: const Icon(Icons.delete, color: Colors.red),
+                  label: const Text(
+                    'Delete',
+                    style: TextStyle(color: Colors.red),
+                  ),
+                  onPressed: () {
+                    Navigator.of(context).pop();
+                    onDelete();
+                  },
+                ),
+                const SizedBox(width: 16),
+                ElevatedButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Close'),
+                ),
+              ],
             ),
           ],
         ),
@@ -67,7 +105,7 @@ class ProductDetailPopup extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(String label, String value) {
+  Widget _buildDetailRow(String label, String value, {Widget? trailing}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
@@ -81,6 +119,7 @@ class ProductDetailPopup extends StatelessWidget {
             ),
           ),
           Expanded(child: Text(value)),
+          if (trailing != null) trailing,
         ],
       ),
     );

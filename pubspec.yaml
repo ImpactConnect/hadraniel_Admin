@@ -11,6 +11,7 @@ dependencies:
   flutter:
     sdk: flutter
   supabase_flutter: ^1.10.9
+  sqflite: ^2.3.2
   sqflite_common_ffi: ^2.3.0
   path_provider: ^2.1.2
   provider: ^6.1.1

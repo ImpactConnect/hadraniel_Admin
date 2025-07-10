@@ -25,11 +25,52 @@ class DatabaseHelper {
     return await databaseFactoryFfi.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 2,
+        version: 4,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       ),
     );
+  }
+
+  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
+    if (oldVersion < 2) {
+      // Add is_synced column to products table if it doesn't exist
+      await db.execute('''
+        ALTER TABLE products ADD COLUMN is_synced INTEGER DEFAULT 0
+      ''');
+    }
+
+    if (oldVersion < 3) {
+      // Add sync_queue and customers tables
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS sync_queue (
+          id INTEGER PRIMARY KEY AUTOINCREMENT,
+          table_name TEXT NOT NULL,
+          record_id TEXT NOT NULL,
+          is_delete INTEGER DEFAULT 0,
+          created_at TEXT NOT NULL
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS customers (
+          id TEXT PRIMARY KEY,
+          full_name TEXT NOT NULL,
+          phone TEXT,
+          outlet_id TEXT NOT NULL,
+          total_outstanding REAL DEFAULT 0,
+          created_at TEXT NOT NULL,
+          is_synced INTEGER DEFAULT 0,
+          FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+        )
+      ''');
+    }
+
+    if (oldVersion < 4) {
+      // Drop and recreate customers table with correct schema
+      await db.execute('DROP TABLE IF EXISTS customers');
+      await db.execute('''        CREATE TABLE customers (          id TEXT PRIMARY KEY,          full_name TEXT NOT NULL,          phone TEXT,          outlet_id TEXT,          total_outstanding REAL DEFAULT 0,          created_at TEXT NOT NULL,          is_synced INTEGER DEFAULT 0,          FOREIGN KEY (outlet_id) REFERENCES outlets (id)        )      ''');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -97,15 +138,20 @@ class DatabaseHelper {
         FOREIGN KEY (outlet_id) REFERENCES outlets (id)
       )
     ''');
-  }
 
-  Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
-    if (oldVersion < 2) {
-      // Add is_synced column to products table if it doesn't exist
-      await db.execute('''
-        ALTER TABLE products ADD COLUMN is_synced INTEGER DEFAULT 0
-      ''');
-    }
+    // Sync Queue table
+    await db.execute('''
+      CREATE TABLE sync_queue (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        table_name TEXT NOT NULL,
+        record_id TEXT NOT NULL,
+        is_delete INTEGER DEFAULT 0,
+        created_at TEXT NOT NULL
+      )
+    ''');
+
+    // Customers table
+    await db.execute('''      CREATE TABLE customers (        id TEXT PRIMARY KEY,        full_name TEXT NOT NULL,        phone TEXT,        outlet_id TEXT,        total_outstanding REAL DEFAULT 0,        created_at TEXT NOT NULL,        is_synced INTEGER DEFAULT 0,        FOREIGN KEY (outlet_id) REFERENCES outlets (id)      )    ''');
   }
 
   Future<void> clearAllTables() async {
@@ -115,6 +161,9 @@ class DatabaseHelper {
       await txn.delete('outlets');
       await txn.delete('products');
       await txn.delete('reps');
+      await txn.delete('sales');
+      await txn.delete('customers');
+      await txn.delete('sync_queue');
     });
   }
 
