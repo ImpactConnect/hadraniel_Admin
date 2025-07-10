@@ -387,19 +387,15 @@ class SyncService {
       // Update local database
       await db.transaction((txn) async {
         for (var customerData in customers) {
-          await txn.insert(
-            'customers',
-            {
-              'id': customerData['id'],
-              'full_name': customerData['full_name'],
-              'phone': customerData['phone'],
-              'outlet_id': customerData['outlet_id'],
-              'total_outstanding': customerData['total_outstanding'],
-              'created_at': customerData['created_at'],
-              'is_synced': 1,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          await txn.insert('customers', {
+            'id': customerData['id'],
+            'full_name': customerData['full_name'],
+            'phone': customerData['phone'],
+            'outlet_id': customerData['outlet_id'],
+            'total_outstanding': customerData['total_outstanding'],
+            'created_at': customerData['created_at'],
+            'is_synced': 1,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
     } catch (e) {

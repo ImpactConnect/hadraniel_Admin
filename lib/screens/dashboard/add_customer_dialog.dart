@@ -26,15 +26,25 @@ class _AddCustomerDialogState extends State<AddCustomerDialog> {
   @override
   void initState() {
     super.initState();
+    _customerService = CustomerService();
+    _syncService = SyncService();
     _loadOutlets();
   }
 
   Future<void> _loadOutlets() async {
-    // TODO: Initialize services and load outlets
-    // final outlets = await _syncService.getOutlets();
-    setState(() {
-      _outlets = []; // Replace with actual outlets data
-    });
+    try {
+      final outlets = await _syncService.fetchAllLocalOutlets();
+      setState(() {
+        _outlets = outlets.map((outlet) => {
+          'id': outlet.id,
+          'name': outlet.name ?? 'Unknown Outlet',
+        }).toList();
+      });
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error loading outlets: $e')),
+      );
+    }
   }
 
   Future<void> _saveCustomer() async {

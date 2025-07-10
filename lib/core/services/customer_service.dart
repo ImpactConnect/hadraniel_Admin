@@ -18,7 +18,9 @@ class CustomerService {
 
   Future<void> createCustomerTable() async {
     final db = await database;
-    await db.execute('''      CREATE TABLE IF NOT EXISTS customers (        id TEXT PRIMARY KEY,        full_name TEXT NOT NULL,        phone TEXT,        outlet_id TEXT,        total_outstanding REAL DEFAULT 0,        created_at TEXT NOT NULL,        is_synced INTEGER DEFAULT 0,        FOREIGN KEY (outlet_id) REFERENCES outlets (id)      )    ''');
+    await db.execute(
+      '''      CREATE TABLE IF NOT EXISTS customers (        id TEXT PRIMARY KEY,        full_name TEXT NOT NULL,        phone TEXT,        outlet_id TEXT,        total_outstanding REAL DEFAULT 0,        created_at TEXT NOT NULL,        is_synced INTEGER DEFAULT 0,        FOREIGN KEY (outlet_id) REFERENCES outlets (id)      )    ''',
+    );
   }
 
   Future<Customer> createCustomer(Customer customer) async {

@@ -69,7 +69,9 @@ class DatabaseHelper {
     if (oldVersion < 4) {
       // Drop and recreate customers table with correct schema
       await db.execute('DROP TABLE IF EXISTS customers');
-      await db.execute('''        CREATE TABLE customers (          id TEXT PRIMARY KEY,          full_name TEXT NOT NULL,          phone TEXT,          outlet_id TEXT,          total_outstanding REAL DEFAULT 0,          created_at TEXT NOT NULL,          is_synced INTEGER DEFAULT 0,          FOREIGN KEY (outlet_id) REFERENCES outlets (id)        )      ''');
+      await db.execute(
+        '''        CREATE TABLE customers (          id TEXT PRIMARY KEY,          full_name TEXT NOT NULL,          phone TEXT,          outlet_id TEXT,          total_outstanding REAL DEFAULT 0,          created_at TEXT NOT NULL,          is_synced INTEGER DEFAULT 0,          FOREIGN KEY (outlet_id) REFERENCES outlets (id)        )      ''',
+      );
     }
   }
 
@@ -151,7 +153,9 @@ class DatabaseHelper {
     ''');
 
     // Customers table
-    await db.execute('''      CREATE TABLE customers (        id TEXT PRIMARY KEY,        full_name TEXT NOT NULL,        phone TEXT,        outlet_id TEXT,        total_outstanding REAL DEFAULT 0,        created_at TEXT NOT NULL,        is_synced INTEGER DEFAULT 0,        FOREIGN KEY (outlet_id) REFERENCES outlets (id)      )    ''');
+    await db.execute(
+      '''      CREATE TABLE customers (        id TEXT PRIMARY KEY,        full_name TEXT NOT NULL,        phone TEXT,        outlet_id TEXT,        total_outstanding REAL DEFAULT 0,        created_at TEXT NOT NULL,        is_synced INTEGER DEFAULT 0,        FOREIGN KEY (outlet_id) REFERENCES outlets (id)      )    ''',
+    );
   }
 
   Future<void> clearAllTables() async {

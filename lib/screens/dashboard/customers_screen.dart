@@ -37,9 +37,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   Future<void> _initializeServices() async {
     try {
-      // Reset database to apply schema changes
-      await _syncService.resetDatabase();
-      await _syncService.syncCustomersToLocalDb();
+      // Only sync if online, otherwise use existing local data
+      if (await _syncService.isOnline()) {
+        await _syncService.syncCustomersToLocalDb();
+      }
       await _loadCustomers();
       await _loadOutlets();
     } catch (e) {
