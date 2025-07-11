@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:sticky_headers/sticky_headers.dart';
 import '../../core/models/outlet_model.dart';
 import '../../core/models/product_model.dart';
 import '../../core/models/stock_balance_model.dart';
@@ -6,6 +7,7 @@ import '../../core/services/stock_service.dart';
 import '../../core/services/sync_service.dart';
 import '../../widgets/dashboard_layout.dart';
 import '../../widgets/loading_overlay.dart';
+import 'stock_detail_dialog.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -15,15 +17,51 @@ class StockScreen extends StatefulWidget {
 }
 
 class _StockScreenState extends State<StockScreen> {
+  Widget _buildHeaderCell(String text, double width) {
+    return Container(
+      width: width,
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      decoration: const BoxDecoration(
+        border: Border(
+          right: BorderSide(color: Colors.white24),
+        ),
+      ),
+      child: Center(
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildContentCell(String text, double width) {
+    return Container(
+      width: width,
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+      child: Center(
+        child: Text(
+          text,
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
   final StockService _stockService = StockService();
   final SyncService _syncService = SyncService();
-  
+
   List<StockBalance> _stockBalances = [];
   List<Outlet> _outlets = [];
   List<Product> _products = [];
   bool _isLoading = false;
   bool _isSyncing = false;
-  
+
   // Filters
   String _searchQuery = '';
   String? _selectedOutletId;
@@ -58,9 +96,9 @@ class _StockScreenState extends State<StockScreen> {
       });
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading data: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading data: $e')));
       }
       setState(() => _isLoading = false);
     }
@@ -78,9 +116,9 @@ class _StockScreenState extends State<StockScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error syncing data: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error syncing data: $e')));
       }
     } finally {
       setState(() => _isSyncing = false);
@@ -144,14 +182,20 @@ class _StockScreenState extends State<StockScreen> {
       setState(() {
         _startDate = picked.start;
         _endDate = picked.end;
-        _activeDateFilter = '${picked.start.toString().split(' ')[0]} to '
+        _activeDateFilter =
+            '${picked.start.toString().split(' ')[0]} to '
             '${picked.end.toString().split(' ')[0]}';
         _loadData();
       });
     }
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+  Widget _buildMetricCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Expanded(
       child: Card(
         elevation: 2,
@@ -164,19 +208,16 @@ class _StockScreenState extends State<StockScreen> {
                 children: [
                   Icon(icon, color: color, size: 24),
                   const SizedBox(width: 8),
-                  Text(
-                    title,
-                    style: TextStyle(color: color.withOpacity(0.8)),
-                  ),
+                  Text(title, style: TextStyle(color: color.withOpacity(0.8))),
                 ],
               ),
               const SizedBox(height: 8),
               Text(
                 value,
-                style: Theme.of(context)
-                    .textTheme
-                    .headlineSmall
-                    ?.copyWith(color: color, fontWeight: FontWeight.bold),
+                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                  color: color,
+                  fontWeight: FontWeight.bold,
+                ),
               ),
             ],
           ),
@@ -200,19 +241,18 @@ class _StockScreenState extends State<StockScreen> {
           dateAdded: DateTime.now(),
           outletId: '',
           createdAt: DateTime.now(),
-          isSynced: false
+          isSynced: false,
         ),
       );
       final outlet = _outlets.firstWhere(
         (o) => o.id == stock.outletId,
-        orElse: () => Outlet(
-          id: stock.outletId,
-          name: 'Unknown',
-          createdAt: null,
-        ),
+        orElse: () =>
+            Outlet(id: stock.outletId, name: 'Unknown', createdAt: null),
       );
-      
-      return product.productName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
+
+      return product.productName.toLowerCase().contains(
+            _searchQuery.toLowerCase(),
+          ) ||
           outlet.name.toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
 
@@ -255,14 +295,24 @@ class _StockScreenState extends State<StockScreen> {
                         const SizedBox(width: 16),
                         _buildMetricCard(
                           'Total Stock Quantity',
-                          filteredStockBalances.fold(0.0, (sum, stock) => sum + stock.givenQuantity).toString(),
+                          filteredStockBalances
+                              .fold(
+                                0.0,
+                                (sum, stock) => sum + stock.givenQuantity,
+                              )
+                              .toString(),
                           Icons.shopping_cart,
                           Colors.green,
                         ),
                         const SizedBox(width: 16),
                         _buildMetricCard(
                           'Total Sold Quantity',
-                          filteredStockBalances.fold(0.0, (sum, stock) => sum + stock.soldQuantity).toString(),
+                          filteredStockBalances
+                              .fold(
+                                0.0,
+                                (sum, stock) => sum + stock.soldQuantity,
+                              )
+                              .toString(),
                           Icons.point_of_sale,
                           Colors.orange,
                         ),
@@ -284,7 +334,14 @@ class _StockScreenState extends State<StockScreen> {
                           scrollDirection: Axis.horizontal,
                           child: Row(
                             children: [
-                              ...["Today", "Yesterday", "This week", "Last 7 days", "This month", "Last month"].map(
+                              ...[
+                                "Today",
+                                "Yesterday",
+                                "This week",
+                                "Last 7 days",
+                                "This month",
+                                "Last month",
+                              ].map(
                                 (filter) => Padding(
                                   padding: const EdgeInsets.only(right: 8.0),
                                   child: FilterChip(
@@ -303,9 +360,14 @@ class _StockScreenState extends State<StockScreen> {
                               Padding(
                                 padding: const EdgeInsets.only(right: 8.0),
                                 child: ActionChip(
-                                  avatar: const Icon(Icons.date_range, size: 18),
+                                  avatar: const Icon(
+                                    Icons.date_range,
+                                    size: 18,
+                                  ),
                                   label: Text(
-                                    _activeDateFilter.isEmpty ? 'Select Date' : _activeDateFilter,
+                                    _activeDateFilter.isEmpty
+                                        ? 'Select Date'
+                                        : _activeDateFilter,
                                   ),
                                   onPressed: _showDateRangePicker,
                                 ),
@@ -332,7 +394,8 @@ class _StockScreenState extends State<StockScreen> {
                                   prefixIcon: Icon(Icons.search),
                                   border: OutlineInputBorder(),
                                 ),
-                                onChanged: (value) => setState(() => _searchQuery = value),
+                                onChanged: (value) =>
+                                    setState(() => _searchQuery = value),
                               ),
                             ),
                             const SizedBox(width: 16),
@@ -397,60 +460,108 @@ class _StockScreenState extends State<StockScreen> {
                     ),
                   ),
                   Expanded(
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: SingleChildScrollView(
-                        child: DataTable(
-                          columns: const [
-                            DataColumn(label: Text('Product Name')),
-                            DataColumn(label: Text('Outlet')),
-                            DataColumn(label: Text('Given Qty')),
-                            DataColumn(label: Text('Sold Qty')),
-                            DataColumn(label: Text('Balance')),
-                            DataColumn(label: Text('Cost/Unit')),
-                            DataColumn(label: Text('Total Value')),
-                            DataColumn(label: Text('Date Updated')),
-                          ],
-                          rows: filteredStockBalances.map((stock) {
-                            final product = _products.firstWhere(
-                              (p) => p.id == stock.productId,
-                              orElse: () => Product(
-                                id: stock.productId,
-                                productName: 'Unknown',
-                                quantity: 0,
-                                unit: 'N/A',
-                                costPerUnit: 0,
-                                totalCost: 0,
-                                dateAdded: DateTime.now(),
-                                outletId: '',
-                                createdAt: DateTime.now(),
-                                isSynced: false
-                              ),
-                            );
-                            final outlet = _outlets.firstWhere(
-                              (o) => o.id == stock.outletId,
-                              orElse: () => Outlet(
-                                id: stock.outletId,
-                                name: 'Unknown',
-                                createdAt: null,
-                              ),
-                            );
-
-                            return DataRow(
-                              cells: [
-                                DataCell(Text(product.productName)),
-                                DataCell(Text(outlet.name)),
-                                DataCell(Text(stock.givenQuantity.toString())),
-                                DataCell(Text(stock.soldQuantity.toString())),
-                                DataCell(Text(stock.balanceQuantity.toString())),
-                                DataCell(Text('₦${product.costPerUnit}')),
-                                DataCell(Text('₦${stock.totalGivenValue?.toStringAsFixed(2) ?? '0.00'}')),
-                                DataCell(Text(stock.lastUpdated?.toString().split('.')[0] ?? 'N/A')),
+                    child: Stack(
+                      children: [
+                        Container(
+                          color: Theme.of(context).primaryColor,
+                          height: 48,
+                          child: SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _buildHeaderCell('Product Name', 200),
+                                _buildHeaderCell('Outlet', 150),
+                                _buildHeaderCell('Given Qty', 100),
+                                _buildHeaderCell('Sold Qty', 100),
+                                _buildHeaderCell('Balance', 100),
+                                _buildHeaderCell('Cost Price', 120),
                               ],
-                            );
-                          }).toList(),
+                            ),
+                          ),
                         ),
-                      ),
+                        Padding(
+                          padding: const EdgeInsets.only(top: 48.0),
+                          child: SingleChildScrollView(
+                            child: SingleChildScrollView(
+                              scrollDirection: Axis.horizontal,
+                              child: Column(
+                                children: filteredStockBalances.map((stock) {
+                                  final product = _products.firstWhere(
+                                    (p) => p.id == stock.productId,
+                                    orElse: () => Product(
+                                      id: stock.productId,
+                                      productName: 'Unknown',
+                                      quantity: 0,
+                                      unit: 'N/A',
+                                      costPerUnit: 0,
+                                      totalCost: 0,
+                                      dateAdded: DateTime.now(),
+                                      outletId: '',
+                                      createdAt: DateTime.now(),
+                                      isSynced: false,
+                                    ),
+                                  );
+                                  final outlet = _outlets.firstWhere(
+                                    (o) => o.id == stock.outletId,
+                                    orElse: () => Outlet(
+                                      id: stock.outletId,
+                                      name: 'Unknown',
+                                      createdAt: null,
+                                    ),
+                                  );
+
+                                  return InkWell(
+                                    onTap: () {
+                                      showDialog(
+                                        context: context,
+                                        builder: (context) => StockDetailDialog(
+                                          stock: stock,
+                                          product: product,
+                                          outlet: outlet,
+                                        ),
+                                      );
+                                    },
+                                    child: Container(
+                                      decoration: BoxDecoration(
+                                        border: Border(
+                                          bottom: BorderSide(
+                                            color: Colors.grey.shade300,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          _buildContentCell(
+                                            product.productName,
+                                            200,
+                                          ),
+                                          _buildContentCell(outlet.name, 150),
+                                          _buildContentCell(
+                                            stock.givenQuantity.toString(),
+                                            100,
+                                          ),
+                                          _buildContentCell(
+                                            stock.soldQuantity.toString(),
+                                            100,
+                                          ),
+                                          _buildContentCell(
+                                            stock.balanceQuantity.toString(),
+                                            100,
+                                          ),
+                                          _buildContentCell(
+                                            '₦${product.costPerUnit}',
+                                            120,
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                }).toList(),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
                     ),
                   ),
                 ],

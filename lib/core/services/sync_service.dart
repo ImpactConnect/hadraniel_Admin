@@ -509,21 +509,17 @@ class SyncService {
 
         // Insert new stock balances
         for (var stockData in stockBalances) {
-          await txn.insert(
-            'stock_balances',
-            {
-              'id': stockData['id'],
-              'outlet_id': stockData['outlet_id'],
-              'product_id': stockData['product_id'],
-              'given_quantity': stockData['given_quantity'],
-              'sold_quantity': stockData['sold_quantity'] ?? 0,
-              'balance_quantity': stockData['balance_quantity'],
-              'last_updated': stockData['last_updated'],
-              'created_at': stockData['created_at'],
-              'synced': 1,
-            },
-            conflictAlgorithm: ConflictAlgorithm.replace,
-          );
+          await txn.insert('stock_balances', {
+            'id': stockData['id'],
+            'outlet_id': stockData['outlet_id'],
+            'product_id': stockData['product_id'],
+            'given_quantity': stockData['given_quantity'],
+            'sold_quantity': stockData['sold_quantity'] ?? 0,
+            'balance_quantity': stockData['balance_quantity'],
+            'last_updated': stockData['last_updated'],
+            'created_at': stockData['created_at'],
+            'synced': 1,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
     } catch (e) {

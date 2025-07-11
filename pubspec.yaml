@@ -23,6 +23,7 @@ dependencies:
   pdf: ^3.10.7
   flutter_secure_storage: ^9.0.0
   path: ^1.8.3
+  sticky_headers: ^0.3.0
 
   cupertino_icons: ^1.0.8
 
