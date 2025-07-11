@@ -156,6 +156,23 @@ class DatabaseHelper {
     await db.execute(
       '''      CREATE TABLE customers (        id TEXT PRIMARY KEY,        full_name TEXT NOT NULL,        phone TEXT,        outlet_id TEXT,        total_outstanding REAL DEFAULT 0,        created_at TEXT NOT NULL,        is_synced INTEGER DEFAULT 0,        FOREIGN KEY (outlet_id) REFERENCES outlets (id)      )    ''',
     );
+
+    // Stock Balances table
+    await db.execute('''
+      CREATE TABLE stock_balances (
+        id TEXT PRIMARY KEY,
+        outlet_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        given_quantity REAL NOT NULL,
+        sold_quantity REAL DEFAULT 0,
+        balance_quantity REAL NOT NULL,
+        last_updated TEXT,
+        created_at TEXT,
+        synced INTEGER DEFAULT 1,
+        FOREIGN KEY (outlet_id) REFERENCES outlets (id),
+        FOREIGN KEY (product_id) REFERENCES products (id)
+      )
+    ''');
   }
 
   Future<void> clearAllTables() async {
@@ -168,6 +185,7 @@ class DatabaseHelper {
       await txn.delete('sales');
       await txn.delete('customers');
       await txn.delete('sync_queue');
+      await txn.delete('stock_balances');
     });
   }
 

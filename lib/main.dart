@@ -3,6 +3,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'core/services/auth_service.dart';
+import 'core/database/database_helper.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/dashboard/dashboard_screen.dart';
 import 'screens/dashboard/reps_screen.dart';
@@ -19,6 +20,10 @@ void main() async {
 
   // Initialize SQLite for Windows
   sqfliteFfiInit();
+
+  // Initialize DatabaseHelper
+  final dbHelper = DatabaseHelper();
+  await dbHelper.database;
 
   // Load environment variables
   await dotenv.load(fileName: '.env');

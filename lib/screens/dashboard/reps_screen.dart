@@ -181,93 +181,96 @@ class _RepsScreenState extends State<RepsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Row(
-                children: [
-                  _buildMetricCard(
-                    'Total Reps',
-                    totalReps.toString(),
-                    Icons.people,
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        _buildMetricCard(
+                          'Total Reps',
+                          totalReps.toString(),
+                          Icons.people,
+                        ),
+                        const SizedBox(width: 16),
+                        _buildMetricCard(
+                          'Admin Users',
+                          totalAdmins.toString(),
+                          Icons.admin_panel_settings,
+                        ),
+                      ],
+                    ),
                   ),
-                  const SizedBox(width: 16),
-                  _buildMetricCard(
-                    'Admin Users',
-                    totalAdmins.toString(),
-                    Icons.admin_panel_settings,
-                  ),
-                ],
-              ),
-            ),
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: TextField(
-                decoration: const InputDecoration(
-                  labelText: 'Search Reps',
-                  prefixIcon: Icon(Icons.search),
-                  border: OutlineInputBorder(),
-                ),
-                onChanged: (value) => setState(() => _searchQuery = value),
-              ),
-            ),
-            Expanded(
-              child: filteredReps.isEmpty
-                  ? const Center(
-                      child: Text(
-                        'No representatives found',
-                        style: TextStyle(fontSize: 16),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Search Reps',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
                       ),
-                    )
-                  : SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('Name')),
-                          DataColumn(label: Text('Outlet Assigned')),
-                          DataColumn(label: Text('Date Created')),
-                          DataColumn(label: Text('Actions')),
-                        ],
-                        rows: filteredReps.map((rep) {
-                          return DataRow(
-                            cells: [
-                              DataCell(
-                                Text(rep.fullName),
-                                onTap: () => _showRepDetails(rep),
-                              ),
-                              DataCell(
-                                Text(_getOutletName(rep.outletId)),
-                                onTap: () => _showRepDetails(rep),
-                              ),
-                              DataCell(
-                                Text(
-                                  rep.createdAt?.toString().split('.')[0] ??
-                                      'N/A',
-                                ),
-                                onTap: () => _showRepDetails(rep),
-                              ),
-                              DataCell(
-                                Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    IconButton(
-                                      icon: const Icon(Icons.edit),
-                                      onPressed: () =>
-                                          _navigateToRepForm(rep: rep),
-                                      tooltip: 'Edit Rep',
+                      onChanged: (value) =>
+                          setState(() => _searchQuery = value),
+                    ),
+                  ),
+                  Expanded(
+                    child: filteredReps.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No representatives found',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                          )
+                        : SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
+                              columns: const [
+                                DataColumn(label: Text('Name')),
+                                DataColumn(label: Text('Outlet Assigned')),
+                                DataColumn(label: Text('Date Created')),
+                                DataColumn(label: Text('Actions')),
+                              ],
+                              rows: filteredReps.map((rep) {
+                                return DataRow(
+                                  cells: [
+                                    DataCell(
+                                      Text(rep.fullName),
+                                      onTap: () => _showRepDetails(rep),
                                     ),
-                                    IconButton(
-                                      icon: const Icon(Icons.delete),
-                                      onPressed: () => _deleteRep(rep),
-                                      tooltip: 'Delete Rep',
+                                    DataCell(
+                                      Text(_getOutletName(rep.outletId)),
+                                      onTap: () => _showRepDetails(rep),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        rep.createdAt?.toString().split(
+                                              '.',
+                                            )[0] ??
+                                            'N/A',
+                                      ),
+                                      onTap: () => _showRepDetails(rep),
+                                    ),
+                                    DataCell(
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit),
+                                            onPressed: () =>
+                                                _navigateToRepForm(rep: rep),
+                                            tooltip: 'Edit Rep',
+                                          ),
+                                          IconButton(
+                                            icon: const Icon(Icons.delete),
+                                            onPressed: () => _deleteRep(rep),
+                                            tooltip: 'Delete Rep',
+                                          ),
+                                        ],
+                                      ),
                                     ),
                                   ],
-                                ),
-                              ),
-                            ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
                   ),
                 ],
               ),

@@ -346,7 +346,8 @@ class SyncService {
     await syncProductsToLocalDb();
     await syncRepsToLocalDb();
     await syncCustomersToLocalDb();
-    // TODO: Add sync methods for sales and stock balances
+    await syncSalesToLocalDb();
+    await syncStockBalancesToLocalDb();
   }
 
   // Customers Sync
@@ -477,6 +478,56 @@ class SyncService {
       }
     } catch (e) {
       print('Error processing sync queue: $e');
+      throw e;
+    }
+  }
+
+  Future<void> syncStockBalancesToLocalDb() async {
+    try {
+      final response = await supabase.from('stock_balances').select();
+      final stockBalances = response as List<dynamic>;
+
+      final db = await _dbHelper.database;
+      await db.transaction((txn) async {
+        // Create stock_balances table if it doesn't exist
+        await txn.execute('''
+          CREATE TABLE IF NOT EXISTS stock_balances (
+            id TEXT PRIMARY KEY,
+            outlet_id TEXT NOT NULL,
+            product_id TEXT NOT NULL,
+            given_quantity REAL NOT NULL,
+            sold_quantity REAL DEFAULT 0,
+            balance_quantity REAL NOT NULL,
+            last_updated TEXT,
+            created_at TEXT,
+            synced INTEGER DEFAULT 1
+          )
+        ''');
+
+        // Clear existing stock balances
+        await txn.delete('stock_balances');
+
+        // Insert new stock balances
+        for (var stockData in stockBalances) {
+          await txn.insert(
+            'stock_balances',
+            {
+              'id': stockData['id'],
+              'outlet_id': stockData['outlet_id'],
+              'product_id': stockData['product_id'],
+              'given_quantity': stockData['given_quantity'],
+              'sold_quantity': stockData['sold_quantity'] ?? 0,
+              'balance_quantity': stockData['balance_quantity'],
+              'last_updated': stockData['last_updated'],
+              'created_at': stockData['created_at'],
+              'synced': 1,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      });
+    } catch (e) {
+      print('Error syncing stock balances: $e');
       throw e;
     }
   }
