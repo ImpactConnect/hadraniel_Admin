@@ -8,77 +8,168 @@ class Sidebar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    // Get the screen height to ensure sidebar takes full height
+    final screenHeight = MediaQuery.of(context).size.height;
+    final primaryColor = Theme.of(context).primaryColor;
+    final colorScheme = Theme.of(context).colorScheme;
+    
     return Drawer(
-      child: ListView(
-        padding: EdgeInsets.zero,
-        children: [
-          const DrawerHeader(
-            decoration: BoxDecoration(color: Colors.blue),
-            child: Text(
-              'Admin Dashboard',
-              style: TextStyle(color: Colors.white, fontSize: 24),
+      elevation: 2.0,
+      child: Container(
+        height: screenHeight,
+        color: Colors.white,
+        child: Column(
+          children: [
+            DrawerHeader(
+              decoration: BoxDecoration(
+                color: primaryColor,
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.1),
+                    blurRadius: 4,
+                    offset: const Offset(0, 2),
+                  ),
+                ],
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.admin_panel_settings,
+                      size: 48,
+                      color: Colors.white,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Admin Dashboard',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
             ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.dashboard),
-            title: const Text('Dashboard'),
-            onTap: () => Navigator.pushNamed(context, '/dashboard'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.people),
-            title: const Text('Reps'),
-            onTap: () => Navigator.pushNamed(context, '/reps'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.store),
-            title: const Text('Outlets'),
-            onTap: () => Navigator.pushNamed(context, '/outlets'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.inventory),
-            title: const Text('Products'),
-            onTap: () => Navigator.pushNamed(context, '/products'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.point_of_sale),
-            title: const Text('Sales'),
-            onTap: () => Navigator.pushNamed(context, '/sales'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.assessment),
-            title: const Text('Stock Balance'),
-            onTap: () => Navigator.pushNamed(context, '/stock'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.group),
-            title: const Text('Customers'),
-            onTap: () => Navigator.pushNamed(context, '/customers'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.sync),
-            title: const Text('Sync'),
-            onTap: () => Navigator.pushNamed(context, '/sync'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.settings),
-            title: const Text('Settings'),
-            onTap: () => Navigator.pushNamed(context, '/settings'),
-          ),
-          ListTile(
-            leading: const Icon(Icons.logout),
-            title: const Text('Logout'),
-            onTap: () async {
-              await _authService.signOut();
-              if (context.mounted) {
-                Navigator.of(context).pushNamedAndRemoveUntil(
-                  '/login',
-                  (route) => false, // Clear the entire navigation stack
-                );
-              }
-            },
-          ),
-        ],
+            Expanded(
+              child: ListView(
+                padding: EdgeInsets.zero,
+                children: [
+                  _buildNavItem(
+                    context: context,
+                    icon: Icons.dashboard,
+                    title: 'Dashboard',
+                    route: '/dashboard',
+                    colorScheme: colorScheme,
+                  ),
+                  _buildNavItem(
+                    context: context,
+                    icon: Icons.people,
+                    title: 'Reps',
+                    route: '/reps',
+                    colorScheme: colorScheme,
+                  ),
+                  _buildNavItem(
+                    context: context,
+                    icon: Icons.store,
+                    title: 'Outlets',
+                    route: '/outlets',
+                    colorScheme: colorScheme,
+                  ),
+                  _buildNavItem(
+                    context: context,
+                    icon: Icons.inventory,
+                    title: 'Products',
+                    route: '/products',
+                    colorScheme: colorScheme,
+                  ),
+                  _buildNavItem(
+                    context: context,
+                    icon: Icons.point_of_sale,
+                    title: 'Sales',
+                    route: '/sales',
+                    colorScheme: colorScheme,
+                  ),
+                  _buildNavItem(
+                    context: context,
+                    icon: Icons.assessment,
+                    title: 'Stock Balance',
+                    route: '/stock',
+                    colorScheme: colorScheme,
+                  ),
+                  _buildNavItem(
+                    context: context,
+                    icon: Icons.group,
+                    title: 'Customers',
+                    route: '/customers',
+                    colorScheme: colorScheme,
+                  ),
+                  _buildNavItem(
+                    context: context,
+                    icon: Icons.sync,
+                    title: 'Sync',
+                    route: '/sync',
+                    colorScheme: colorScheme,
+                  ),
+                  _buildNavItem(
+                    context: context,
+                    icon: Icons.settings,
+                    title: 'Settings',
+                    route: '/settings',
+                    colorScheme: colorScheme,
+                  ),
+                ],
+              ),
+            ),
+            Divider(height: 1),
+            _buildNavItem(
+              context: context,
+              icon: Icons.logout,
+              title: 'Logout',
+              colorScheme: colorScheme,
+              onTap: () async {
+                await _authService.signOut();
+                if (context.mounted) {
+                  Navigator.of(context).pushNamedAndRemoveUntil(
+                    '/login',
+                    (route) => false, // Clear the entire navigation stack
+                  );
+                }
+              },
+            ),
+          ],
+        ),
       ),
+    );
+  }
+
+  Widget _buildNavItem({
+    required BuildContext context,
+    required IconData icon,
+    required String title,
+    String? route,
+    required ColorScheme colorScheme,
+    VoidCallback? onTap,
+  }) {
+    final currentRoute = ModalRoute.of(context)?.settings.name;
+    final isSelected = route != null && currentRoute == route;
+
+    return ListTile(
+      leading: Icon(
+        icon,
+        color: isSelected ? colorScheme.primary : Colors.grey[700],
+      ),
+      title: Text(
+        title,
+        style: TextStyle(
+          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          color: isSelected ? colorScheme.primary : Colors.grey[800],
+        ),
+      ),
+      tileColor: isSelected ? colorScheme.primary.withOpacity(0.1) : null,
+      onTap: onTap ?? () => Navigator.pushNamed(context, route!),
     );
   }
 }

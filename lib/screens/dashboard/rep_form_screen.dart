@@ -180,69 +180,248 @@ class _RepFormScreenState extends State<RepFormScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.rep == null ? 'Add New Rep' : 'Edit Rep'),
+        elevation: 2,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Form(
-          key: _formKey,
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              TextFormField(
-                controller: _fullNameController,
-                decoration: const InputDecoration(labelText: 'Full Name'),
-                validator: (value) =>
-                    value?.isEmpty ?? true ? 'Required field' : null,
-              ),
-              const SizedBox(height: 16),
-              TextFormField(
-                controller: _emailController,
-                decoration: const InputDecoration(labelText: 'Email'),
-                keyboardType: TextInputType.emailAddress,
-                validator: (value) =>
-                    value?.isEmpty ?? true ? 'Required field' : null,
-              ),
-              const SizedBox(height: 16),
-              if (widget.rep == null) // Only show password field for new reps
-                TextFormField(
-                  controller: _passwordController,
-                  decoration: const InputDecoration(labelText: 'Password'),
-                  obscureText: true,
-                  validator: (value) =>
-                      value?.isEmpty ?? true ? 'Required field' : null,
+      body: Container(
+        color: Colors.grey[50],
+        child: Center(
+          child: SingleChildScrollView(
+            child: Container(
+              constraints: const BoxConstraints(maxWidth: 600),
+              padding: const EdgeInsets.all(24.0),
+              child: Card(
+                elevation: 4,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
                 ),
-              const SizedBox(height: 16),
-              DropdownButtonFormField<String>(
-                value: _selectedOutletId,
-                decoration: const InputDecoration(labelText: 'Outlet'),
-                items: _outlets.map((outlet) {
-                  return DropdownMenuItem(
-                    value: outlet.id,
-                    child: Text(outlet.name),
-                  );
-                }).toList(),
-                onChanged: (value) {
-                  setState(() {
-                    _selectedOutletId = value;
-                  });
-                },
-                validator: (value) =>
-                    value == null ? 'Please select an outlet' : null,
+                child: Padding(
+                  padding: const EdgeInsets.all(32.0),
+                  child: Form(
+                    key: _formKey,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Form Header
+                        Center(
+                          child: Column(
+                            children: [
+                              Icon(
+                                widget.rep == null ? Icons.person_add : Icons.edit,
+                                size: 48,
+                                color: colorScheme.primary,
+                              ),
+                              const SizedBox(height: 16),
+                              Text(
+                                widget.rep == null ? 'Create New Representative' : 'Edit Representative',
+                                style: theme.textTheme.headlineSmall?.copyWith(
+                                  fontWeight: FontWeight.bold,
+                                  color: colorScheme.primary,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                widget.rep == null
+                                    ? 'Fill in the details to create a new sales representative'
+                                    : 'Update the details of this sales representative',
+                                style: TextStyle(
+                                  color: Colors.grey[600],
+                                  fontSize: 14,
+                                ),
+                                textAlign: TextAlign.center,
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 32),
+                        
+                        // Full Name Field
+                        _buildTextField(
+                          controller: _fullNameController,
+                          label: 'Full Name',
+                          icon: Icons.person_outline,
+                          colorScheme: colorScheme,
+                          validator: (value) =>
+                              value?.isEmpty ?? true ? 'Required field' : null,
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        // Email Field
+                        _buildTextField(
+                          controller: _emailController,
+                          label: 'Email',
+                          icon: Icons.email_outlined,
+                          keyboardType: TextInputType.emailAddress,
+                          colorScheme: colorScheme,
+                          validator: (value) =>
+                              value?.isEmpty ?? true ? 'Required field' : null,
+                        ),
+                        const SizedBox(height: 24),
+                        
+                        // Password Field (only for new reps)
+                        if (widget.rep == null)
+                          _buildTextField(
+                            controller: _passwordController,
+                            label: 'Password',
+                            icon: Icons.lock_outline,
+                            obscureText: true,
+                            colorScheme: colorScheme,
+                            validator: (value) =>
+                                value?.isEmpty ?? true ? 'Required field' : null,
+                          ),
+                        if (widget.rep == null) const SizedBox(height: 24),
+                        
+                        // Outlet Dropdown
+                        _buildDropdownField(
+                          value: _selectedOutletId,
+                          label: 'Assigned Outlet',
+                          icon: Icons.store_outlined,
+                          items: _outlets.map((outlet) {
+                            return DropdownMenuItem(
+                              value: outlet.id,
+                              child: Text(outlet.name),
+                            );
+                          }).toList(),
+                          onChanged: (value) {
+                            setState(() {
+                              _selectedOutletId = value;
+                            });
+                          },
+                          validator: (value) =>
+                              value == null ? 'Please select an outlet' : null,
+                          colorScheme: colorScheme,
+                        ),
+                        const SizedBox(height: 40),
+                        
+                        // Submit Button
+                        SizedBox(
+                          height: 50,
+                          child: ElevatedButton(
+                            onPressed: _isLoading ? null : _saveRep,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: colorScheme.primary,
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 2,
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    height: 24,
+                                    width: 24,
+                                    child: CircularProgressIndicator(
+                                      color: Colors.white,
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Text(
+                                    widget.rep == null ? 'Create Rep' : 'Update Rep',
+                                    style: const TextStyle(
+                                      fontSize: 16,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
               ),
-              const SizedBox(height: 24),
-              ElevatedButton(
-                onPressed: _isLoading ? null : _saveRep,
-                child: _isLoading
-                    ? const CircularProgressIndicator()
-                    : Text(widget.rep == null ? 'Create Rep' : 'Update Rep'),
-              ),
-            ],
+            ),
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildTextField({
+    required TextEditingController controller,
+    required String label,
+    required IconData icon,
+    required ColorScheme colorScheme,
+    TextInputType? keyboardType,
+    bool obscureText = false,
+    String? Function(String?)? validator,
+  }) {
+    return TextFormField(
+      controller: controller,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: colorScheme.primary),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.primary, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.error),
+        ),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+      ),
+      keyboardType: keyboardType,
+      obscureText: obscureText,
+      validator: validator,
+    );
+  }
+
+  Widget _buildDropdownField({
+    required String? value,
+    required String label,
+    required IconData icon,
+    required List<DropdownMenuItem<String>> items,
+    required void Function(String?)? onChanged,
+    required ColorScheme colorScheme,
+    String? Function(String?)? validator,
+  }) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      decoration: InputDecoration(
+        labelText: label,
+        prefixIcon: Icon(icon, color: colorScheme.primary),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: Colors.grey[300]!),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.primary, width: 2),
+        ),
+        errorBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: colorScheme.error),
+        ),
+        filled: true,
+        fillColor: Colors.white,
+        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+      ),
+      items: items,
+      onChanged: onChanged,
+      validator: validator,
+      icon: Icon(Icons.arrow_drop_down, color: colorScheme.primary),
+      isExpanded: true,
+      dropdownColor: Colors.white,
     );
   }
 

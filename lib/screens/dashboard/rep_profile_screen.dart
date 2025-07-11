@@ -47,6 +47,9 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.rep.fullName),
@@ -62,175 +65,248 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : SingleChildScrollView(
-              padding: const EdgeInsets.all(24.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Center(
-                    child: Column(
+          : Container(
+              color: Colors.grey[50],
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Profile Header with Avatar and Contact Information side by side
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Hero(
-                          tag: 'rep-avatar-${widget.rep.id}',
-                          child: CircleAvatar(
-                            radius: 50,
-                            backgroundColor: Theme.of(
-                              context,
-                            ).colorScheme.primary,
-                            child: Text(
-                              widget.rep.fullName.substring(0, 1).toUpperCase(),
-                              style: const TextStyle(
-                                fontSize: 36,
-                                color: Colors.white,
+                        // Profile Header with Avatar - takes 60% of the width
+                        Expanded(
+                          flex: 6,
+                          child: Card(
+                            elevation: 4,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Container(
+                              padding: const EdgeInsets.all(24.0),
+                              decoration: BoxDecoration(
+                                gradient: LinearGradient(
+                                  begin: Alignment.topLeft,
+                                  end: Alignment.bottomRight,
+                                  colors: [
+                                    colorScheme.primary,
+                                    colorScheme.primary.withOpacity(0.7),
+                                  ],
+                                ),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Column(
+                                children: [
+                                  Hero(
+                                    tag: 'rep-avatar-${widget.rep.id}',
+                                    child: CircleAvatar(
+                                      radius: 60,
+                                      backgroundColor: Colors.white,
+                                      child: Text(
+                                        widget.rep.fullName.substring(0, 1).toUpperCase(),
+                                        style: TextStyle(
+                                          fontSize: 48,
+                                          color: colorScheme.primary,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 20),
+                                  Text(
+                                    widget.rep.fullName,
+                                    style: const TextStyle(
+                                      fontSize: 28,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 16,
+                                      vertical: 8,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: Colors.white,
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      widget.rep.isAdmin ? 'Admin' : 'Sales Rep',
+                                      style: TextStyle(
+                                        color: widget.rep.isAdmin
+                                            ? Colors.purple
+                                            : colorScheme.primary,
+                                        fontWeight: FontWeight.bold,
+                                        fontSize: 16,
+                                      ),
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(height: 16),
-                        Text(
-                          widget.rep.fullName,
-                          style: Theme.of(context).textTheme.headlineSmall
-                              ?.copyWith(fontWeight: FontWeight.bold),
-                        ),
-                        const SizedBox(height: 8),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 12,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: widget.rep.isAdmin
-                                ? Colors.purple.withOpacity(0.1)
-                                : Colors.blue.withOpacity(0.1),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            widget.rep.isAdmin ? 'Admin' : 'Sales Rep',
-                            style: TextStyle(
-                              color: widget.rep.isAdmin
-                                  ? Colors.purple
-                                  : Colors.blue,
-                              fontWeight: FontWeight.w500,
+                        
+                        const SizedBox(width: 16),
+                        
+                        // Contact Information Card - takes 40% of the width
+                        Expanded(
+                          flex: 4,
+                          child: Card(
+                            elevation: 2,
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(16),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(24.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.person_outline,
+                                        color: colorScheme.primary,
+                                      ),
+                                      const SizedBox(width: 12),
+                                      Expanded(
+                                        child: Text(
+                                          'Contact Information',
+                                          style: theme.textTheme.titleLarge?.copyWith(
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.primary,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const Divider(height: 32),
+                                  _buildInfoRow(
+                                    Icons.email_outlined,
+                                    'Email',
+                                    widget.rep.email,
+                                    colorScheme,
+                                  ),
+                                  _buildInfoRow(
+                                    Icons.store_outlined,
+                                    'Assigned Outlet',
+                                    _outlet?.name ?? 'Not Assigned',
+                                    colorScheme,
+                                  ),
+                                  _buildInfoRow(
+                                    Icons.location_on_outlined,
+                                    'Outlet Location',
+                                    _outlet?.location ?? 'N/A',
+                                    colorScheme,
+                                  ),
+                                  _buildInfoRow(
+                                    Icons.calendar_today_outlined,
+                                    'Created',
+                                    widget.rep.createdAt?.toString().split('.')[0] ??
+                                        'N/A',
+                                    colorScheme,
+                                    isLast: true,
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ),
                       ],
                     ),
-                  ),
-                  const SizedBox(height: 32),
-                  Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.person_outline),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Contact Information',
-                                style: Theme.of(context).textTheme.titleLarge
-                                    ?.copyWith(fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          _buildInfoRow(
-                            Icons.email_outlined,
-                            'Email',
-                            widget.rep.email,
-                          ),
-                          _buildInfoRow(
-                            Icons.store_outlined,
-                            'Assigned Outlet',
-                            _outlet?.name ?? 'Not Assigned',
-                          ),
-                          _buildInfoRow(
-                            Icons.location_on_outlined,
-                            'Outlet Location',
-                            _outlet?.location ?? 'N/A',
-                          ),
-                          _buildInfoRow(
-                            Icons.calendar_today_outlined,
-                            'Created',
-                            widget.rep.createdAt?.toString().split('.')[0] ??
-                                'N/A',
-                          ),
-                        ],
+                    
+                    const SizedBox(height: 32),
+                    
+                    // Performance Metrics Card
+                    Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.analytics_outlined,
+                                  color: colorScheme.primary,
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Performance Metrics',
+                                  style: theme.textTheme.titleLarge?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: colorScheme.primary,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const Divider(height: 32),
+                            Row(
+                              children: [
+                                _buildMetricCard(
+                                  'Total Sales',
+                                  '₦0',
+                                  Icons.point_of_sale,
+                                  Colors.green,
+                                  colorScheme,
+                                ),
+                                const SizedBox(width: 16),
+                                _buildMetricCard(
+                                  'Products Sold',
+                                  '0',
+                                  Icons.inventory,
+                                  Colors.blue,
+                                  colorScheme,
+                                ),
+                                const SizedBox(width: 16),
+                                _buildMetricCard(
+                                  'Customers',
+                                  '0',
+                                  Icons.people,
+                                  Colors.orange,
+                                  colorScheme,
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ),
-                  ),
-                  const SizedBox(height: 24),
-                  Card(
-                    elevation: 2,
-                    child: Padding(
-                      padding: const EdgeInsets.all(24.0),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              const Icon(Icons.analytics_outlined),
-                              const SizedBox(width: 8),
-                              Text(
-                                'Performance Metrics',
-                                style: Theme.of(context).textTheme.titleLarge
-                                    ?.copyWith(fontWeight: FontWeight.bold),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 24),
-                          Row(
-                            children: [
-                              _buildMetricCard(
-                                'Total Sales',
-                                '₦0',
-                                Icons.point_of_sale,
-                                Colors.green,
-                              ),
-                              const SizedBox(width: 16),
-                              _buildMetricCard(
-                                'Products Sold',
-                                '0',
-                                Icons.inventory,
-                                Colors.blue,
-                              ),
-                              const SizedBox(width: 16),
-                              _buildMetricCard(
-                                'Customers',
-                                '0',
-                                Icons.people,
-                                Colors.orange,
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+                  ],
+                ),
               ),
             ),
     );
   }
 
-  Widget _buildInfoRow(IconData icon, String label, String value) {
+  Widget _buildInfoRow(
+    IconData icon,
+    String label,
+    String value,
+    ColorScheme colorScheme, {
+    bool isLast = false,
+  }) {
     return Padding(
-      padding: const EdgeInsets.only(bottom: 20.0),
+      padding: EdgeInsets.only(bottom: isLast ? 0 : 20.0),
       child: Row(
         children: [
           Container(
-            padding: const EdgeInsets.all(8),
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+              color: colorScheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
             ),
             child: Icon(
               icon,
-              color: Theme.of(context).colorScheme.primary,
-              size: 20,
+              color: colorScheme.primary,
+              size: 24,
             ),
           ),
           const SizedBox(width: 16),
@@ -240,16 +316,19 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
               children: [
                 Text(
                   label,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodySmall?.copyWith(color: Colors.grey[600]),
+                  style: TextStyle(
+                    fontSize: 14,
+                    color: Colors.grey[600],
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 6),
                 Text(
                   value,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w500),
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                  ),
                 ),
               ],
             ),
@@ -264,34 +343,43 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
     String value,
     IconData icon,
     MaterialColor color,
+    ColorScheme colorScheme,
   ) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
         decoration: BoxDecoration(
           color: color.shade50,
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.shade100),
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: color.shade100,
+              blurRadius: 4,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Column(
           children: [
-            Icon(icon, size: 32, color: color.shade700),
-            const SizedBox(height: 12),
+            Icon(icon, size: 36, color: color.shade700),
+            const SizedBox(height: 16),
             Text(
-              title,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              value,
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
                 color: color.shade700,
-                fontWeight: FontWeight.w500,
               ),
-              textAlign: TextAlign.center,
             ),
             const SizedBox(height: 8),
             Text(
-              value,
-              style: Theme.of(context).textTheme.titleLarge?.copyWith(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
                 color: color.shade700,
-                fontWeight: FontWeight.bold,
               ),
+              textAlign: TextAlign.center,
             ),
           ],
         ),

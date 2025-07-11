@@ -147,6 +147,9 @@ class _RepsScreenState extends State<RepsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
     final filteredReps = _reps
         .where(
           (rep) =>
@@ -160,152 +163,399 @@ class _RepsScreenState extends State<RepsScreen> {
 
     return DashboardLayout(
       title: 'Sales Representatives',
-      child: Column(
-        children: [
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                IconButton(
-                  icon: const Icon(Icons.sync),
-                  onPressed: _isLoading ? null : _syncData,
-                  tooltip: 'Sync Data',
-                ),
-              ],
-            ),
-          ),
-          Expanded(
-            child: LoadingOverlay(
-              isLoading: _isLoading,
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+      floatingActionButton: FloatingActionButton.extended(
+        onPressed: () => _navigateToRepForm(),
+        tooltip: 'Add New Rep',
+        icon: const Icon(Icons.person_add),
+        label: const Text('Add Rep', style: TextStyle(color: Colors.white)),
+        backgroundColor: colorScheme.primary,
+        elevation: 4,
+      ),
+      child: Container(
+        color: Colors.grey[50],
+        child: Column(
+          children: [
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.end,
                 children: [
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Row(
-                      children: [
-                        _buildMetricCard(
-                          'Total Reps',
-                          totalReps.toString(),
-                          Icons.people,
-                        ),
-                        const SizedBox(width: 16),
-                        _buildMetricCard(
-                          'Admin Users',
-                          totalAdmins.toString(),
-                          Icons.admin_panel_settings,
-                        ),
-                      ],
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: TextField(
-                      decoration: const InputDecoration(
-                        labelText: 'Search Reps',
-                        prefixIcon: Icon(Icons.search),
-                        border: OutlineInputBorder(),
-                      ),
-                      onChanged: (value) =>
-                          setState(() => _searchQuery = value),
-                    ),
-                  ),
-                  Expanded(
-                    child: filteredReps.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'No representatives found',
-                              style: TextStyle(fontSize: 16),
+                  ElevatedButton.icon(
+                    icon: _isSyncing
+                        ? SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(
+                              color: Colors.white,
+                              strokeWidth: 2,
                             ),
                           )
-                        : SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: DataTable(
-                              columns: const [
-                                DataColumn(label: Text('Name')),
-                                DataColumn(label: Text('Outlet Assigned')),
-                                DataColumn(label: Text('Date Created')),
-                                DataColumn(label: Text('Actions')),
-                              ],
-                              rows: filteredReps.map((rep) {
-                                return DataRow(
-                                  cells: [
-                                    DataCell(
-                                      Text(rep.fullName),
-                                      onTap: () => _showRepDetails(rep),
-                                    ),
-                                    DataCell(
-                                      Text(_getOutletName(rep.outletId)),
-                                      onTap: () => _showRepDetails(rep),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        rep.createdAt?.toString().split(
-                                              '.',
-                                            )[0] ??
-                                            'N/A',
-                                      ),
-                                      onTap: () => _showRepDetails(rep),
-                                    ),
-                                    DataCell(
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
-                                        children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.edit),
-                                            onPressed: () =>
-                                                _navigateToRepForm(rep: rep),
-                                            tooltip: 'Edit Rep',
-                                          ),
-                                          IconButton(
-                                            icon: const Icon(Icons.delete),
-                                            onPressed: () => _deleteRep(rep),
-                                            tooltip: 'Delete Rep',
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  ],
-                                );
-                              }).toList(),
-                            ),
-                          ),
+                        : const Icon(Icons.sync),
+                    label: Text(_isSyncing ? 'Syncing...' : 'Sync Data'),
+                    onPressed: _isLoading || _isSyncing ? null : _syncData,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: colorScheme.primary,
+                      foregroundColor: Colors.white,
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                   ),
                 ],
               ),
             ),
-          ),
-        ],
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddRepDialog,
-        tooltip: 'Add New Rep',
-        child: const Icon(Icons.add),
+            Expanded(
+              child: LoadingOverlay(
+                isLoading: _isLoading,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Row(
+                        children: [
+                          _buildMetricCard(
+                            'Total Reps',
+                            totalReps.toString(),
+                            Icons.people,
+                            Colors.blue,
+                            colorScheme,
+                          ),
+                          const SizedBox(width: 16),
+                          _buildMetricCard(
+                            'Admin Users',
+                            totalAdmins.toString(),
+                            Icons.admin_panel_settings,
+                            Colors.purple,
+                            colorScheme,
+                          ),
+                        ],
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.all(16.0),
+                      child: TextField(
+                        decoration: InputDecoration(
+                          labelText: 'Search Representatives',
+                          hintText: 'Search by name, email or outlet',
+                          prefixIcon: Icon(
+                            Icons.search,
+                            color: colorScheme.primary,
+                          ),
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          enabledBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(color: Colors.grey[300]!),
+                          ),
+                          focusedBorder: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            borderSide: BorderSide(
+                              color: colorScheme.primary,
+                              width: 2,
+                            ),
+                          ),
+                          filled: true,
+                          fillColor: Colors.white,
+                          contentPadding: const EdgeInsets.symmetric(
+                            vertical: 16,
+                            horizontal: 16,
+                          ),
+                        ),
+                        onChanged: (value) =>
+                            setState(() => _searchQuery = value),
+                      ),
+                    ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                        child: filteredReps.isEmpty
+                            ? Center(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Icon(
+                                      Icons.person_search,
+                                      size: 64,
+                                      color: Colors.grey[400],
+                                    ),
+                                    const SizedBox(height: 16),
+                                    Text(
+                                      'No representatives found',
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        color: Colors.grey[600],
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    ),
+                                    if (_searchQuery.isNotEmpty)
+                                      Padding(
+                                        padding: const EdgeInsets.only(
+                                          top: 8.0,
+                                        ),
+                                        child: Text(
+                                          'Try adjusting your search criteria',
+                                          style: TextStyle(
+                                            color: Colors.grey[500],
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              )
+                            : Card(
+                                elevation: 2,
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Center(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: DataTable(
+                                      headingRowColor:
+                                          MaterialStateProperty.all(
+                                            colorScheme.primary.withOpacity(
+                                              0.05,
+                                            ),
+                                          ),
+                                      dataRowMinHeight: 64,
+                                      dataRowMaxHeight: 64,
+                                      columns: [
+                                        DataColumn(
+                                          label: Text(
+                                            'Name',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: colorScheme.primary,
+                                            ),
+                                          ),
+                                        ),
+                                        DataColumn(
+                                          label: Text(
+                                            'Outlet Assigned',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: colorScheme.primary,
+                                            ),
+                                          ),
+                                        ),
+                                        DataColumn(
+                                          label: Text(
+                                            'Date Created',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: colorScheme.primary,
+                                            ),
+                                          ),
+                                        ),
+                                        DataColumn(
+                                          label: Text(
+                                            'Actions',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: colorScheme.primary,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                      rows: filteredReps.map((rep) {
+                                        return DataRow(
+                                          cells: [
+                                            DataCell(
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  Hero(
+                                                    tag: 'rep-avatar-${rep.id}',
+                                                    child: CircleAvatar(
+                                                      radius: 16,
+                                                      backgroundColor:
+                                                          colorScheme.primary,
+                                                      child: Text(
+                                                        rep.fullName
+                                                            .substring(0, 1)
+                                                            .toUpperCase(),
+                                                        style: const TextStyle(
+                                                          color: Colors.white,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  const SizedBox(width: 12),
+                                                  Column(
+                                                    crossAxisAlignment:
+                                                        CrossAxisAlignment
+                                                            .start,
+                                                    mainAxisAlignment:
+                                                        MainAxisAlignment
+                                                            .center,
+                                                    children: [
+                                                      Text(
+                                                        rep.fullName,
+                                                        style: const TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w600,
+                                                        ),
+                                                      ),
+                                                      Text(
+                                                        rep.email,
+                                                        style: TextStyle(
+                                                          fontSize: 12,
+                                                          color:
+                                                              Colors.grey[600],
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                ],
+                                              ),
+                                              onTap: () => _showRepDetails(rep),
+                                            ),
+                                            DataCell(
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                      horizontal: 12,
+                                                      vertical: 6,
+                                                    ),
+                                                decoration: BoxDecoration(
+                                                  color: colorScheme.primary
+                                                      .withOpacity(0.1),
+                                                  borderRadius:
+                                                      BorderRadius.circular(16),
+                                                ),
+                                                child: Text(
+                                                  _getOutletName(rep.outletId),
+                                                  style: TextStyle(
+                                                    color: colorScheme.primary,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                              onTap: () => _showRepDetails(rep),
+                                            ),
+                                            DataCell(
+                                              Text(
+                                                rep.createdAt?.toString().split(
+                                                      '.',
+                                                    )[0] ??
+                                                    'N/A',
+                                              ),
+                                              onTap: () => _showRepDetails(rep),
+                                            ),
+                                            DataCell(
+                                              Row(
+                                                mainAxisSize: MainAxisSize.min,
+                                                children: [
+                                                  IconButton(
+                                                    icon: Icon(
+                                                      Icons.visibility,
+                                                      color:
+                                                          colorScheme.primary,
+                                                    ),
+                                                    onPressed: () =>
+                                                        _showRepDetails(rep),
+                                                    tooltip: 'View Details',
+                                                  ),
+                                                  IconButton(
+                                                    icon: Icon(
+                                                      Icons.edit,
+                                                      color: Colors.orange[700],
+                                                    ),
+                                                    onPressed: () =>
+                                                        _navigateToRepForm(
+                                                          rep: rep,
+                                                        ),
+                                                    tooltip: 'Edit Rep',
+                                                  ),
+                                                  IconButton(
+                                                    icon: Icon(
+                                                      Icons.delete,
+                                                      color: Colors.red[700],
+                                                    ),
+                                                    onPressed: () =>
+                                                        _deleteRep(rep),
+                                                    tooltip: 'Delete Rep',
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ],
+                                        );
+                                      }).toList(),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon) {
+  Widget _buildMetricCard(
+    String title,
+    String value,
+    IconData icon,
+    MaterialColor color,
+    ColorScheme colorScheme,
+  ) {
     return Expanded(
       child: Card(
-        elevation: 2,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
+        elevation: 3,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        child: Container(
+          padding: const EdgeInsets.all(20.0),
+          decoration: BoxDecoration(
+            color: color.shade50,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: color.shade100,
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
           child: Column(
             children: [
-              Icon(icon, size: 32, color: Theme.of(context).primaryColor),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                  color: Theme.of(context).primaryColor,
-                  fontWeight: FontWeight.bold,
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.w500,
+                      color: color.shade700,
+                    ),
+                  ),
+                  Icon(icon, size: 28, color: color.shade400),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 32,
+                    fontWeight: FontWeight.bold,
+                    color: color.shade700,
+                  ),
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(title, style: TextStyle(color: Colors.grey[600])),
             ],
           ),
         ),
@@ -321,113 +571,7 @@ class _RepsScreenState extends State<RepsScreen> {
   }
 
   Future<void> _showAddRepDialog() async {
-    final _formKey = GlobalKey<FormState>();
-    final _fullNameController = TextEditingController();
-    final _emailController = TextEditingController();
-    final _passwordController = TextEditingController();
-    String? _selectedOutletId;
-    final _outlets = await _syncService.getAllLocalOutlets();
-    bool _isLoading = false;
-
-    await showDialog(
-      context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) => AlertDialog(
-          title: const Text('Add New Rep'),
-          content: SingleChildScrollView(
-            child: Form(
-              key: _formKey,
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextFormField(
-                    controller: _fullNameController,
-                    decoration: const InputDecoration(labelText: 'Full Name'),
-                    validator: (value) =>
-                        value?.isEmpty ?? true ? 'Required field' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _emailController,
-                    decoration: const InputDecoration(labelText: 'Email'),
-                    keyboardType: TextInputType.emailAddress,
-                    validator: (value) =>
-                        value?.isEmpty ?? true ? 'Required field' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  TextFormField(
-                    controller: _passwordController,
-                    decoration: const InputDecoration(labelText: 'Password'),
-                    obscureText: true,
-                    validator: (value) =>
-                        value?.isEmpty ?? true ? 'Required field' : null,
-                  ),
-                  const SizedBox(height: 16),
-                  DropdownButtonFormField<String>(
-                    value: _selectedOutletId,
-                    decoration: const InputDecoration(labelText: 'Outlet'),
-                    items: _outlets.map((outlet) {
-                      return DropdownMenuItem(
-                        value: outlet.id,
-                        child: Text(outlet.name),
-                      );
-                    }).toList(),
-                    onChanged: (value) {
-                      setState(() {
-                        _selectedOutletId = value;
-                      });
-                    },
-                    validator: (value) =>
-                        value == null ? 'Please select an outlet' : null,
-                  ),
-                ],
-              ),
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: _isLoading
-                  ? null
-                  : () async {
-                      if (_formKey.currentState!.validate()) {
-                        setState(() => _isLoading = true);
-                        try {
-                          final rep = await _repService.createRep(
-                            fullName: _fullNameController.text,
-                            email: _emailController.text,
-                            password: _passwordController.text,
-                            outletId: _selectedOutletId,
-                          );
-
-                          if (rep != null) {
-                            Navigator.pop(context, true);
-                            _loadData();
-                          } else {
-                            throw Exception('Failed to create rep');
-                          }
-                        } catch (e) {
-                          ScaffoldMessenger.of(
-                            context,
-                          ).showSnackBar(SnackBar(content: Text('Error: $e')));
-                          setState(() => _isLoading = false);
-                        }
-                      }
-                    },
-              child: _isLoading
-                  ? const SizedBox(
-                      height: 20,
-                      width: 20,
-                      child: CircularProgressIndicator(strokeWidth: 2),
-                    )
-                  : const Text('Create'),
-            ),
-          ],
-        ),
-      ),
-    );
+    // Navigate to the RepFormScreen instead of showing a dialog
+    _navigateToRepForm();
   }
 }
