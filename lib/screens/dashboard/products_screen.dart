@@ -112,6 +112,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   Future<void> _loadProducts() async {
     try {
+      await _syncService.migrateProductUnits(); // Migrate product units
       final products = await _syncService.getAllLocalProducts();
       if (mounted) {
         setState(() {

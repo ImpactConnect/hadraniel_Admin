@@ -528,6 +528,30 @@ class SyncService {
     }
   }
 
+  // Migration for product units
+  Future<void> migrateProductUnits() async {
+    try {
+      final db = await _dbHelper.database;
+      final List<Map<String, dynamic>> products = await db.query('products');
+      
+      await db.transaction((txn) async {
+        for (var product in products) {
+          if (product['unit'] == 'KG') {
+            await txn.update(
+              'products',
+              {'unit': 'Kg'},
+              where: 'id = ?',
+              whereArgs: [product['id']],
+            );
+          }
+        }
+      });
+    } catch (e) {
+      print('Error migrating product units: $e');
+      throw e;
+    }
+  }
+
   @override
   void dispose() {
     // Clean up resources if needed

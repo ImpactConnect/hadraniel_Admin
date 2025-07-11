@@ -198,7 +198,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
   void initState() {
     super.initState();
     productName = widget.product?.productName ?? '';
-    unit = widget.product?.unit ?? 'KG';
+    unit = widget.product?.unit ?? 'Kg';
     quantity = widget.product?.quantity ?? 0.0;
     costPerUnit = widget.product?.costPerUnit ?? 0.0;
     outletId = widget.product?.outletId ?? '';
@@ -328,21 +328,14 @@ class _AddProductDialogState extends State<AddProductDialog> {
                         filled: true,
                         fillColor: Colors.grey[50],
                       ),
-                      items:
-                          ['KG', 'PCS', 'Carton', 'Paint', 'Cup']
-                              .map(
-                                (unit) => DropdownMenuItem(
-                                  value: unit,
-                                  child: Text(unit),
-                                ),
-                              )
-                              .toList()
-                            ..add(
-                              const DropdownMenuItem(
-                                value: 'other',
-                                child: Text('Add New Unit'),
-                              ),
-                            ),
+                      items: const [
+                        DropdownMenuItem(value: 'Kg', child: Text('Kg')),
+                        DropdownMenuItem(value: 'PCS', child: Text('PCS')),
+                        DropdownMenuItem(value: 'Carton', child: Text('Carton')),
+                        DropdownMenuItem(value: 'Paint', child: Text('Paint')),
+                        DropdownMenuItem(value: 'Cup', child: Text('Cup')),
+                        DropdownMenuItem(value: 'other', child: Text('Add New Unit'))
+                      ],
                       onChanged: (value) {
                         if (value == 'other') {
                           showDialog(
@@ -363,7 +356,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
                             ),
                           );
                         } else {
-                          setState(() => unit = value ?? 'KG');
+                          setState(() => unit = value ?? 'Kg');
                         }
                       },
                       validator: (value) =>
