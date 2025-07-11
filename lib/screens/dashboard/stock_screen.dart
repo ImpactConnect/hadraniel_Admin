@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'sidebar.dart';
+import '../../widgets/dashboard_layout.dart';
 
 class StockScreen extends StatefulWidget {
   const StockScreen({super.key});
@@ -11,14 +11,9 @@ class StockScreen extends StatefulWidget {
 class _StockScreenState extends State<StockScreen> {
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Stock Balance'),
-      ),
-      drawer: Sidebar(),
-      body: const Center(
-        child: Text('Stock Balance Screen - Coming Soon'),
-      ),
+    return const DashboardLayout(
+      title: 'Stock Balance',
+      child: Center(child: Text('Stock Balance Screen - Coming Soon')),
     );
   }
 }

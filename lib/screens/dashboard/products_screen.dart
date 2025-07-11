@@ -3,7 +3,7 @@ import 'package:intl/intl.dart';
 import '../../core/models/product_model.dart';
 import '../../core/models/outlet_model.dart';
 import '../../core/services/sync_service.dart';
-import 'sidebar.dart';
+import '../../widgets/dashboard_layout.dart';
 import 'product_detail_popup.dart';
 import 'add_product_dialog.dart';
 
@@ -164,21 +164,24 @@ class _ProductsScreenState extends State<ProductsScreen> {
       );
     }
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Products'),
-        actions: [
-          IconButton(
-            icon: _isSyncing
-                ? const CircularProgressIndicator(color: Colors.white)
-                : const Icon(Icons.sync),
-            onPressed: _isSyncing ? null : _syncProducts,
-          ),
-        ],
-      ),
-      drawer: Sidebar(),
-      body: Column(
+    return DashboardLayout(
+      title: 'Products',
+      child: Column(
         children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  icon: _isSyncing
+                      ? const CircularProgressIndicator()
+                      : const Icon(Icons.sync),
+                  onPressed: _isSyncing ? null : _syncProducts,
+                ),
+              ],
+            ),
+          ),
           Padding(
             padding: const EdgeInsets.all(16.0),
             child: Column(

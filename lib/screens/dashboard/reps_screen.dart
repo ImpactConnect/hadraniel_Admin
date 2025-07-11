@@ -4,9 +4,9 @@ import '../../core/models/rep_model.dart';
 import '../../core/services/rep_service.dart';
 import '../../core/services/sync_service.dart';
 import '../../widgets/loading_overlay.dart';
+import '../../widgets/dashboard_layout.dart';
 import 'rep_form_screen.dart';
 import 'rep_profile_screen.dart';
-import 'sidebar.dart';
 
 class RepsScreen extends StatefulWidget {
   const RepsScreen({super.key});
@@ -158,23 +158,29 @@ class _RepsScreenState extends State<RepsScreen> {
         )
         .toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Sales Representatives'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.sync),
-            onPressed: _isLoading ? null : _syncData,
-            tooltip: 'Sync Data',
+    return DashboardLayout(
+      title: 'Sales Representatives',
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                IconButton(
+                  icon: const Icon(Icons.sync),
+                  onPressed: _isLoading ? null : _syncData,
+                  tooltip: 'Sync Data',
+                ),
+              ],
+            ),
           ),
-        ],
-      ),
-      drawer: Sidebar(),
-      body: LoadingOverlay(
-        isLoading: _isLoading,
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+          Expanded(
+            child: LoadingOverlay(
+              isLoading: _isLoading,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
             Padding(
               padding: const EdgeInsets.all(16.0),
               child: Row(
@@ -262,9 +268,12 @@ class _RepsScreenState extends State<RepsScreen> {
                         }).toList(),
                       ),
                     ),
+                  ),
+                ],
+              ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       floatingActionButton: FloatingActionButton(
         onPressed: _showAddRepDialog,

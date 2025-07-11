@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'sidebar.dart';
+import '../../widgets/dashboard_layout.dart';
 
 class DashboardScreen extends StatelessWidget {
   const DashboardScreen({super.key});
@@ -57,10 +57,9 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Dashboard')),
-      drawer: Sidebar(),
-      body: Padding(
+    return DashboardLayout(
+      title: 'Dashboard',
+      child: Padding(
         padding: const EdgeInsets.all(16.0),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,

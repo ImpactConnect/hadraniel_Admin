@@ -4,7 +4,7 @@ import '../../core/models/customer_model.dart';
 import '../../core/models/outlet_model.dart';
 import '../../core/services/customer_service.dart';
 import '../../core/services/sync_service.dart';
-import 'sidebar.dart';
+import '../../widgets/dashboard_layout.dart';
 import 'add_customer_dialog.dart';
 import 'customer_details_dialog.dart';
 
@@ -62,9 +62,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
       }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error loading outlets: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Error loading outlets: $e')));
       }
     }
   }
@@ -131,10 +131,9 @@ class _CustomersScreenState extends State<CustomersScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: const Text('Customers')),
-      drawer: Sidebar(),
-      body: Column(
+    return DashboardLayout(
+      title: 'Customers',
+      child: Column(
         children: [
           Padding(
             padding: const EdgeInsets.all(16.0),
@@ -219,7 +218,10 @@ class _CustomersScreenState extends State<CustomersScreen> {
                   value: _selectedOutlet,
                   hint: const Text('All Outlets'),
                   items: [
-                    const DropdownMenuItem(value: null, child: Text('All Outlets')),
+                    const DropdownMenuItem(
+                      value: null,
+                      child: Text('All Outlets'),
+                    ),
                     ..._outlets.map(
                       (outlet) => DropdownMenuItem(
                         value: outlet.id,

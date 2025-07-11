@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/models/outlet_model.dart';
 import '../../core/services/sync_service.dart';
-import 'sidebar.dart';
+import '../../widgets/dashboard_layout.dart';
 import 'outlet_profile_screen.dart';
 
 class OutletsScreen extends StatefulWidget {
@@ -207,113 +207,129 @@ class _OutletsScreenState extends State<OutletsScreen> {
         )
         .toList();
 
-    return Scaffold(
-      appBar: AppBar(
-        title: const Text('Outlets'),
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.sync),
-            onPressed: _isLoading ? null : _syncOutlets,
-            tooltip: 'Sync Outlets',
-          ),
-        ],
-      ),
-      drawer: Sidebar(),
-      body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
-          : Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+    return DashboardLayout(
+      title: 'Outlets',
+      child: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    children: [
-                      _buildMetricCard(
-                        'Total Outlets',
-                        totalOutlets.toString(),
-                        Icons.store,
-                        Colors.blue,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildMetricCard(
-                        'Active Outlets',
-                        activeOutlets.toString(),
-                        Icons.store,
-                        Colors.green,
-                      ),
-                    ],
-                  ),
-                ),
-                Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: TextField(
-                    decoration: const InputDecoration(
-                      labelText: 'Search Outlets',
-                      prefixIcon: Icon(Icons.search),
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (value) => setState(() => _searchQuery = value),
-                  ),
-                ),
-                Expanded(
-                  child: filteredOutlets.isEmpty
-                      ? const Center(
-                          child: Text(
-                            'No outlets found',
-                            style: TextStyle(fontSize: 16),
-                          ),
-                        )
-                      : SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: DataTable(
-                            columns: const [
-                              DataColumn(label: Text('Name')),
-                              DataColumn(label: Text('Location')),
-                              DataColumn(label: Text('Date Created')),
-                              DataColumn(label: Text('Actions')),
-                            ],
-                            rows: filteredOutlets.map((outlet) {
-                              return DataRow(
-                                cells: [
-                                  DataCell(
-                                    Text(outlet.name),
-                                    onTap: () => Navigator.push(
-                                      context,
-                                      MaterialPageRoute(
-                                        builder: (context) =>
-                                            OutletProfileScreen(outlet: outlet),
-                                      ),
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Text(outlet.location ?? 'No location'),
-                                  ),
-                                  DataCell(
-                                    Text(
-                                      outlet.createdAt.toString().split('.')[0],
-                                    ),
-                                  ),
-                                  DataCell(
-                                    Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        IconButton(
-                                          icon: const Icon(Icons.edit),
-                                          onPressed: () =>
-                                              _showOutletDialog(outlet: outlet),
-                                          tooltip: 'Edit Outlet',
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              );
-                            }).toList(),
-                          ),
-                        ),
+                IconButton(
+                  icon: const Icon(Icons.sync),
+                  onPressed: _isLoading ? null : _syncOutlets,
+                  tooltip: 'Sync Outlets',
                 ),
               ],
             ),
+          ),
+          if (_isLoading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: Row(
+                      children: [
+                        _buildMetricCard(
+                          'Total Outlets',
+                          totalOutlets.toString(),
+                          Icons.store,
+                          Colors.blue,
+                        ),
+                        const SizedBox(width: 16),
+                        _buildMetricCard(
+                          'Active Outlets',
+                          activeOutlets.toString(),
+                          Icons.store,
+                          Colors.green,
+                        ),
+                      ],
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(16.0),
+                    child: TextField(
+                      decoration: const InputDecoration(
+                        labelText: 'Search Outlets',
+                        prefixIcon: Icon(Icons.search),
+                        border: OutlineInputBorder(),
+                      ),
+                      onChanged: (value) =>
+                          setState(() => _searchQuery = value),
+                    ),
+                  ),
+                  Expanded(
+                    child: filteredOutlets.isEmpty
+                        ? const Center(
+                            child: Text(
+                              'No outlets found',
+                              style: TextStyle(fontSize: 16),
+                            ),
+                          )
+                        : SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: DataTable(
+                              columns: const [
+                                DataColumn(label: Text('Name')),
+                                DataColumn(label: Text('Location')),
+                                DataColumn(label: Text('Date Created')),
+                                DataColumn(label: Text('Actions')),
+                              ],
+                              rows: filteredOutlets.map((outlet) {
+                                return DataRow(
+                                  cells: [
+                                    DataCell(
+                                      Text(outlet.name),
+                                      onTap: () => Navigator.push(
+                                        context,
+                                        MaterialPageRoute(
+                                          builder: (context) =>
+                                              OutletProfileScreen(
+                                                outlet: outlet,
+                                              ),
+                                        ),
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Text(outlet.location ?? 'No location'),
+                                    ),
+                                    DataCell(
+                                      Text(
+                                        outlet.createdAt.toString().split(
+                                          '.',
+                                        )[0],
+                                      ),
+                                    ),
+                                    DataCell(
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          IconButton(
+                                            icon: const Icon(Icons.edit),
+                                            onPressed: () => _showOutletDialog(
+                                              outlet: outlet,
+                                            ),
+                                            tooltip: 'Edit Outlet',
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                  ),
+                ],
+              ),
+            ),
+        ],
+      ),
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showOutletDialog(),
         tooltip: 'Add New Outlet',
