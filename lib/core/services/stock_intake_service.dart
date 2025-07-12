@@ -248,6 +248,22 @@ class StockIntakeService {
 
     return maps.map((map) => map['product_name'] as String).toList();
   }
+  
+  // Get available products with their balance quantities
+  Future<Map<String, double>> getAvailableProductsWithBalance() async {
+    final db = await _db.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'intake_balances',
+      where: 'balance_quantity > 0',
+    );
+
+    Map<String, double> productsWithBalance = {};
+    for (var map in maps) {
+      productsWithBalance[map['product_name'] as String] = map['balance_quantity'] as double;
+    }
+    
+    return productsWithBalance;
+  }
 
   // Sync stock intakes to cloud
   Future<void> syncIntakesToCloud() async {

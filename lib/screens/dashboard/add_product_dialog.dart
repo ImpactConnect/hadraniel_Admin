@@ -33,6 +33,13 @@ class _AddProductDialogState extends State<AddProductDialog> {
 
   // Cache for product names with balance
   List<String>? _cachedProductNames;
+  // Cache for product balances
+  Map<String, double>? _cachedProductBalances;
+  
+  // Get the available balance for a product
+  double getAvailableBalance(String productName) {
+    return _cachedProductBalances?[productName] ?? 0.0;
+  }
   
   Future<List<String>> _getPreloadedProductNames() async {
     // Return cached product names if available
@@ -44,18 +51,35 @@ class _AddProductDialogState extends State<AddProductDialog> {
       // Import the StockIntakeService to get products with balance
       final stockIntakeService = StockIntakeService();
       
-      // Get products with balance > 0
-      final productsWithBalance = await stockIntakeService.getAvailableProductsForAssignment();
+      // Get products with balance > 0 along with their balances
+      final productsWithBalance = await stockIntakeService.getAvailableProductsWithBalance();
       
-      // Cache the result
-      _cachedProductNames = productsWithBalance;
+      // Cache the balances
+      _cachedProductBalances = productsWithBalance;
       
-      return productsWithBalance;
+      // Cache the product names with balance information
+      _cachedProductNames = productsWithBalance.keys.map((name) {
+        final balance = productsWithBalance[name]!;
+        final unit = widget.product?.unit ?? 'Kg'; // Default unit
+        return '$name (${balance.toStringAsFixed(2)}$unit left)';
+      }).toList();
+      
+      return _cachedProductNames!;
     } catch (e) {
       print('Error fetching products with balance: $e');
       // Return an empty list in case of error
       return [];
     }
+  }
+  
+  // Extract the actual product name from the display string
+  String extractProductName(String displayName) {
+    // Check if the string contains balance information
+    final balanceIndex = displayName.lastIndexOf(' (');
+    if (balanceIndex > 0) {
+      return displayName.substring(0, balanceIndex);
+    }
+    return displayName;
   }
 
   @override
@@ -151,9 +175,12 @@ class _AddProductDialogState extends State<AddProductDialog> {
                             _productNameController.text = '';
                           });
                         } else {
+                          // Extract the actual product name from the display string
+                          final actualProductName = extractProductName(selection);
+                          
                           setState(() {
                             _isNewProduct = false;
-                            productName = selection;
+                            productName = actualProductName;
                             _productNameController.text = selection;
                           });
                         }
@@ -257,12 +284,24 @@ class _AddProductDialogState extends State<AddProductDialog> {
                         ),
                         filled: true,
                         fillColor: Colors.grey[50],
+                        // Show the available balance in the helper text
+                        helperText: !_isNewProduct ? 'Available: ${getAvailableBalance(productName).toStringAsFixed(2)} ${unit}' : null,
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {
                         if (value?.isEmpty ?? true) return 'Required field';
                         if (double.tryParse(value!) == null)
                           return 'Invalid number';
+                          
+                        // Check if quantity exceeds available balance for existing products
+                        if (!_isNewProduct) {
+                          final requestedQuantity = double.parse(value);
+                          final availableBalance = getAvailableBalance(productName);
+                          
+                          if (requestedQuantity > availableBalance) {
+                            return 'Exceeds available balance of ${availableBalance.toStringAsFixed(2)} ${unit}';
+                          }
+                        }
                         return null;
                       },
                       onSaved: (value) => quantity = double.parse(value!),
