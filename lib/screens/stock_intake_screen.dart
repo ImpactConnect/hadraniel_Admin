@@ -226,6 +226,11 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _tabController.addListener(() {
+      // This is called when the tab changes, forcing a rebuild of the UI
+      // which will update the FloatingActionButton visibility
+      setState(() {});
+    });
     _loadData();
   }
 
@@ -655,7 +660,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
       rows.add(['Product Name', 'Total Received', 'Total Assigned', 'Balance Quantity', 'Last Updated']);
       
       // Add data rows
-      for (var balance in _intakeBalances) {
+       for (var balance in _filteredBalances) {
         rows.add([
           balance.productName,
           balance.totalReceived,
@@ -717,7 +722,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
                 4: pw.Alignment.center,
               },
               headers: ['Product Name', 'Total Received', 'Total Assigned', 'Balance', 'Last Updated'],
-              data: _intakeBalances.map((balance) {
+              data: _filteredBalances.map((balance) {
                 return [
                   balance.productName,
                   balance.totalReceived.toString(),
@@ -764,9 +769,12 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
         automaticallyImplyLeading: !isDesktop,
         bottom: TabBar(
           controller: _tabController,
+          indicatorColor: Theme.of(context).colorScheme.primary,
+          labelColor: Theme.of(context).colorScheme.primary,
+          unselectedLabelColor: Colors.grey,
           tabs: const [
-            Tab(text: 'Intake Records'),
-            Tab(text: 'Balance Summary'),
+            Tab(text: 'Intake Records', icon: Icon(Icons.receipt_long)),
+            Tab(text: 'Balance Summary', icon: Icon(Icons.balance)),
           ],
         ),
       ),
@@ -812,11 +820,11 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: _tabController.index == 0 ? FloatingActionButton(
         onPressed: _showAddIntakeDialog,
         child: const Icon(Icons.add),
         tooltip: 'Add Stock Intake',
-      ),
+      ) : null,
     );
   }
 
@@ -846,9 +854,18 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
-            'Product Balance Summary',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Product Balance Summary',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              Text(
+                'Showing ${_filteredBalances.length} of ${_intakeBalances.length} products',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
           ),
           Row(
             children: [
@@ -1286,23 +1303,27 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
     );
   }
   
+  List<IntakeBalance> get _filteredBalances {
+    return _intakeBalances.where((balance) {
+      // Apply search filter
+      final matchesSearch = balance.productName.toLowerCase().contains(_balanceSearchQuery.toLowerCase());
+      
+      // Apply balance quantity filter
+      bool matchesBalanceFilter = true;
+      if (_balanceFilter == 'positive') {
+        matchesBalanceFilter = balance.balanceQuantity > 0;
+      } else if (_balanceFilter == 'zero') {
+        matchesBalanceFilter = balance.balanceQuantity == 0;
+      } else if (_balanceFilter == 'negative') {
+        matchesBalanceFilter = balance.balanceQuantity < 0;
+      }
+      
+      return matchesSearch && matchesBalanceFilter;
+    }).toList();
+  }
+  
   Widget _buildBalanceList() {
-     List<IntakeBalance> filteredBalances = _intakeBalances.where((balance) {
-       // Apply search filter
-       final matchesSearch = balance.productName.toLowerCase().contains(_balanceSearchQuery.toLowerCase());
-       
-       // Apply balance quantity filter
-       bool matchesBalanceFilter = true;
-       if (_balanceFilter == 'positive') {
-         matchesBalanceFilter = balance.balanceQuantity > 0;
-       } else if (_balanceFilter == 'zero') {
-         matchesBalanceFilter = balance.balanceQuantity == 0;
-       } else if (_balanceFilter == 'negative') {
-         matchesBalanceFilter = balance.balanceQuantity < 0;
-       }
-       
-       return matchesSearch && matchesBalanceFilter;
-     }).toList();
+    List<IntakeBalance> filteredBalances = _filteredBalances;
     
     // Sort the list based on selected column and direction
     filteredBalances.sort((a, b) {
@@ -1345,19 +1366,36 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
                   child: Text('${balance.totalReceived}'),
                 ),
                 Expanded(
-                  flex: 2,
-                  child: Text(
-                    '${balance.balanceQuantity}',
-                    style: TextStyle(
-                      color: balance.balanceQuantity > 0 
-                          ? Colors.green 
-                          : balance.balanceQuantity < 0 
-                              ? Colors.red 
-                              : Colors.grey,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
+                   flex: 2,
+                   child: Row(
+                     children: [
+                       Container(
+                         width: 12,
+                         height: 12,
+                         decoration: BoxDecoration(
+                           color: balance.balanceQuantity > 0 
+                               ? Colors.green 
+                               : balance.balanceQuantity < 0 
+                                   ? Colors.red 
+                                   : Colors.grey,
+                           shape: BoxShape.circle,
+                         ),
+                       ),
+                       const SizedBox(width: 8),
+                       Text(
+                         '${balance.balanceQuantity}',
+                         style: TextStyle(
+                           color: balance.balanceQuantity > 0 
+                               ? Colors.green 
+                               : balance.balanceQuantity < 0 
+                                   ? Colors.red 
+                                   : Colors.grey,
+                           fontWeight: FontWeight.bold,
+                         ),
+                       ),
+                     ],
+                   ),
+                 ),
                 Expanded(
                   flex: 2,
                   child: Text(
