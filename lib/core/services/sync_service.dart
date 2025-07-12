@@ -552,6 +552,109 @@ class SyncService {
     }
   }
 
+  // Stock Intake Sync
+  Future<bool> syncStockIntakeToSupabase(dynamic stockIntake) async {
+    try {
+      await supabase.from('stock_intake').insert({
+        'id': stockIntake.id,
+        'product_name': stockIntake.productName,
+        'quantity': stockIntake.quantityReceived,
+        'unit': stockIntake.unit,
+        'cost_per_unit': stockIntake.costPerUnit,
+        // 'total_cost' is generated in the database
+        'description': stockIntake.description,
+        'received_date': stockIntake.dateReceived.toIso8601String(),
+        // 'created_at' is generated in the database
+      });
+      return true;
+    } catch (e) {
+      print('Error syncing stock intake to Supabase: $e');
+      return false;
+    }
+  }
+
+  Future<void> syncIntakeBalancesToSupabase(dynamic intakeBalance) async {
+    try {
+      // Try to upsert the data
+      await supabase.from('intake_balances').upsert({
+        'id': intakeBalance.id,
+        'product_name': intakeBalance.productName,
+        'total_received': intakeBalance.totalReceived,
+        'total_assigned': intakeBalance.totalAssigned,
+        'balance_quantity': intakeBalance.balanceQuantity,
+        'last_updated': intakeBalance.lastUpdated.toIso8601String(),
+      });
+    } catch (e) {
+      // If the table doesn't exist, provide instructions for creating it
+      if (e.toString().contains('404') || e.toString().contains('Not Found')) {
+        print(
+          'Error: The intake_balances table does not exist in your Supabase project.',
+        );
+        print(
+          'Please create it manually through the Supabase dashboard with the following schema:',
+        );
+        print('''
+        CREATE TABLE public.intake_balances (
+          id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+          product_name TEXT NOT NULL,
+          total_received NUMERIC NOT NULL,
+          total_assigned NUMERIC NOT NULL,
+          balance_quantity NUMERIC NOT NULL,
+          last_updated TIMESTAMP DEFAULT now()
+        );
+        ''');
+      } else {
+        print('Error syncing intake balances to Supabase: $e');
+      }
+      // Don't throw the error, just log it to prevent app crashes
+    }
+  }
+
+  Future<void> syncStockIntakesFromSupabase() async {
+    try {
+      final response = await supabase.from('stock_intake').select();
+      final stockIntakes = response as List<dynamic>;
+
+      final db = await _dbHelper.database;
+      await db.transaction((txn) async {
+        // Create table if it doesn't exist
+        await txn.execute('''
+          CREATE TABLE IF NOT EXISTS stock_intake (
+            id TEXT PRIMARY KEY,
+            product_name TEXT NOT NULL,
+            quantity_received REAL NOT NULL,
+            unit TEXT NOT NULL,
+            cost_per_unit REAL NOT NULL,
+            total_cost REAL NOT NULL,
+            description TEXT,
+            date_received TEXT NOT NULL,
+            created_at TEXT NOT NULL,
+            is_synced INTEGER DEFAULT 1
+          )
+        ''');
+
+        // Insert stock intakes
+        for (final intakeData in stockIntakes) {
+          await txn.insert('stock_intake', {
+            'id': intakeData['id'],
+            'product_name': intakeData['product_name'],
+            'quantity_received': intakeData['quantity_received'],
+            'unit': intakeData['unit'],
+            'cost_per_unit': intakeData['cost_per_unit'],
+            'total_cost': intakeData['total_cost'],
+            'description': intakeData['description'],
+            'date_received': intakeData['date_received'],
+            'created_at': intakeData['created_at'],
+            'is_synced': 1,
+          }, conflictAlgorithm: ConflictAlgorithm.replace);
+        }
+      });
+    } catch (e) {
+      print('Error syncing stock intakes from Supabase: $e');
+      throw e;
+    }
+  }
+
   @override
   void dispose() {
     // Clean up resources if needed

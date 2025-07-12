@@ -87,6 +87,34 @@ class DatabaseHelper {
       )
     ''');
 
+    // Stock intake table
+    await db.execute('''
+      CREATE TABLE stock_intake (
+        id TEXT PRIMARY KEY,
+        product_name TEXT NOT NULL,
+        quantity_received REAL NOT NULL,
+        unit TEXT NOT NULL,
+        cost_per_unit REAL NOT NULL,
+        total_cost REAL NOT NULL,
+        description TEXT,
+        date_received TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        is_synced INTEGER DEFAULT 0
+      )
+    ''');
+
+    // Intake balances table
+    await db.execute('''
+      CREATE TABLE intake_balances (
+        id TEXT PRIMARY KEY,
+        product_name TEXT NOT NULL,
+        total_received REAL NOT NULL,
+        total_assigned REAL DEFAULT 0,
+        balance_quantity REAL NOT NULL,
+        last_updated TEXT NOT NULL
+      )
+    ''');
+
     // Outlets table
     await db.execute('''
       CREATE TABLE outlets (
