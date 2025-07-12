@@ -152,7 +152,21 @@ class _OutletsScreenState extends State<OutletsScreen> {
     );
   }
 
-  @override
+  // Helper method to build section titles
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 18,
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      ),
+    );
+  }
+
   Widget _buildMetricCard(
     String title,
     String value,
@@ -163,26 +177,43 @@ class _OutletsScreenState extends State<OutletsScreen> {
       child: Container(
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [color.withOpacity(0.7), color.withOpacity(0.4)],
+          ),
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
+          boxShadow: [
+            BoxShadow(
+              color: color.withOpacity(0.2),
+              blurRadius: 8,
+              offset: const Offset(0, 2),
+            ),
+          ],
         ),
         child: Row(
           children: [
-            Icon(icon, color: color, size: 24),
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.3),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, color: Colors.white, size: 24),
+            ),
             const SizedBox(width: 12),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
-                  style: TextStyle(color: color.withOpacity(0.7), fontSize: 14),
+                  style: const TextStyle(color: Colors.white, fontSize: 14),
                 ),
                 const SizedBox(height: 4),
                 Text(
                   value,
-                  style: TextStyle(
-                    color: color,
+                  style: const TextStyle(
+                    color: Colors.white,
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
                   ),
@@ -206,6 +237,9 @@ class _OutletsScreenState extends State<OutletsScreen> {
               ),
         )
         .toList();
+
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
 
     return DashboardLayout(
       title: 'Outlets',
@@ -231,8 +265,10 @@ class _OutletsScreenState extends State<OutletsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Metrics Section
+                  _buildSectionTitle('Overview'),
                   Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0),
                     child: Row(
                       children: [
                         _buildMetricCard(
@@ -251,77 +287,250 @@ class _OutletsScreenState extends State<OutletsScreen> {
                       ],
                     ),
                   ),
+
+                  // Search and Filter Section
+                  _buildSectionTitle('Outlets'),
                   Padding(
                     padding: const EdgeInsets.all(16.0),
-                    child: TextField(
-                      decoration: const InputDecoration(
-                        labelText: 'Search Outlets',
-                        prefixIcon: Icon(Icons.search),
-                        border: OutlineInputBorder(),
+                    child: Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      onChanged: (value) =>
-                          setState(() => _searchQuery = value),
+                      child: Padding(
+                        padding: const EdgeInsets.all(16.0),
+                        child: TextField(
+                          decoration: InputDecoration(
+                            labelText: 'Search Outlets',
+                            prefixIcon: const Icon(Icons.search),
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(
+                                color: Colors.grey.shade300,
+                              ),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                              borderSide: BorderSide(color: primaryColor),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey.shade50,
+                            contentPadding: const EdgeInsets.symmetric(
+                              vertical: 12,
+                              horizontal: 16,
+                            ),
+                          ),
+                          onChanged: (value) =>
+                              setState(() => _searchQuery = value),
+                        ),
+                      ),
                     ),
                   ),
+
+                  // Outlets Table
                   Expanded(
                     child: filteredOutlets.isEmpty
-                        ? const Center(
-                            child: Text(
-                              'No outlets found',
-                              style: TextStyle(fontSize: 16),
+                        ? Center(
+                            child: Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Icon(
+                                  Icons.store_outlined,
+                                  size: 64,
+                                  color: Colors.grey.shade400,
+                                ),
+                                const SizedBox(height: 16),
+                                Text(
+                                  'No outlets found',
+                                  style: TextStyle(
+                                    fontSize: 16,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Try adjusting your search or add a new outlet',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    color: Colors.grey.shade500,
+                                  ),
+                                ),
+                              ],
                             ),
                           )
-                        : SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: DataTable(
-                              columns: const [
-                                DataColumn(label: Text('Name')),
-                                DataColumn(label: Text('Location')),
-                                DataColumn(label: Text('Date Created')),
-                                DataColumn(label: Text('Actions')),
-                              ],
-                              rows: filteredOutlets.map((outlet) {
-                                return DataRow(
-                                  cells: [
-                                    DataCell(
-                                      Text(outlet.name),
-                                      onTap: () => Navigator.push(
-                                        context,
-                                        MaterialPageRoute(
-                                          builder: (context) =>
-                                              OutletProfileScreen(
-                                                outlet: outlet,
-                                              ),
-                                        ),
+                        : Padding(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16.0,
+                            ),
+                            child: Card(
+                              elevation: 2,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Column(
+                                children: [
+                                  // Sticky Header
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: primaryColor,
+                                      borderRadius: const BorderRadius.only(
+                                        topLeft: Radius.circular(12),
+                                        topRight: Radius.circular(12),
                                       ),
                                     ),
-                                    DataCell(
-                                      Text(outlet.location ?? 'No location'),
-                                    ),
-                                    DataCell(
-                                      Text(
-                                        outlet.createdAt.toString().split(
-                                          '.',
-                                        )[0],
+                                    child: Padding(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12.0,
                                       ),
-                                    ),
-                                    DataCell(
-                                      Row(
-                                        mainAxisSize: MainAxisSize.min,
+                                      child: Row(
                                         children: [
-                                          IconButton(
-                                            icon: const Icon(Icons.edit),
-                                            onPressed: () => _showOutletDialog(
-                                              outlet: outlet,
+                                          Expanded(
+                                            flex: 2,
+                                            child: Padding(
+                                              padding: const EdgeInsets.only(
+                                                left: 24.0,
+                                              ),
+                                              child: Text(
+                                                'Name',
+                                                style: const TextStyle(
+                                                  fontWeight: FontWeight.bold,
+                                                  color: Colors.white,
+                                                ),
+                                              ),
                                             ),
-                                            tooltip: 'Edit Outlet',
+                                          ),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Text(
+                                              'Location',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Text(
+                                              'Date Created',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                              ),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            flex: 1,
+                                            child: Text(
+                                              'Actions',
+                                              style: const TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.white,
+                                              ),
+                                            ),
                                           ),
                                         ],
                                       ),
                                     ),
-                                  ],
-                                );
-                              }).toList(),
+                                  ),
+
+                                  // Scrollable Content
+                                  Expanded(
+                                    child: ListView.builder(
+                                      itemCount: filteredOutlets.length,
+                                      itemBuilder: (context, index) {
+                                        final outlet = filteredOutlets[index];
+                                        final isEven = index % 2 == 0;
+
+                                        return Container(
+                                          color: isEven
+                                              ? Colors.grey.shade50
+                                              : Colors.white,
+                                          child: InkWell(
+                                            onTap: () => Navigator.push(
+                                              context,
+                                              MaterialPageRoute(
+                                                builder: (context) =>
+                                                    OutletProfileScreen(
+                                                      outlet: outlet,
+                                                    ),
+                                              ),
+                                            ),
+                                            child: Padding(
+                                              padding:
+                                                  const EdgeInsets.symmetric(
+                                                    vertical: 12.0,
+                                                  ),
+                                              child: Row(
+                                                children: [
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Padding(
+                                                      padding:
+                                                          const EdgeInsets.only(
+                                                            left: 24.0,
+                                                          ),
+                                                      child: Text(
+                                                        outlet.name,
+                                                        style: TextStyle(
+                                                          fontWeight:
+                                                              FontWeight.w500,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Text(
+                                                      outlet.location ??
+                                                          'No location',
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    flex: 2,
+                                                    child: Text(
+                                                      outlet.createdAt
+                                                          .toString()
+                                                          .split('.')[0],
+                                                    ),
+                                                  ),
+                                                  Expanded(
+                                                    flex: 1,
+                                                    child: Row(
+                                                      mainAxisSize:
+                                                          MainAxisSize.min,
+                                                      children: [
+                                                        IconButton(
+                                                          icon: Icon(
+                                                            Icons.edit,
+                                                            color: primaryColor,
+                                                          ),
+                                                          onPressed: () =>
+                                                              _showOutletDialog(
+                                                                outlet: outlet,
+                                                              ),
+                                                          tooltip:
+                                                              'Edit Outlet',
+                                                        ),
+                                                      ],
+                                                    ),
+                                                  ),
+                                                ],
+                                              ),
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                   ),
@@ -333,6 +542,7 @@ class _OutletsScreenState extends State<OutletsScreen> {
       floatingActionButton: FloatingActionButton(
         onPressed: () => _showOutletDialog(),
         tooltip: 'Add New Outlet',
+        backgroundColor: theme.colorScheme.primary,
         child: const Icon(Icons.add),
       ),
     );

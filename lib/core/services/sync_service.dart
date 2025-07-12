@@ -533,7 +533,7 @@ class SyncService {
     try {
       final db = await _dbHelper.database;
       final List<Map<String, dynamic>> products = await db.query('products');
-      
+
       await db.transaction((txn) async {
         for (var product in products) {
           if (product['unit'] == 'KG') {

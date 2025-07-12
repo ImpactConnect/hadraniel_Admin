@@ -219,7 +219,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         ),
                         onPressed: _isSyncing ? null : _syncProducts,
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          backgroundColor: Theme.of(
+                            context,
+                          ).colorScheme.primary,
                           foregroundColor: Colors.white,
                           elevation: 2,
                           shape: RoundedRectangleBorder(
@@ -562,12 +564,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
                               style: TextStyle(fontWeight: FontWeight.bold),
                             ),
                           ),
-                          Expanded(
-                            child: Text(
-                              'Date Updated',
-                              style: TextStyle(fontWeight: FontWeight.bold),
-                            ),
-                          ),
                           SizedBox(
                             width: 40,
                             child: Text(
@@ -657,13 +653,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                         DateFormat(
                                           'yyyy-MM-dd',
                                         ).format(product.dateAdded),
-                                      ),
-                                    ),
-                                    Expanded(
-                                      child: Text(
-                                        DateFormat(
-                                          'yyyy-MM-dd',
-                                        ).format(product.createdAt),
                                       ),
                                     ),
                                     SizedBox(
@@ -809,7 +798,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       onPressed: () => Navigator.of(context).pop(),
                       child: Text(
                         'Cancel',
-                        style: TextStyle(color: Theme.of(context).colorScheme.primary),
+                        style: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                       ),
                     ),
                     const SizedBox(width: 8),

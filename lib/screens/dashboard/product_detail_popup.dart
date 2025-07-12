@@ -20,7 +20,7 @@ class ProductDetailPopup extends StatelessWidget {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       elevation: 8,
@@ -68,7 +68,7 @@ class ProductDetailPopup extends StatelessWidget {
             ),
             const Divider(),
             const SizedBox(height: 16),
-            
+
             // Product information in a card
             Card(
               elevation: 0,
@@ -87,7 +87,11 @@ class ProductDetailPopup extends StatelessWidget {
                         CircleAvatar(
                           backgroundColor: colorScheme.primary.withOpacity(0.1),
                           radius: 24,
-                          child: Icon(Icons.inventory_2, color: colorScheme.primary, size: 28),
+                          child: Icon(
+                            Icons.inventory_2,
+                            color: colorScheme.primary,
+                            size: 28,
+                          ),
                         ),
                         const SizedBox(width: 16),
                         Expanded(
@@ -113,7 +117,7 @@ class ProductDetailPopup extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    
+
                     // Product details in a grid layout
                     Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -156,7 +160,9 @@ class ProductDetailPopup extends StatelessWidget {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               FutureBuilder<String>(
-                                future: _syncService.getOutletName(product.outletId),
+                                future: _syncService.getOutletName(
+                                  product.outletId,
+                                ),
                                 builder: (context, snapshot) {
                                   return _buildDetailRow(
                                     context,
@@ -189,9 +195,10 @@ class ProductDetailPopup extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 24),
-                    
+
                     // Description section
-                    if (product.description != null && product.description!.isNotEmpty) ...[  
+                    if (product.description != null &&
+                        product.description!.isNotEmpty) ...[
                       Text(
                         'Description',
                         style: theme.textTheme.titleMedium?.copyWith(
@@ -214,7 +221,7 @@ class ProductDetailPopup extends StatelessWidget {
                       ),
                     ],
                     const SizedBox(height: 16),
-                    
+
                     // Sync status
                     Row(
                       children: [
@@ -227,7 +234,9 @@ class ProductDetailPopup extends StatelessWidget {
                         Text(
                           product.isSynced ? 'Synced to cloud' : 'Not synced',
                           style: TextStyle(
-                            color: product.isSynced ? Colors.green : Colors.grey,
+                            color: product.isSynced
+                                ? Colors.green
+                                : Colors.grey,
                             fontWeight: FontWeight.w500,
                           ),
                         ),
@@ -238,7 +247,7 @@ class ProductDetailPopup extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 24),
-            
+
             // Close button
             Align(
               alignment: Alignment.centerRight,
@@ -250,7 +259,10 @@ class ProductDetailPopup extends StatelessWidget {
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 12,
+                  ),
                 ),
                 child: const Text('Close'),
               ),
@@ -261,7 +273,13 @@ class ProductDetailPopup extends StatelessWidget {
     );
   }
 
-  Widget _buildDetailRow(BuildContext context, String label, String value, IconData icon, Color iconColor) {
+  Widget _buildDetailRow(
+    BuildContext context,
+    String label,
+    String value,
+    IconData icon,
+    Color iconColor,
+  ) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -280,10 +298,7 @@ class ProductDetailPopup extends StatelessWidget {
             children: [
               Text(
                 label,
-                style: TextStyle(
-                  color: Colors.grey[600],
-                  fontSize: 12,
-                ),
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
               ),
               const SizedBox(height: 4),
               Text(

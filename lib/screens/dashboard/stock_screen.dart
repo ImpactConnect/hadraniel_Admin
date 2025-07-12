@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:sticky_headers/sticky_headers.dart';
+import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import '../../core/models/outlet_model.dart';
 import '../../core/models/product_model.dart';
 import '../../core/models/stock_balance_model.dart';
@@ -22,18 +23,13 @@ class _StockScreenState extends State<StockScreen> {
       width: width,
       height: 48,
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      decoration: const BoxDecoration(
-        border: Border(
-          right: BorderSide(color: Colors.white24),
-        ),
-      ),
-      child: Center(
-        child: Text(
-          text,
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+      alignment: Alignment.centerLeft,
+      child: Text(
+        text,
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.bold,
+          fontSize: 14,
         ),
       ),
     );
@@ -42,12 +38,69 @@ class _StockScreenState extends State<StockScreen> {
   Widget _buildContentCell(String text, double width) {
     return Container(
       width: width,
-      height: 48,
+      height: 52,
       padding: const EdgeInsets.symmetric(horizontal: 16.0),
-      child: Center(
-        child: Text(
-          text,
-          overflow: TextOverflow.ellipsis,
+      alignment: Alignment.centerLeft,
+      child: Text(
+        text,
+        style: TextStyle(
+          color: Colors.grey.shade800,
+          fontSize: 14,
+        ),
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
+  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+    return Expanded(
+      child: Card(
+        elevation: 3,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+        child: Container(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(12),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                color.withOpacity(0.8),
+                color.withOpacity(0.6),
+              ],
+            ),
+          ),
+          padding: const EdgeInsets.all(16.0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(icon, color: Colors.white, size: 24),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w500,
+                        fontSize: 14,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 20,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -169,13 +222,62 @@ class _StockScreenState extends State<StockScreen> {
   }
 
   Future<void> _showDateRangePicker() async {
-    final picked = await showDateRangePicker(
+    final picked = await showDialog(
       context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      initialDateRange: _startDate != null && _endDate != null
-          ? DateTimeRange(start: _startDate!, end: _endDate!)
-          : null,
+      builder: (BuildContext context) {
+        DateTime? startDate = _startDate;
+        DateTime? endDate = _endDate;
+        
+        return Dialog(
+          child: Container(
+            width: 300, // Reduced width for the calendar popup
+            padding: const EdgeInsets.all(16.0),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                CalendarDatePicker2(
+                  config: CalendarDatePicker2Config(
+                    calendarType: CalendarDatePicker2Type.range,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                  ),
+                  value: startDate != null && endDate != null
+                      ? [startDate, endDate]
+                      : [],
+                  onValueChanged: (dates) {
+                    if (dates.length == 2 && dates[0] != null && dates[1] != null) {
+                      startDate = dates[0]!;
+                      endDate = dates[1]!;
+                    }
+                  },
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.end,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.pop(context),
+                      child: const Text('Cancel'),
+                    ),
+                    const SizedBox(width: 8),
+                    ElevatedButton(
+                      onPressed: () {
+                        if (startDate != null && endDate != null) {
+                          Navigator.pop(
+                            context,
+                            DateTimeRange(start: startDate!, end: endDate!),
+                          );
+                        }
+                      },
+                      child: const Text('Apply'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
 
     if (picked != null) {
@@ -188,42 +290,6 @@ class _StockScreenState extends State<StockScreen> {
         _loadData();
       });
     }
-  }
-
-  Widget _buildMetricCard(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
-    return Expanded(
-      child: Card(
-        elevation: 2,
-        child: Padding(
-          padding: const EdgeInsets.all(16.0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  Icon(icon, color: color, size: 24),
-                  const SizedBox(width: 8),
-                  Text(title, style: TextStyle(color: color.withOpacity(0.8))),
-                ],
-              ),
-              const SizedBox(height: 8),
-              Text(
-                value,
-                style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                  color: color,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
   }
 
   @override
@@ -260,17 +326,34 @@ class _StockScreenState extends State<StockScreen> {
       title: 'Stock Management',
       child: Column(
         children: [
+          // Sync button with improved styling
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0),
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.end,
               children: [
-                IconButton(
+                ElevatedButton.icon(
                   icon: _isSyncing
-                      ? const CircularProgressIndicator()
-                      : const Icon(Icons.sync),
+                      ? SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
+                        )
+                      : const Icon(Icons.sync, size: 20),
+                  label: Text(_isSyncing ? 'Syncing...' : 'Sync Stock'),
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    elevation: 2,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  ),
                   onPressed: _isSyncing ? null : _syncData,
-                  tooltip: 'Sync Stock Data',
                 ),
               ],
             ),
@@ -280,10 +363,11 @@ class _StockScreenState extends State<StockScreen> {
           else
             Expanded(
               child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+                crossAxisAlignment: CrossAxisAlignment.center,
                 children: [
+                  // Metric cards with improved spacing
                   Padding(
-                    padding: const EdgeInsets.all(16.0),
+                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
                     child: Row(
                       children: [
                         _buildMetricCard(
@@ -326,242 +410,300 @@ class _StockScreenState extends State<StockScreen> {
                       ],
                     ),
                   ),
+                  
+                  // Unified filter section with card styling
                   Padding(
-                    padding: const EdgeInsets.all(16.0),
-                    child: Column(
-                      children: [
-                        SingleChildScrollView(
-                          scrollDirection: Axis.horizontal,
-                          child: Row(
-                            children: [
-                              ...[
-                                "Today",
-                                "Yesterday",
-                                "This week",
-                                "Last 7 days",
-                                "This month",
-                                "Last month",
-                              ].map(
-                                (filter) => Padding(
-                                  padding: const EdgeInsets.only(right: 8.0),
-                                  child: FilterChip(
-                                    label: Text(filter),
-                                    selected: _activeDateFilter == filter,
-                                    onSelected: (selected) {
-                                      if (selected) {
-                                        _setDateFilter(filter);
-                                      } else {
-                                        _clearDateFilter();
-                                      }
+                    padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 8.0),
+                    child: Card(
+                      elevation: 2,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12.0),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            // Filter section title and date filters in a single row
+                            Row(
+                              children: [
+                                Text(
+                                  'Filters',
+                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                    fontWeight: FontWeight.bold,
+                                    color: Theme.of(context).colorScheme.primary,
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: SingleChildScrollView(
+                                    scrollDirection: Axis.horizontal,
+                                    child: Row(
+                                      children: [
+                                        ...[
+                                          "Today",
+                                          "Yesterday",
+                                          "This week",
+                                          "Last 7 days",
+                                          "This month",
+                                          "Last month"
+                                        ].map(
+                                          (filter) => Padding(
+                                            padding: const EdgeInsets.only(right: 8.0),
+                                            child: FilterChip(
+                                              label: Text(filter),
+                                              selected: _activeDateFilter == filter,
+                                              selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                                              checkmarkColor: Theme.of(context).colorScheme.primary,
+                                              onSelected: (selected) {
+                                                if (selected) {
+                                                  _setDateFilter(filter);
+                                                } else {
+                                                  _clearDateFilter();
+                                                }
+                                              },
+                                            ),
+                                          ),
+                                        ),
+                                        Padding(
+                                          padding: const EdgeInsets.only(right: 8.0),
+                                          child: ActionChip(
+                                            avatar: Icon(
+                                              Icons.date_range,
+                                              size: 18,
+                                              color: Theme.of(context).colorScheme.primary,
+                                            ),
+                                            label: Text(
+                                              _activeDateFilter.isEmpty ? 'Select Date' : _activeDateFilter,
+                                            ),
+                                            onPressed: _showDateRangePicker,
+                                          ),
+                                        ),
+                                        if (_activeDateFilter.isNotEmpty)
+                                          ActionChip(
+                                            avatar: Icon(
+                                              Icons.clear,
+                                              size: 18,
+                                              color: Theme.of(context).colorScheme.error,
+                                            ),
+                                            label: const Text('Clear Filter'),
+                                            onPressed: _clearDateFilter,
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            
+                            const SizedBox(height: 12),
+                            
+                            // Search and dropdown filters in a single row
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: TextField(
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Search Stock',
+                                      prefixIcon: const Icon(Icons.search),
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                    ),
+                                    onChanged: (value) => setState(() => _searchQuery = value),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(
+                                    value: _selectedOutletId,
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Filter by Outlet',
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                    ),
+                                    items: [
+                                      const DropdownMenuItem(
+                                        value: null,
+                                        child: Text('All Outlets'),
+                                      ),
+                                      ..._outlets.map(
+                                        (outlet) => DropdownMenuItem(
+                                          value: outlet.id,
+                                          child: Text(outlet.name),
+                                        ),
+                                      ),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _selectedOutletId = value;
+                                        _loadData();
+                                      });
                                     },
                                   ),
                                 ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.only(right: 8.0),
-                                child: ActionChip(
-                                  avatar: const Icon(
-                                    Icons.date_range,
-                                    size: 18,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: DropdownButtonFormField<String>(
+                                    value: _selectedProductId,
+                                    decoration: InputDecoration(
+                                      isDense: true,
+                                      labelText: 'Filter by Product',
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                    ),
+                                    items: [
+                                      const DropdownMenuItem(
+                                        value: null,
+                                        child: Text('All Products'),
+                                      ),
+                                      ..._products.map(
+                                        (product) => DropdownMenuItem(
+                                          value: product.id,
+                                          child: Text(product.productName),
+                                        ),
+                                      ),
+                                    ],
+                                    onChanged: (value) {
+                                      setState(() {
+                                        _selectedProductId = value;
+                                        _loadData();
+                                      });
+                                    },
                                   ),
-                                  label: Text(
-                                    _activeDateFilter.isEmpty
-                                        ? 'Select Date'
-                                        : _activeDateFilter,
-                                  ),
-                                  onPressed: _showDateRangePicker,
                                 ),
-                              ),
-                              if (_activeDateFilter.isNotEmpty)
-                                Padding(
-                                  padding: const EdgeInsets.only(right: 8.0),
-                                  child: ActionChip(
-                                    avatar: const Icon(Icons.clear, size: 18),
-                                    label: const Text('Clear Filter'),
-                                    onPressed: _clearDateFilter,
-                                  ),
-                                ),
-                            ],
-                          ),
+                              ],
+                            ),
+                          ],
                         ),
-                        const SizedBox(height: 16),
-                        Row(
+                      ),
+                    ),
+                  ),
+                  
+                  // Table with sticky header and centered content
+                  Expanded(
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16.0),
+                      child: Card(
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        clipBehavior: Clip.antiAlias,
+                        child: Column(
                           children: [
-                            Expanded(
-                              child: TextField(
-                                decoration: const InputDecoration(
-                                  labelText: 'Search Stock',
-                                  prefixIcon: Icon(Icons.search),
-                                  border: OutlineInputBorder(),
+                            // Sticky header
+                            Container(
+                              color: Theme.of(context).colorScheme.primary,
+                              height: 48,
+                              child: SingleChildScrollView(
+                                scrollDirection: Axis.horizontal,
+                                child: Row(
+                                  children: [
+                                    _buildHeaderCell('Product Name', 200),
+                                    _buildHeaderCell('Outlet', 150),
+                                    _buildHeaderCell('Given Qty', 100),
+                                    _buildHeaderCell('Sold Qty', 100),
+                                    _buildHeaderCell('Balance', 100),
+                                    _buildHeaderCell('Cost Price', 120),
+                                    _buildHeaderCell('Total Value', 120),
+                                  ],
                                 ),
-                                onChanged: (value) =>
-                                    setState(() => _searchQuery = value),
                               ),
                             ),
-                            const SizedBox(width: 16),
+                            // Scrollable content
                             Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: _selectedOutletId,
-                                decoration: const InputDecoration(
-                                  labelText: 'Filter by Outlet',
-                                  border: OutlineInputBorder(),
+                              child: SingleChildScrollView(
+                                child: SingleChildScrollView(
+                                  scrollDirection: Axis.horizontal,
+                                  child: Column(
+                                    children: filteredStockBalances.map((stock) {
+                                      final product = _products.firstWhere(
+                                        (p) => p.id == stock.productId,
+                                        orElse: () => Product(
+                                          id: stock.productId,
+                                          productName: 'Unknown',
+                                          quantity: 0,
+                                          unit: 'N/A',
+                                          costPerUnit: 0,
+                                          totalCost: 0,
+                                          dateAdded: DateTime.now(),
+                                          outletId: '',
+                                          createdAt: DateTime.now(),
+                                          isSynced: false,
+                                        ),
+                                      );
+                                      final outlet = _outlets.firstWhere(
+                                        (o) => o.id == stock.outletId,
+                                        orElse: () => Outlet(
+                                          id: stock.outletId,
+                                          name: 'Unknown',
+                                          createdAt: null,
+                                        ),
+                                      );
+
+                                      return InkWell(
+                                        onTap: () {
+                                          showDialog(
+                                            context: context,
+                                            builder: (context) => StockDetailDialog(
+                                              stock: stock,
+                                              product: product,
+                                              outlet: outlet,
+                                            ),
+                                          );
+                                        },
+                                        child: Container(
+                                          decoration: BoxDecoration(
+                                            color: Colors.white,
+                                            border: Border(
+                                              bottom: BorderSide(
+                                                color: Colors.grey.shade200,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              _buildContentCell(
+                                                product.productName,
+                                                200,
+                                              ),
+                                              _buildContentCell(outlet.name, 150),
+                                              _buildContentCell(
+                                                stock.givenQuantity.toString(),
+                                                100,
+                                              ),
+                                              _buildContentCell(
+                                                stock.soldQuantity.toString(),
+                                                100,
+                                              ),
+                                              _buildContentCell(
+                                                stock.balanceQuantity.toString(),
+                                                100,
+                                              ),
+                                              _buildContentCell(
+                                                '₦${product.costPerUnit}',
+                                                120,
+                                              ),
+                                              _buildContentCell(
+                                                '₦${(stock.givenQuantity * product.costPerUnit).toStringAsFixed(2)}',
+                                                120,
+                                              ),
+                                            ],
+                                          ),
+                                        ),
+                                      );
+                                    }).toList(),
+                                  ),
                                 ),
-                                items: [
-                                  const DropdownMenuItem(
-                                    value: null,
-                                    child: Text('All Outlets'),
-                                  ),
-                                  ..._outlets.map(
-                                    (outlet) => DropdownMenuItem(
-                                      value: outlet.id,
-                                      child: Text(outlet.name),
-                                    ),
-                                  ),
-                                ],
-                                onChanged: (value) {
-                                  setState(() {
-                                    _selectedOutletId = value;
-                                    _loadData();
-                                  });
-                                },
-                              ),
-                            ),
-                            const SizedBox(width: 16),
-                            Expanded(
-                              child: DropdownButtonFormField<String>(
-                                value: _selectedProductId,
-                                decoration: const InputDecoration(
-                                  labelText: 'Filter by Product',
-                                  border: OutlineInputBorder(),
-                                ),
-                                items: [
-                                  const DropdownMenuItem(
-                                    value: null,
-                                    child: Text('All Products'),
-                                  ),
-                                  ..._products.map(
-                                    (product) => DropdownMenuItem(
-                                      value: product.id,
-                                      child: Text(product.productName),
-                                    ),
-                                  ),
-                                ],
-                                onChanged: (value) {
-                                  setState(() {
-                                    _selectedProductId = value;
-                                    _loadData();
-                                  });
-                                },
                               ),
                             ),
                           ],
                         ),
-                      ],
-                    ),
-                  ),
-                  Expanded(
-                    child: Stack(
-                      children: [
-                        Container(
-                          color: Theme.of(context).primaryColor,
-                          height: 48,
-                          child: SingleChildScrollView(
-                            scrollDirection: Axis.horizontal,
-                            child: Row(
-                              children: [
-                                _buildHeaderCell('Product Name', 200),
-                                _buildHeaderCell('Outlet', 150),
-                                _buildHeaderCell('Given Qty', 100),
-                                _buildHeaderCell('Sold Qty', 100),
-                                _buildHeaderCell('Balance', 100),
-                                _buildHeaderCell('Cost Price', 120),
-                              ],
-                            ),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.only(top: 48.0),
-                          child: SingleChildScrollView(
-                            child: SingleChildScrollView(
-                              scrollDirection: Axis.horizontal,
-                              child: Column(
-                                children: filteredStockBalances.map((stock) {
-                                  final product = _products.firstWhere(
-                                    (p) => p.id == stock.productId,
-                                    orElse: () => Product(
-                                      id: stock.productId,
-                                      productName: 'Unknown',
-                                      quantity: 0,
-                                      unit: 'N/A',
-                                      costPerUnit: 0,
-                                      totalCost: 0,
-                                      dateAdded: DateTime.now(),
-                                      outletId: '',
-                                      createdAt: DateTime.now(),
-                                      isSynced: false,
-                                    ),
-                                  );
-                                  final outlet = _outlets.firstWhere(
-                                    (o) => o.id == stock.outletId,
-                                    orElse: () => Outlet(
-                                      id: stock.outletId,
-                                      name: 'Unknown',
-                                      createdAt: null,
-                                    ),
-                                  );
-
-                                  return InkWell(
-                                    onTap: () {
-                                      showDialog(
-                                        context: context,
-                                        builder: (context) => StockDetailDialog(
-                                          stock: stock,
-                                          product: product,
-                                          outlet: outlet,
-                                        ),
-                                      );
-                                    },
-                                    child: Container(
-                                      decoration: BoxDecoration(
-                                        border: Border(
-                                          bottom: BorderSide(
-                                            color: Colors.grey.shade300,
-                                          ),
-                                        ),
-                                      ),
-                                      child: Row(
-                                        children: [
-                                          _buildContentCell(
-                                            product.productName,
-                                            200,
-                                          ),
-                                          _buildContentCell(outlet.name, 150),
-                                          _buildContentCell(
-                                            stock.givenQuantity.toString(),
-                                            100,
-                                          ),
-                                          _buildContentCell(
-                                            stock.soldQuantity.toString(),
-                                            100,
-                                          ),
-                                          _buildContentCell(
-                                            stock.balanceQuantity.toString(),
-                                            100,
-                                          ),
-                                          _buildContentCell(
-                                            '₦${product.costPerUnit}',
-                                            120,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
-                                  );
-                                }).toList(),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                      ),
                     ),
                   ),
                 ],

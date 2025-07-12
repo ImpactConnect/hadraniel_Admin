@@ -331,10 +331,16 @@ class _AddProductDialogState extends State<AddProductDialog> {
                       items: const [
                         DropdownMenuItem(value: 'Kg', child: Text('Kg')),
                         DropdownMenuItem(value: 'PCS', child: Text('PCS')),
-                        DropdownMenuItem(value: 'Carton', child: Text('Carton')),
+                        DropdownMenuItem(
+                          value: 'Carton',
+                          child: Text('Carton'),
+                        ),
                         DropdownMenuItem(value: 'Paint', child: Text('Paint')),
                         DropdownMenuItem(value: 'Cup', child: Text('Cup')),
-                        DropdownMenuItem(value: 'other', child: Text('Add New Unit'))
+                        DropdownMenuItem(
+                          value: 'other',
+                          child: Text('Add New Unit'),
+                        ),
                       ],
                       onChanged: (value) {
                         if (value == 'other') {

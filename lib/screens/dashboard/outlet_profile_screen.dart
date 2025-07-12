@@ -72,6 +72,21 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
     }
   }
 
+  // Helper method to build section titles
+  Widget _buildSectionTitle(String title) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(0, 24, 0, 8),
+      child: Text(
+        title,
+        style: TextStyle(
+          fontSize: 20,
+          fontWeight: FontWeight.bold,
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      ),
+    );
+  }
+
   Widget _buildMetricCard(
     String title,
     String value,
@@ -79,24 +94,51 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
     Color color,
   ) {
     return Card(
-      elevation: 2,
+      elevation: 4,
+      shadowColor: color.withOpacity(0.3),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16.0),
-        child: Column(
-          children: [
-            Icon(icon, size: 32, color: color),
-            const SizedBox(height: 8),
-            Text(
-              value,
-              style: Theme.of(context).textTheme.headlineMedium?.copyWith(
-                color: color,
-                fontWeight: FontWeight.bold,
+      child: Container(
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [color.withOpacity(0.8), color.withOpacity(0.6)],
+          ),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(12.0),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.white.withOpacity(0.3),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, size: 24, color: Colors.white),
               ),
-            ),
-            const SizedBox(height: 4),
-            Text(title, style: TextStyle(color: Colors.grey[600])),
-          ],
+              const SizedBox(height: 8),
+              Text(
+                value,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                title,
+                style: TextStyle(
+                  color: Colors.white.withOpacity(0.9),
+                  fontWeight: FontWeight.w500,
+                  fontSize: 12,
+                ),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -104,9 +146,18 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final primaryColor = theme.colorScheme.primary;
+
     return Scaffold(
       appBar: AppBar(
-        title: Text(widget.outlet.name),
+        title: Text(
+          widget.outlet.name,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        backgroundColor: primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 0,
         actions: [
           IconButton(
             icon: const Icon(Icons.refresh),
@@ -124,48 +175,169 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                 children: [
                   // Outlet Info Card
                   Card(
-                    elevation: 2,
+                    elevation: 4,
+                    shadowColor: Colors.black.withOpacity(0.1),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: Padding(
-                      padding: const EdgeInsets.all(16.0),
+                      padding: const EdgeInsets.all(20.0),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(
-                            'Outlet Information',
-                            style: Theme.of(context).textTheme.titleLarge,
+                          Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: primaryColor.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  Icons.store,
+                                  size: 32,
+                                  color: primaryColor,
+                                ),
+                              ),
+                              const SizedBox(width: 16),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Outlet Information',
+                                      style: TextStyle(
+                                        fontSize: 20,
+                                        fontWeight: FontWeight.bold,
+                                        color: primaryColor,
+                                      ),
+                                    ),
+                                    Text(
+                                      'Details about this outlet',
+                                      style: TextStyle(
+                                        color: Colors.grey[600],
+                                        fontSize: 14,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
                           ),
-                          const Divider(),
-                          ListTile(
-                            leading: const Icon(Icons.location_on),
-                            title: const Text('Location'),
-                            subtitle: Text(
-                              widget.outlet.location ?? 'Not specified',
-                            ),
-                          ),
-                          ListTile(
-                            leading: const Icon(Icons.calendar_today),
-                            title: const Text('Created'),
-                            subtitle: Text(
-                              widget.outlet.createdAt?.toString().split(
-                                    '.',
-                                  )[0] ??
-                                  'Not specified',
-                            ),
+                          const Divider(height: 24),
+                          Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: ListTile(
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.blue.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.location_on,
+                                      color: Colors.blue,
+                                    ),
+                                  ),
+                                  title: const Text(
+                                    'Location',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    widget.outlet.location ?? 'Not specified',
+                                    style: const TextStyle(fontSize: 15),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: ListTile(
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.orange.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.calendar_today,
+                                      color: Colors.orange,
+                                    ),
+                                  ),
+                                  title: const Text(
+                                    'Created',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  subtitle: Text(
+                                    widget.outlet.createdAt?.toString().split(
+                                          '.',
+                                        )[0] ??
+                                        'Not specified',
+                                    style: const TextStyle(fontSize: 15),
+                                  ),
+                                ),
+                              ),
+                              Expanded(
+                                child: ListTile(
+                                  leading: Container(
+                                    padding: const EdgeInsets.all(8),
+                                    decoration: BoxDecoration(
+                                      color: Colors.green.withOpacity(0.1),
+                                      borderRadius: BorderRadius.circular(8),
+                                    ),
+                                    child: const Icon(
+                                      Icons.people,
+                                      color: Colors.green,
+                                    ),
+                                  ),
+                                  title: const Text(
+                                    'Assigned Reps',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w500,
+                                      fontSize: 16,
+                                    ),
+                                  ),
+                                  subtitle: _reps.isEmpty
+                                      ? const Text(
+                                          'No reps assigned',
+                                          style: TextStyle(fontSize: 15),
+                                        )
+                                      : Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: _reps
+                                              .map((rep) => Padding(
+                                                    padding: const EdgeInsets.only(bottom: 4),
+                                                    child: Text(
+                                                      rep.fullName ?? 'Unnamed Rep',
+                                                      style: const TextStyle(fontSize: 15),
+                                                    ),
+                                                  ))
+                                              .toList(),
+                                        ),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       ),
                     ),
                   ),
-                  const SizedBox(height: 16),
+
+                  // Metrics Section
+                  _buildSectionTitle('Performance Metrics'),
 
                   // Metrics Grid
                   GridView.count(
                     crossAxisCount: 4,
-                    crossAxisSpacing: 16,
-                    mainAxisSpacing: 16,
+                    crossAxisSpacing: 12,
+                    mainAxisSpacing: 12,
+                    childAspectRatio: 1.2,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
@@ -213,23 +385,46 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                       ),
                     ],
                   ),
-                  const SizedBox(height: 24),
 
                   // Low Stock Products Section
-                  Text(
-                    'Low Stock Products',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
+                  _buildSectionTitle('Low Stock Products'),
                   Card(
-                    elevation: 2,
+                    elevation: 3,
+                    shadowColor: Colors.black.withOpacity(0.1),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
                     child: _lowStockProducts.isEmpty
-                        ? const Padding(
-                            padding: EdgeInsets.all(16.0),
-                            child: Text('No low stock products'),
+                        ? Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.inventory_2_outlined,
+                                    size: 48,
+                                    color: Colors.grey[400],
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No low stock products',
+                                    style: TextStyle(
+                                      fontSize: 16,
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'All products have sufficient stock levels',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[500],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
                           )
                         : ListView.builder(
                             shrinkWrap: true,
@@ -240,80 +435,249 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                               return ListTile(
                                 title: Text(
                                   product.productName ?? 'Unnamed Product',
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w500,
+                                  ),
                                 ),
                                 subtitle: Text('Quantity: ${product.quantity}'),
-                                leading: const Icon(
-                                  Icons.warning,
-                                  color: Colors.orange,
+                                leading: Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.orange.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.warning,
+                                    color: Colors.orange,
+                                  ),
                                 ),
+                                trailing: product.quantity == 0
+                                    ? Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.red.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'Out of Stock',
+                                          style: TextStyle(
+                                            color: Colors.red,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      )
+                                    : Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 4,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: Colors.orange.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                        ),
+                                        child: const Text(
+                                          'Low Stock',
+                                          style: TextStyle(
+                                            color: Colors.orange,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ),
                               );
                             },
                           ),
                   ),
-                  const SizedBox(height: 24),
 
                   // Sales Records Section
-                  Text(
-                    'Recent Sales',
-                    style: Theme.of(context).textTheme.titleLarge,
-                  ),
-                  const SizedBox(height: 8),
+                  _buildSectionTitle('Recent Sales'),
                   Card(
-                    elevation: 2,
+                    elevation: 3,
+                    shadowColor: Colors.black.withOpacity(0.1),
                     shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+                      borderRadius: BorderRadius.circular(16),
                     ),
-                    child: SingleChildScrollView(
-                      scrollDirection: Axis.horizontal,
-                      child: DataTable(
-                        columns: const [
-                          DataColumn(label: Text('Date')),
-                          DataColumn(label: Text('Customer')),
-                          DataColumn(label: Text('Amount')),
-                          DataColumn(label: Text('Status')),
-                        ],
-                        rows: _sales.map((sale) {
-                          return DataRow(
-                            cells: [
-                              DataCell(
-                                Text(
-                                  sale.createdAt?.toString().split('.')[0] ??
-                                      'No date',
-                                ),
-                              ),
-                              DataCell(Text(sale.customerId ?? 'Unknown')),
-                              DataCell(
-                                Text(
-                                  '₦${(sale.totalAmount ?? 0).toStringAsFixed(2)}',
-                                ),
-                              ),
-                              DataCell(
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 8,
-                                    vertical: 4,
+                    child: _sales.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.all(24.0),
+                            child: Center(
+                              child: Column(
+                                children: [
+                                  Icon(
+                                    Icons.point_of_sale_outlined,
+                                    size: 48,
+                                    color: Colors.grey[400],
                                   ),
-                                  decoration: BoxDecoration(
-                                    color: (sale.isPaid ?? false)
-                                        ? Colors.green[100]
-                                        : Colors.red[100],
-                                    borderRadius: BorderRadius.circular(12),
-                                  ),
-                                  child: Text(
-                                    (sale.isPaid ?? false) ? 'Paid' : 'Unpaid',
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    'No sales records',
                                     style: TextStyle(
-                                      color: (sale.isPaid ?? false)
-                                          ? Colors.green[900]
-                                          : Colors.red[900],
+                                      fontSize: 16,
+                                      color: Colors.grey[600],
+                                      fontWeight: FontWeight.w500,
                                     ),
                                   ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Sales will appear here once they are made',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey[500],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          )
+                        : Column(
+                            children: [
+                              // Table Header
+                              Container(
+                                decoration: BoxDecoration(
+                                  color: primaryColor,
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(16),
+                                    topRight: Radius.circular(16),
+                                  ),
+                                ),
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 12,
+                                  horizontal: 16,
+                                ),
+                                child: Row(
+                                  children: const [
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        'Date',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        'Customer',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 2,
+                                      child: Text(
+                                        'Amount',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                    Expanded(
+                                      flex: 1,
+                                      child: Text(
+                                        'Status',
+                                        style: TextStyle(
+                                          fontWeight: FontWeight.bold,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
+
+                              // Table Body
+                              ListView.builder(
+                                shrinkWrap: true,
+                                physics: const NeverScrollableScrollPhysics(),
+                                itemCount: _sales.length,
+                                itemBuilder: (context, index) {
+                                  final sale = _sales[index];
+                                  final isEven = index % 2 == 0;
+
+                                  return Container(
+                                    color: isEven
+                                        ? Colors.grey.shade50
+                                        : Colors.white,
+                                    padding: const EdgeInsets.symmetric(
+                                      vertical: 12,
+                                      horizontal: 16,
+                                    ),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            sale.createdAt?.toString().split(
+                                                  '.',
+                                                )[0] ??
+                                                'No date',
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            sale.customerId ?? 'Unknown',
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            '₦${(sale.totalAmount ?? 0).toStringAsFixed(2)}',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w500,
+                                              color: (sale.totalAmount ?? 0) > 0
+                                                  ? Colors.green[700]
+                                                  : Colors.grey[600],
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 1,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 8,
+                                              vertical: 4,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: (sale.isPaid ?? false)
+                                                  ? Colors.green[100]
+                                                  : Colors.red[100],
+                                              borderRadius:
+                                                  BorderRadius.circular(12),
+                                            ),
+                                            child: Text(
+                                              (sale.isPaid ?? false)
+                                                  ? 'Paid'
+                                                  : 'Unpaid',
+                                              style: TextStyle(
+                                                color: (sale.isPaid ?? false)
+                                                    ? Colors.green[900]
+                                                    : Colors.red[900],
+                                                fontWeight: FontWeight.w500,
+                                                fontSize: 12,
+                                              ),
+                                              textAlign: TextAlign.center,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  );
+                                },
+                              ),
                             ],
-                          );
-                        }).toList(),
-                      ),
-                    ),
+                          ),
                   ),
                 ],
               ),

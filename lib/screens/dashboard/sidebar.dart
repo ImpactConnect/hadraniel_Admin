@@ -10,19 +10,36 @@ class Sidebar extends StatelessWidget {
   Widget build(BuildContext context) {
     // Get the screen height to ensure sidebar takes full height
     final screenHeight = MediaQuery.of(context).size.height;
-    final primaryColor = Theme.of(context).primaryColor;
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Drawer(
-      elevation: 2.0,
+      elevation: 4.0,
       child: Container(
-        height: screenHeight,
-        color: Colors.white,
+        height: screenHeight, // Ensure full height
+        decoration: BoxDecoration(
+          color: Colors.white,
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 5,
+              offset: const Offset(0, 2),
+            ),
+          ],
+        ),
         child: Column(
           children: [
             DrawerHeader(
+              margin: EdgeInsets.zero,
+              padding: const EdgeInsets.all(16),
               decoration: BoxDecoration(
-                color: primaryColor,
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    colorScheme.primary,
+                    colorScheme.primary.withOpacity(0.8),
+                  ],
+                ),
                 boxShadow: [
                   BoxShadow(
                     color: Colors.black.withOpacity(0.1),
@@ -35,10 +52,17 @@ class Sidebar extends StatelessWidget {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(
-                      Icons.admin_panel_settings,
-                      size: 48,
-                      color: Colors.white,
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.admin_panel_settings,
+                        size: 48,
+                        color: Colors.white,
+                      ),
                     ),
                     const SizedBox(height: 12),
                     const Text(
@@ -55,7 +79,7 @@ class Sidebar extends StatelessWidget {
             ),
             Expanded(
               child: ListView(
-                padding: EdgeInsets.zero,
+                padding: const EdgeInsets.symmetric(vertical: 8.0),
                 children: [
                   _buildNavItem(
                     context: context,
@@ -123,7 +147,7 @@ class Sidebar extends StatelessWidget {
                 ],
               ),
             ),
-            Divider(height: 1),
+            Divider(height: 1, color: Colors.grey.shade300),
             _buildNavItem(
               context: context,
               icon: Icons.logout,
@@ -156,20 +180,26 @@ class Sidebar extends StatelessWidget {
     final currentRoute = ModalRoute.of(context)?.settings.name;
     final isSelected = route != null && currentRoute == route;
 
-    return ListTile(
-      leading: Icon(
-        icon,
-        color: isSelected ? colorScheme.primary : Colors.grey[700],
-      ),
-      title: Text(
-        title,
-        style: TextStyle(
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-          color: isSelected ? colorScheme.primary : Colors.grey[800],
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 2.0),
+      child: ListTile(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+        leading: Icon(
+          icon,
+          color: isSelected ? colorScheme.primary : Colors.grey[700],
+          size: 22,
         ),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+            color: isSelected ? colorScheme.primary : Colors.grey[800],
+            fontSize: 15,
+          ),
+        ),
+        tileColor: isSelected ? colorScheme.primary.withOpacity(0.1) : null,
+        onTap: onTap ?? () => Navigator.pushNamed(context, route!),
       ),
-      tileColor: isSelected ? colorScheme.primary.withOpacity(0.1) : null,
-      onTap: onTap ?? () => Navigator.pushNamed(context, route!),
     );
   }
 }

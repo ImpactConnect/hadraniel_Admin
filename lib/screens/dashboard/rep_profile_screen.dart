@@ -49,7 +49,7 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.rep.fullName),
@@ -105,7 +105,9 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                                       radius: 60,
                                       backgroundColor: Colors.white,
                                       child: Text(
-                                        widget.rep.fullName.substring(0, 1).toUpperCase(),
+                                        widget.rep.fullName
+                                            .substring(0, 1)
+                                            .toUpperCase(),
                                         style: TextStyle(
                                           fontSize: 48,
                                           color: colorScheme.primary,
@@ -134,7 +136,9 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                                       borderRadius: BorderRadius.circular(20),
                                     ),
                                     child: Text(
-                                      widget.rep.isAdmin ? 'Admin' : 'Sales Rep',
+                                      widget.rep.isAdmin
+                                          ? 'Admin'
+                                          : 'Sales Rep',
                                       style: TextStyle(
                                         color: widget.rep.isAdmin
                                             ? Colors.purple
@@ -149,9 +153,9 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                             ),
                           ),
                         ),
-                        
+
                         const SizedBox(width: 16),
-                        
+
                         // Contact Information Card - takes 40% of the width
                         Expanded(
                           flex: 4,
@@ -175,10 +179,11 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                                       Expanded(
                                         child: Text(
                                           'Contact Information',
-                                          style: theme.textTheme.titleLarge?.copyWith(
-                                            fontWeight: FontWeight.bold,
-                                            color: colorScheme.primary,
-                                          ),
+                                          style: theme.textTheme.titleLarge
+                                              ?.copyWith(
+                                                fontWeight: FontWeight.bold,
+                                                color: colorScheme.primary,
+                                              ),
                                         ),
                                       ),
                                     ],
@@ -205,7 +210,9 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                                   _buildInfoRow(
                                     Icons.calendar_today_outlined,
                                     'Created',
-                                    widget.rep.createdAt?.toString().split('.')[0] ??
+                                    widget.rep.createdAt?.toString().split(
+                                          '.',
+                                        )[0] ??
                                         'N/A',
                                     colorScheme,
                                     isLast: true,
@@ -217,9 +224,9 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                         ),
                       ],
                     ),
-                    
+
                     const SizedBox(height: 32),
-                    
+
                     // Performance Metrics Card
                     Card(
                       elevation: 2,
@@ -303,11 +310,7 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
               color: colorScheme.primary.withOpacity(0.1),
               borderRadius: BorderRadius.circular(12),
             ),
-            child: Icon(
-              icon,
-              color: colorScheme.primary,
-              size: 24,
-            ),
+            child: Icon(icon, color: colorScheme.primary, size: 24),
           ),
           const SizedBox(width: 16),
           Expanded(

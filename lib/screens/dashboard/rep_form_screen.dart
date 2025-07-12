@@ -182,7 +182,7 @@ class _RepFormScreenState extends State<RepFormScreen> {
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final colorScheme = theme.colorScheme;
-    
+
     return Scaffold(
       appBar: AppBar(
         title: Text(widget.rep == null ? 'Add New Rep' : 'Edit Rep'),
@@ -212,13 +212,17 @@ class _RepFormScreenState extends State<RepFormScreen> {
                           child: Column(
                             children: [
                               Icon(
-                                widget.rep == null ? Icons.person_add : Icons.edit,
+                                widget.rep == null
+                                    ? Icons.person_add
+                                    : Icons.edit,
                                 size: 48,
                                 color: colorScheme.primary,
                               ),
                               const SizedBox(height: 16),
                               Text(
-                                widget.rep == null ? 'Create New Representative' : 'Edit Representative',
+                                widget.rep == null
+                                    ? 'Create New Representative'
+                                    : 'Edit Representative',
                                 style: theme.textTheme.headlineSmall?.copyWith(
                                   fontWeight: FontWeight.bold,
                                   color: colorScheme.primary,
@@ -240,7 +244,7 @@ class _RepFormScreenState extends State<RepFormScreen> {
                           ),
                         ),
                         const SizedBox(height: 32),
-                        
+
                         // Full Name Field
                         _buildTextField(
                           controller: _fullNameController,
@@ -251,7 +255,7 @@ class _RepFormScreenState extends State<RepFormScreen> {
                               value?.isEmpty ?? true ? 'Required field' : null,
                         ),
                         const SizedBox(height: 24),
-                        
+
                         // Email Field
                         _buildTextField(
                           controller: _emailController,
@@ -263,7 +267,7 @@ class _RepFormScreenState extends State<RepFormScreen> {
                               value?.isEmpty ?? true ? 'Required field' : null,
                         ),
                         const SizedBox(height: 24),
-                        
+
                         // Password Field (only for new reps)
                         if (widget.rep == null)
                           _buildTextField(
@@ -272,11 +276,12 @@ class _RepFormScreenState extends State<RepFormScreen> {
                             icon: Icons.lock_outline,
                             obscureText: true,
                             colorScheme: colorScheme,
-                            validator: (value) =>
-                                value?.isEmpty ?? true ? 'Required field' : null,
+                            validator: (value) => value?.isEmpty ?? true
+                                ? 'Required field'
+                                : null,
                           ),
                         if (widget.rep == null) const SizedBox(height: 24),
-                        
+
                         // Outlet Dropdown
                         _buildDropdownField(
                           value: _selectedOutletId,
@@ -298,7 +303,7 @@ class _RepFormScreenState extends State<RepFormScreen> {
                           colorScheme: colorScheme,
                         ),
                         const SizedBox(height: 40),
-                        
+
                         // Submit Button
                         SizedBox(
                           height: 50,
@@ -322,7 +327,9 @@ class _RepFormScreenState extends State<RepFormScreen> {
                                     ),
                                   )
                                 : Text(
-                                    widget.rep == null ? 'Create Rep' : 'Update Rep',
+                                    widget.rep == null
+                                        ? 'Create Rep'
+                                        : 'Update Rep',
                                     style: const TextStyle(
                                       fontSize: 16,
                                       fontWeight: FontWeight.bold,
@@ -374,7 +381,10 @@ class _RepFormScreenState extends State<RepFormScreen> {
         ),
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          vertical: 16,
+          horizontal: 16,
+        ),
       ),
       keyboardType: keyboardType,
       obscureText: obscureText,
@@ -414,7 +424,10 @@ class _RepFormScreenState extends State<RepFormScreen> {
         ),
         filled: true,
         fillColor: Colors.white,
-        contentPadding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
+        contentPadding: const EdgeInsets.symmetric(
+          vertical: 16,
+          horizontal: 16,
+        ),
       ),
       items: items,
       onChanged: onChanged,
