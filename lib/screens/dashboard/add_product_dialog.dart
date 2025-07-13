@@ -35,35 +35,36 @@ class _AddProductDialogState extends State<AddProductDialog> {
   List<String>? _cachedProductNames;
   // Cache for product balances
   Map<String, double>? _cachedProductBalances;
-  
+
   // Get the available balance for a product
   double getAvailableBalance(String productName) {
     return _cachedProductBalances?[productName] ?? 0.0;
   }
-  
+
   Future<List<String>> _getPreloadedProductNames() async {
     // Return cached product names if available
     if (_cachedProductNames != null) {
       return _cachedProductNames!;
     }
-    
+
     try {
       // Import the StockIntakeService to get products with balance
       final stockIntakeService = StockIntakeService();
-      
+
       // Get products with balance > 0 along with their balances
-      final productsWithBalance = await stockIntakeService.getAvailableProductsWithBalance();
-      
+      final productsWithBalance = await stockIntakeService
+          .getAvailableProductsWithBalance();
+
       // Cache the balances
       _cachedProductBalances = productsWithBalance;
-      
+
       // Cache the product names with balance information
       _cachedProductNames = productsWithBalance.keys.map((name) {
         final balance = productsWithBalance[name]!;
         final unit = widget.product?.unit ?? 'Kg'; // Default unit
         return '$name (${balance.toStringAsFixed(2)}$unit left)';
       }).toList();
-      
+
       return _cachedProductNames!;
     } catch (e) {
       print('Error fetching products with balance: $e');
@@ -71,7 +72,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
       return [];
     }
   }
-  
+
   // Extract the actual product name from the display string
   String extractProductName(String displayName) {
     // Check if the string contains balance information
@@ -94,7 +95,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
     outletId = widget.product?.outletId ?? '';
     description = widget.product?.description;
   }
-  
+
   @override
   void dispose() {
     _productNameController.dispose();
@@ -148,25 +149,24 @@ class _AddProductDialogState extends State<AddProductDialog> {
                     width: 300,
                     child: Autocomplete<String>(
                       initialValue: TextEditingValue(text: productName),
-                      optionsBuilder: (TextEditingValue textEditingValue) async {
-                        // Get product names with balance
-                        final productNames = await _getPreloadedProductNames();
-                        
-                        if (textEditingValue.text.isEmpty) {
-                          return [
-                            'Add New Product',
-                            ...productNames,
-                          ];
-                        }
-                        return productNames
-                            .where(
-                              (product) => product.toLowerCase().contains(
-                                textEditingValue.text.toLowerCase(),
-                              ),
-                            )
-                            .toList()
-                          ..insert(0, 'Add New Product');
-                      },
+                      optionsBuilder:
+                          (TextEditingValue textEditingValue) async {
+                            // Get product names with balance
+                            final productNames =
+                                await _getPreloadedProductNames();
+
+                            if (textEditingValue.text.isEmpty) {
+                              return ['Add New Product', ...productNames];
+                            }
+                            return productNames
+                                .where(
+                                  (product) => product.toLowerCase().contains(
+                                    textEditingValue.text.toLowerCase(),
+                                  ),
+                                )
+                                .toList()
+                              ..insert(0, 'Add New Product');
+                          },
                       onSelected: (String selection) {
                         if (selection == 'Add New Product') {
                           setState(() {
@@ -176,8 +176,10 @@ class _AddProductDialogState extends State<AddProductDialog> {
                           });
                         } else {
                           // Extract the actual product name from the display string
-                          final actualProductName = extractProductName(selection);
-                          
+                          final actualProductName = extractProductName(
+                            selection,
+                          );
+
                           setState(() {
                             _isNewProduct = false;
                             productName = actualProductName;
@@ -193,10 +195,12 @@ class _AddProductDialogState extends State<AddProductDialog> {
                             onFieldSubmitted,
                           ) {
                             // Initialize the controller with our stored value
-                            if (_productNameController.text.isNotEmpty && textEditingController.text.isEmpty) {
-                              textEditingController.text = _productNameController.text;
+                            if (_productNameController.text.isNotEmpty &&
+                                textEditingController.text.isEmpty) {
+                              textEditingController.text =
+                                  _productNameController.text;
                             }
-                            
+
                             return TextFormField(
                               controller: textEditingController,
                               focusNode: focusNode,
@@ -285,19 +289,23 @@ class _AddProductDialogState extends State<AddProductDialog> {
                         filled: true,
                         fillColor: Colors.grey[50],
                         // Show the available balance in the helper text
-                        helperText: !_isNewProduct ? 'Available: ${getAvailableBalance(productName).toStringAsFixed(2)} ${unit}' : null,
+                        helperText: !_isNewProduct
+                            ? 'Available: ${getAvailableBalance(productName).toStringAsFixed(2)} ${unit}'
+                            : null,
                       ),
                       keyboardType: TextInputType.number,
                       validator: (value) {
                         if (value?.isEmpty ?? true) return 'Required field';
                         if (double.tryParse(value!) == null)
                           return 'Invalid number';
-                          
+
                         // Check if quantity exceeds available balance for existing products
                         if (!_isNewProduct) {
                           final requestedQuantity = double.parse(value);
-                          final availableBalance = getAvailableBalance(productName);
-                          
+                          final availableBalance = getAvailableBalance(
+                            productName,
+                          );
+
                           if (requestedQuantity > availableBalance) {
                             return 'Exceeds available balance of ${availableBalance.toStringAsFixed(2)} ${unit}';
                           }

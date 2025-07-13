@@ -25,7 +25,7 @@ class DatabaseHelper {
     return await databaseFactoryFfi.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 4,
+        version: 5,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       ),
@@ -73,6 +73,25 @@ class DatabaseHelper {
         '''        CREATE TABLE customers (          id TEXT PRIMARY KEY,          full_name TEXT NOT NULL,          phone TEXT,          outlet_id TEXT,          total_outstanding REAL DEFAULT 0,          created_at TEXT NOT NULL,          is_synced INTEGER DEFAULT 0,          FOREIGN KEY (outlet_id) REFERENCES outlets (id)        )      ''',
       );
     }
+    
+    if (oldVersion < 5) {
+      // Add product_distributions table
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS product_distributions (
+          id TEXT PRIMARY KEY,
+          product_name TEXT NOT NULL,
+          outlet_id TEXT NOT NULL,
+          outlet_name TEXT NOT NULL,
+          quantity REAL NOT NULL,
+          cost_per_unit REAL NOT NULL,
+          total_cost REAL NOT NULL,
+          distribution_date TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          is_synced INTEGER DEFAULT 0,
+          FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+        )
+      ''');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -112,6 +131,23 @@ class DatabaseHelper {
         total_assigned REAL DEFAULT 0,
         balance_quantity REAL NOT NULL,
         last_updated TEXT NOT NULL
+      )
+    ''');
+    
+    // Product distributions table
+    await db.execute('''
+      CREATE TABLE product_distributions (
+        id TEXT PRIMARY KEY,
+        product_name TEXT NOT NULL,
+        outlet_id TEXT NOT NULL,
+        outlet_name TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        cost_per_unit REAL NOT NULL,
+        total_cost REAL NOT NULL,
+        distribution_date TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        is_synced INTEGER DEFAULT 0,
+        FOREIGN KEY (outlet_id) REFERENCES outlets (id)
       )
     ''');
 
@@ -214,6 +250,7 @@ class DatabaseHelper {
       await txn.delete('customers');
       await txn.delete('sync_queue');
       await txn.delete('stock_balances');
+      await txn.delete('product_distributions');
     });
   }
 

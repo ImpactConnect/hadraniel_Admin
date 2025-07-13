@@ -4,6 +4,7 @@ import '../database/database_helper.dart';
 import '../models/stock_intake_model.dart';
 import '../models/intake_balance_model.dart';
 import '../models/product_model.dart';
+import '../models/product_distribution_model.dart';
 import 'sync_service.dart';
 
 class StockIntakeService {
@@ -191,6 +192,9 @@ class StockIntakeService {
   Future<bool> updateBalanceOnProductAssignment(
     String productName,
     double quantity,
+    String outletId,
+    String outletName,
+    double costPerUnit,
   ) async {
     final db = await _db.database;
     final now = DateTime.now();
@@ -227,6 +231,16 @@ class StockIntakeService {
       where: 'id = ?',
       whereArgs: [existingBalance.id],
     );
+    
+    // Record the distribution
+    await addProductDistribution(
+      productName: productName,
+      outletId: outletId,
+      outletName: outletName,
+      quantity: quantity,
+      costPerUnit: costPerUnit,
+      distributionDate: now,
+    );
 
     return true;
   }
@@ -248,7 +262,7 @@ class StockIntakeService {
 
     return maps.map((map) => map['product_name'] as String).toList();
   }
-  
+
   // Get available products with their balance quantities
   Future<Map<String, double>> getAvailableProductsWithBalance() async {
     final db = await _db.database;
@@ -259,9 +273,10 @@ class StockIntakeService {
 
     Map<String, double> productsWithBalance = {};
     for (var map in maps) {
-      productsWithBalance[map['product_name'] as String] = map['balance_quantity'] as double;
+      productsWithBalance[map['product_name'] as String] =
+          map['balance_quantity'] as double;
     }
-    
+
     return productsWithBalance;
   }
 
@@ -324,5 +339,63 @@ class StockIntakeService {
     return result.first['count'] == null
         ? 0
         : (result.first['count'] as num).toInt();
+  }
+  
+  // Add a product distribution record
+  Future<ProductDistribution> addProductDistribution({
+    required String productName,
+    required String outletId,
+    required String outletName,
+    required double quantity,
+    required double costPerUnit,
+    required DateTime distributionDate,
+  }) async {
+    final db = await _db.database;
+    final now = DateTime.now();
+    final totalCost = quantity * costPerUnit;
+    
+    final distribution = ProductDistribution(
+      id: _uuid.v4(),
+      productName: productName,
+      outletId: outletId,
+      outletName: outletName,
+      quantity: quantity,
+      costPerUnit: costPerUnit,
+      totalCost: totalCost,
+      distributionDate: distributionDate,
+      createdAt: now,
+    );
+    
+    await db.insert(
+      'product_distributions',
+      distribution.toMap(),
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+    
+    return distribution;
+  }
+  
+  // Get product distributions by product name
+  Future<List<ProductDistribution>> getProductDistributions(String productName) async {
+    final db = await _db.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'product_distributions',
+      where: 'product_name = ?',
+      whereArgs: [productName],
+      orderBy: 'distribution_date DESC',
+    );
+    
+    return maps.map((map) => ProductDistribution.fromMap(map)).toList();
+  }
+  
+  // Get all product distributions
+  Future<List<ProductDistribution>> getAllProductDistributions() async {
+    final db = await _db.database;
+    final List<Map<String, dynamic>> maps = await db.query(
+      'product_distributions',
+      orderBy: 'distribution_date DESC',
+    );
+    
+    return maps.map((map) => ProductDistribution.fromMap(map)).toList();
   }
 }

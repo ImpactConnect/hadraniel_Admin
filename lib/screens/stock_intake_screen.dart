@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
 import '../core/models/stock_intake_model.dart';
 import '../core/models/intake_balance_model.dart';
+import '../core/models/product_distribution_model.dart';
 import '../core/services/stock_intake_service.dart';
 import '../core/services/sync_service.dart';
 import '../core/database/database_helper.dart';
@@ -24,7 +25,8 @@ class StockIntakeScreen extends StatefulWidget {
   _StockIntakeScreenState createState() => _StockIntakeScreenState();
 }
 
-class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTickerProviderStateMixin {
+class _StockIntakeScreenState extends State<StockIntakeScreen>
+    with SingleTickerProviderStateMixin {
   final StockIntakeService _stockIntakeService = StockIntakeService();
   final SyncService _syncService = SyncService();
   final _formKey = GlobalKey<FormState>();
@@ -42,13 +44,14 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
   DateTime? _startDate;
   DateTime? _endDate;
   final TextEditingController _searchController = TextEditingController();
-  
+
   // Tab controller
   late TabController _tabController;
-  
+
   // Balance tab specific variables
   String _balanceSearchQuery = '';
-  final TextEditingController _balanceSearchController = TextEditingController();
+  final TextEditingController _balanceSearchController =
+      TextEditingController();
   String _sortColumn = 'productName';
   bool _sortAscending = true;
   String _balanceFilter = 'all'; // 'all', 'positive', 'zero', 'negative'
@@ -563,30 +566,271 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
     });
   }
 
-  void _showBalanceDetails(IntakeBalance balance) {
+  void _showBalanceDetails(IntakeBalance balance) async {
+    final colorScheme = Theme.of(context).colorScheme;
+    final StockIntakeService _stockIntakeService = StockIntakeService();
+    
+    // Fetch distribution history for this product
+    List<ProductDistribution> distributions = 
+        await _stockIntakeService.getProductDistributions(balance.productName);
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('${balance.productName} Balance Details'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
+        title: Row(
           children: [
-            Text('Total Received: ${balance.totalReceived}'),
-            const SizedBox(height: 8),
-            Text('Total Assigned: ${balance.totalAssigned}'),
-            const SizedBox(height: 8),
-            Text('Balance Quantity: ${balance.balanceQuantity}'),
-            const SizedBox(height: 8),
-            Text(
-              'Last Updated: ${DateFormat('MMM dd, yyyy').format(balance.lastUpdated)}',
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: colorScheme.primary.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: Text(
+                  balance.productName.substring(0, 1).toUpperCase(),
+                  style: TextStyle(
+                    fontWeight: FontWeight.bold,
+                    color: colorScheme.primary,
+                    fontSize: 18,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                '${balance.productName} Balance Details',
+                style: TextStyle(
+                  color: colorScheme.primary,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
             ),
           ],
         ),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        content: Container(
+          width: double.maxFinite,
+          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildDetailItem(
+                icon: Icons.inventory_2_outlined,
+                label: 'Total Received',
+                value: '${balance.totalReceived}',
+                color: Colors.blue,
+              ),
+              const Divider(),
+              _buildDetailItem(
+                icon: Icons.assignment_outlined,
+                label: 'Total Assigned',
+                value: '${balance.totalAssigned}',
+                color: Colors.orange,
+              ),
+              const Divider(),
+              _buildDetailItem(
+                icon: Icons.account_balance_outlined,
+                label: 'Balance Quantity',
+                value: '${balance.balanceQuantity}',
+                color: balance.balanceQuantity > 0
+                    ? Colors.green
+                    : balance.balanceQuantity < 0
+                    ? Colors.red
+                    : Colors.grey,
+              ),
+              const Divider(),
+              _buildDetailItem(
+                icon: Icons.calendar_today_outlined,
+                label: 'Last Updated',
+                value: DateFormat('MMM dd, yyyy').format(balance.lastUpdated),
+                color: Colors.purple,
+              ),
+              const Divider(),
+              const SizedBox(height: 16),
+              Text(
+                'Distribution History',
+                style: TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                  color: colorScheme.primary,
+                ),
+              ),
+              const SizedBox(height: 8),
+              distributions.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 16.0),
+                      child: Center(
+                        child: Text(
+                          'No distribution history available',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      ),
+                    )
+                  : Expanded(
+                      child: _buildDistributionHistoryTable(distributions),
+                    ),
+            ],
+          ),
+        ),
         actions: [
-          TextButton(
+          ElevatedButton(
             onPressed: () => Navigator.pop(context),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: colorScheme.primary,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
+            ),
             child: const Text('Close'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailItem({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8.0),
+      child: Row(
+        children: [
+          Container(
+            width: 36,
+            height: 36,
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: color, size: 20),
+          ),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                style: TextStyle(color: Colors.grey[600], fontSize: 12),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontWeight: FontWeight.bold,
+                  fontSize: 16,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+  
+  Widget _buildDistributionHistoryTable(List<ProductDistribution> distributions) {
+    return Container(
+      decoration: BoxDecoration(
+        border: Border.all(color: Colors.grey.shade300),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        children: [
+          // Table header (sticky)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            decoration: BoxDecoration(
+              color: Colors.grey.shade100,
+              borderRadius: const BorderRadius.only(
+                topLeft: Radius.circular(8),
+                topRight: Radius.circular(8),
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    'Outlet',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Quantity',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    'Date',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.grey.shade800,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          // Table body (scrollable)
+          Expanded(
+            child: ListView.builder(
+              padding: EdgeInsets.zero,
+              itemCount: distributions.length,
+              itemBuilder: (context, index) {
+                final distribution = distributions[index];
+                final bool isEven = index % 2 == 0;
+                
+                return Container(
+                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  decoration: BoxDecoration(
+                    color: isEven ? Colors.white : Colors.grey.shade50,
+                    border: Border(
+                      top: BorderSide(color: Colors.grey.shade200),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        flex: 3,
+                        child: Text(
+                          distribution.outletName,
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          distribution.quantity.toString(),
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                      Expanded(
+                        flex: 2,
+                        child: Text(
+                          DateFormat('MMM dd, yyyy').format(distribution.distributionDate),
+                          style: const TextStyle(fontSize: 14),
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            ),
           ),
         ],
       ),
@@ -650,17 +894,24 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
   Future<void> _exportBalancesToCSV() async {
     try {
       final directory = await getApplicationDocumentsDirectory();
-      final path = '${directory.path}/stock_balances_${DateTime.now().millisecondsSinceEpoch}.csv';
+      final path =
+          '${directory.path}/stock_balances_${DateTime.now().millisecondsSinceEpoch}.csv';
       final file = File(path);
-      
+
       // Create CSV data
       List<List<dynamic>> rows = [];
-      
+
       // Add header row
-      rows.add(['Product Name', 'Total Received', 'Total Assigned', 'Balance Quantity', 'Last Updated']);
-      
+      rows.add([
+        'Product Name',
+        'Total Received',
+        'Total Assigned',
+        'Balance Quantity',
+        'Last Updated',
+      ]);
+
       // Add data rows
-       for (var balance in _filteredBalances) {
+      for (var balance in _filteredBalances) {
         rows.add([
           balance.productName,
           balance.totalReceived,
@@ -669,27 +920,27 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
           DateFormat('yyyy-MM-dd').format(balance.lastUpdated),
         ]);
       }
-      
+
       // Convert to CSV
       String csv = const ListToCsvConverter().convert(rows);
-      
+
       // Write to file
       await file.writeAsString(csv);
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('CSV exported to: $path')),
-      );
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('CSV exported to: $path')));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error exporting CSV: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error exporting CSV: $e')));
     }
   }
-  
+
   Future<void> _exportBalancesToPDF() async {
     try {
       final pdf = pw.Document();
-      
+
       pdf.addPage(
         pw.MultiPage(
           pageFormat: PdfPageFormat.a4,
@@ -697,7 +948,13 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
           header: (pw.Context context) {
             return pw.Header(
               level: 0,
-              child: pw.Text('Stock Balance Report', style: pw.TextStyle(fontSize: 20, fontWeight: pw.FontWeight.bold)),
+              child: pw.Text(
+                'Stock Balance Report',
+                style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
             );
           },
           footer: (pw.Context context) {
@@ -711,9 +968,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
           build: (pw.Context context) => [
             pw.Table.fromTextArray(
               headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
-              headerDecoration: pw.BoxDecoration(
-                color: PdfColors.grey300,
-              ),
+              headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
               cellAlignments: {
                 0: pw.Alignment.centerLeft,
                 1: pw.Alignment.center,
@@ -721,7 +976,13 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
                 3: pw.Alignment.center,
                 4: pw.Alignment.center,
               },
-              headers: ['Product Name', 'Total Received', 'Total Assigned', 'Balance', 'Last Updated'],
+              headers: [
+                'Product Name',
+                'Total Received',
+                'Total Assigned',
+                'Balance',
+                'Last Updated',
+              ],
               data: _filteredBalances.map((balance) {
                 return [
                   balance.productName,
@@ -735,19 +996,20 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
           ],
         ),
       );
-      
+
       final directory = await getApplicationDocumentsDirectory();
-      final path = '${directory.path}/stock_balances_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final path =
+          '${directory.path}/stock_balances_${DateTime.now().millisecondsSinceEpoch}.pdf';
       final file = File(path);
       await file.writeAsBytes(await pdf.save());
-      
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('PDF exported to: $path')),
-      );
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('PDF exported to: $path')));
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error exporting PDF: $e')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error exporting PDF: $e')));
     }
   }
 
@@ -820,50 +1082,111 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
           ),
         ],
       ),
-      floatingActionButton: _tabController.index == 0 ? FloatingActionButton(
-        onPressed: _showAddIntakeDialog,
-        child: const Icon(Icons.add),
-        tooltip: 'Add Stock Intake',
-      ) : null,
+      floatingActionButton: _tabController.index == 0
+          ? FloatingActionButton(
+              onPressed: _showAddIntakeDialog,
+              child: const Icon(Icons.add),
+              tooltip: 'Add Stock Intake',
+            )
+          : null,
     );
   }
 
   Widget _buildHeader() {
-    return Padding(
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
       padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          const Text(
-            'Stock Intake Records',
-            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.inventory_2,
+                  color: colorScheme.primary,
+                  size: 24,
+                ),
+              ),
+              const SizedBox(width: 12),
+              const Text(
+                'Stock Intake Records',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+            ],
           ),
           CustomButton(
             onPressed: _showAddIntakeDialog,
             text: 'Add New Intake',
             icon: Icons.add,
+            color: colorScheme.primary,
           ),
         ],
       ),
     );
   }
-  
+
   Widget _buildBalanceHeader() {
-    return Padding(
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
       padding: const EdgeInsets.all(16.0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+          Row(
             children: [
-              const Text(
-                'Product Balance Summary',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  Icons.balance,
+                  color: colorScheme.primary,
+                  size: 24,
+                ),
               ),
-              Text(
-                'Showing ${_filteredBalances.length} of ${_intakeBalances.length} products',
-                style: TextStyle(fontSize: 12, color: Colors.grey),
+              const SizedBox(width: 12),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Product Balance Summary',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                  ),
+                  Text(
+                    'Showing ${_filteredBalances.length} of ${_intakeBalances.length} products',
+                    style: TextStyle(fontSize: 12, color: Colors.grey),
+                  ),
+                ],
               ),
             ],
           ),
@@ -873,12 +1196,15 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
                 onPressed: _exportBalancesToCSV,
                 text: 'Export CSV',
                 icon: Icons.file_download,
+                color: colorScheme.primary,
+                isOutlined: true,
               ),
               const SizedBox(width: 8),
               CustomButton(
                 onPressed: _exportBalancesToPDF,
                 text: 'Export PDF',
                 icon: Icons.picture_as_pdf,
+                color: colorScheme.primary,
               ),
             ],
           ),
@@ -888,27 +1214,61 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
   }
 
   Widget _buildMetricsSection() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       child: Row(
         children: [
           Expanded(
             child: Card(
-              child: Padding(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Container(
                 padding: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      colorScheme.primary.withOpacity(0.8),
+                      colorScheme.primary,
+                    ],
+                  ),
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Total Stock Value',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.monetization_on,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Total Stock Value',
+                          style: TextStyle(fontSize: 14, color: Colors.white),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 16),
                     Text(
                       '₦${NumberFormat('#,##0.00').format(_totalStockValue)}',
                       style: const TextStyle(
-                        fontSize: 20,
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
                     ),
                   ],
@@ -919,21 +1279,47 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
           const SizedBox(width: 16),
           Expanded(
             child: Card(
-              child: Padding(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Container(
                 padding: const EdgeInsets.all(16.0),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12),
+                  color: Colors.white,
+                ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Total Items Received',
-                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.orange.withOpacity(0.1),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.inventory,
+                            color: Colors.orange[700],
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        const Text(
+                          'Total Items Received',
+                          style: TextStyle(fontSize: 14, color: Colors.grey),
+                        ),
+                      ],
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 16),
                     Text(
                       '${_filteredStockIntakes.length}',
-                      style: const TextStyle(
-                        fontSize: 20,
+                      style: TextStyle(
+                        fontSize: 24,
                         fontWeight: FontWeight.bold,
+                        color: Colors.orange[700],
                       ),
                     ),
                   ],
@@ -944,25 +1330,55 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
           const SizedBox(width: 16),
           Expanded(
             child: Card(
+              elevation: 2,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               child: InkWell(
                 onTap: () {
                   showDialog(
                     context: context,
                     builder: (context) => AlertDialog(
-                      title: const Text('Product Balances'),
+                      title: Row(
+                        children: [
+                          Icon(Icons.balance, color: colorScheme.primary),
+                          const SizedBox(width: 8),
+                          const Text('Product Balances'),
+                        ],
+                      ),
                       content: SizedBox(
                         width: double.maxFinite,
+                        height: 400,
                         child: ListView.builder(
                           shrinkWrap: true,
                           itemCount: _intakeBalances.length,
                           itemBuilder: (context, index) {
                             final balance = _intakeBalances[index];
-                            return ListTile(
-                              title: Text(balance.productName),
-                              subtitle: Text(
-                                'Balance: ${balance.balanceQuantity}',
+                            return Card(
+                              margin: const EdgeInsets.symmetric(vertical: 4),
+                              child: ListTile(
+                                leading: CircleAvatar(
+                                  backgroundColor: colorScheme.primary
+                                      .withOpacity(0.1),
+                                  child: Text(
+                                    balance.productName
+                                        .substring(0, 1)
+                                        .toUpperCase(),
+                                    style: TextStyle(
+                                      color: colorScheme.primary,
+                                    ),
+                                  ),
+                                ),
+                                title: Text(balance.productName),
+                                subtitle: Text(
+                                  'Balance: ${balance.balanceQuantity}',
+                                ),
+                                trailing: Icon(
+                                  Icons.arrow_forward_ios,
+                                  size: 16,
+                                ),
+                                onTap: () => _showBalanceDetails(balance),
                               ),
-                              onTap: () => _showBalanceDetails(balance),
                             );
                           },
                         ),
@@ -970,27 +1386,52 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
                       actions: [
                         TextButton(
                           onPressed: () => Navigator.pop(context),
-                          child: const Text('Close'),
+                          child: Text(
+                            'Close',
+                            style: TextStyle(color: colorScheme.primary),
+                          ),
                         ),
                       ],
                     ),
                   );
                 },
-                child: Padding(
+                child: Container(
                   padding: const EdgeInsets.all(16.0),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12),
+                    color: Colors.white,
+                  ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'Product Balances',
-                        style: TextStyle(fontSize: 14, color: Colors.grey),
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.green.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              Icons.category,
+                              color: Colors.green[700],
+                              size: 24,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Text(
+                            'Product Balances',
+                            style: TextStyle(fontSize: 14, color: Colors.grey),
+                          ),
+                        ],
                       ),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 16),
                       Text(
                         '${_intakeBalances.length} Products',
-                        style: const TextStyle(
-                          fontSize: 20,
+                        style: TextStyle(
+                          fontSize: 24,
                           fontWeight: FontWeight.bold,
+                          color: Colors.green[700],
                         ),
                       ),
                     ],
@@ -1005,125 +1446,261 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
   }
 
   Widget _buildFiltersSection() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              controller: _searchController,
-              decoration: const InputDecoration(
-                hintText: 'Search by product name or description',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
-              ),
-              onChanged: (value) {
-                setState(() {
-                  _searchQuery = value;
-                });
-              },
-            ),
-          ),
-          const SizedBox(width: 16),
-          InkWell(
-            onTap: _showDateRangePicker,
+            flex: 3,
             child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
               decoration: BoxDecoration(
-                border: Border.all(color: Colors.grey),
-                borderRadius: BorderRadius.circular(4),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.calendar_today, size: 16),
-                  const SizedBox(width: 8),
-                  Text(
-                    _startDate != null && _endDate != null
-                        ? '${DateFormat('MMM dd').format(_startDate!)} - ${DateFormat('MMM dd').format(_endDate!)}'
-                        : 'Select Date Range',
+                borderRadius: BorderRadius.circular(12.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
                   ),
                 ],
               ),
+              child: TextField(
+                controller: _searchController,
+                decoration: InputDecoration(
+                  hintText: 'Search by product name or description',
+                  hintStyle: TextStyle(color: Colors.grey[400]),
+                  prefixIcon: Icon(Icons.search, color: colorScheme.primary),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                    borderSide: BorderSide(color: Colors.grey.withOpacity(0.1)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                    borderSide: BorderSide(color: colorScheme.primary),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 16.0,
+                    horizontal: 16.0,
+                  ),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _searchQuery = value;
+                  });
+                },
+              ),
             ),
           ),
-          if (_startDate != null && _endDate != null) ...[  
-            IconButton(
-              icon: const Icon(Icons.clear),
-              onPressed: _clearDateFilter,
-              tooltip: 'Clear Date Filter',
+          const SizedBox(width: 16),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12.0),
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 3,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
+                borderRadius: BorderRadius.circular(12.0),
+                onTap: _showDateRangePicker,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.calendar_today,
+                        size: 20,
+                        color: colorScheme.primary,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _startDate != null && _endDate != null
+                            ? '${DateFormat('MMM dd').format(_startDate!)} - ${DateFormat('MMM dd').format(_endDate!)}'
+                            : 'Select Date Range',
+                        style: TextStyle(color: colorScheme.onSurface),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          if (_startDate != null && _endDate != null) ...[
+            const SizedBox(width: 8),
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(12.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
+              ),
+              child: IconButton(
+                onPressed: _clearDateFilter,
+                icon: const Icon(Icons.clear, color: Colors.red),
+                tooltip: 'Clear date filter',
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                  ),
+                ),
+              ),
             ),
           ],
         ],
       ),
     );
   }
-  
+
   Widget _buildBalanceFiltersSection() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
       child: Row(
         children: [
           Expanded(
-            child: TextField(
-              controller: _balanceSearchController,
-              decoration: const InputDecoration(
-                hintText: 'Search by product name',
-                prefixIcon: Icon(Icons.search),
-                border: OutlineInputBorder(),
+            child: Container(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12.0),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.grey.withOpacity(0.1),
+                    spreadRadius: 1,
+                    blurRadius: 3,
+                    offset: const Offset(0, 1),
+                  ),
+                ],
               ),
-              onChanged: (value) {
-                setState(() {
-                  _balanceSearchQuery = value;
-                });
-              },
+              child: TextField(
+                controller: _balanceSearchController,
+                decoration: InputDecoration(
+                  hintText: 'Search by product name',
+                  hintStyle: TextStyle(color: Colors.grey[400]),
+                  prefixIcon: Icon(Icons.search, color: colorScheme.primary),
+                  filled: true,
+                  fillColor: Colors.white,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                    borderSide: BorderSide.none,
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                    borderSide: BorderSide(color: Colors.grey.withOpacity(0.1)),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12.0),
+                    borderSide: BorderSide(color: colorScheme.primary),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    vertical: 16.0,
+                    horizontal: 16.0,
+                  ),
+                ),
+                onChanged: (value) {
+                  setState(() {
+                    _balanceSearchQuery = value;
+                  });
+                },
+              ),
             ),
           ),
           const SizedBox(width: 16),
           // Filter by balance quantity
-          PopupMenuButton<String>(
-             onSelected: (value) {
-               setState(() {
-                 _balanceFilter = value;
-               });
-             },
-            itemBuilder: (context) => [
-              const PopupMenuItem<String>(
-                value: 'all',
-                child: Text('All Balances'),
+          Container(
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(12.0),
+              color: Colors.white,
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.grey.withOpacity(0.1),
+                  spreadRadius: 1,
+                  blurRadius: 3,
+                  offset: const Offset(0, 1),
+                ),
+              ],
+            ),
+            child: PopupMenuButton<String>(
+              onSelected: (value) {
+                setState(() {
+                  _balanceFilter = value;
+                });
+              },
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
               ),
-              const PopupMenuItem<String>(
-                value: 'positive',
-                child: Text('Positive Balances'),
+              offset: const Offset(0, 40),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              itemBuilder: (context) => [
+                const PopupMenuItem<String>(
+                  value: 'all',
+                  child: Text('All Balances'),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'positive',
+                  child: Text('Positive Balances'),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'zero',
+                  child: Text('Zero Balances'),
+                ),
+                const PopupMenuItem<String>(
+                  value: 'negative',
+                  child: Text('Negative Balances'),
+                ),
+              ],
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 16,
+                ),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary,
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.filter_list, color: Colors.white),
+                    const SizedBox(width: 8),
+                    Text(
+                      _balanceFilter == 'all'
+                          ? 'All Balances'
+                          : _balanceFilter == 'positive'
+                          ? 'Positive Balances'
+                          : _balanceFilter == 'zero'
+                          ? 'Zero Balances'
+                          : 'Negative Balances',
+                      style: const TextStyle(color: Colors.white),
+                    ),
+                  ],
+                ),
               ),
-              const PopupMenuItem<String>(
-                value: 'zero',
-                child: Text('Zero Balances'),
-              ),
-              const PopupMenuItem<String>(
-                value: 'negative',
-                child: Text('Negative Balances'),
-              ),
-            ],
-            child: Container(
-               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-               decoration: BoxDecoration(
-                 color: Theme.of(context).colorScheme.primary,
-                 borderRadius: BorderRadius.circular(4),
-               ),
-               child: Row(
-                 children: [
-                   const Icon(Icons.filter_list, color: Colors.white),
-                   const SizedBox(width: 8),
-                   Text(
-                     _balanceFilter == 'all' ? 'All Balances' :
-                     _balanceFilter == 'positive' ? 'Positive Balances' :
-                     _balanceFilter == 'zero' ? 'Zero Balances' :
-                     'Negative Balances',
-                     style: const TextStyle(color: Colors.white),
-                   ),
-                 ],
-               ),
-             ),
+            ),
           ),
         ],
       ),
@@ -1131,31 +1708,67 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
   }
 
   Widget _buildTableHeader() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      color: Colors.grey[200],
+      margin: const EdgeInsets.symmetric(horizontal: 16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.primary.withOpacity(0.1)),
+      ),
       child: Row(
         children: [
-          Expanded(flex: 3, child: _buildHeaderCell('Product Name')),
-          Expanded(flex: 1, child: _buildHeaderCell('Quantity')),
-          Expanded(flex: 1, child: _buildHeaderCell('Unit')),
-          Expanded(flex: 2, child: _buildHeaderCell('Cost/Unit')),
-          Expanded(flex: 2, child: _buildHeaderCell('Total Cost')),
-          Expanded(flex: 2, child: _buildHeaderCell('Date Received')),
-          Expanded(flex: 1, child: _buildHeaderCell('Sync')),
+          Expanded(
+            flex: 3,
+            child: _buildHeaderCell('Product Name', color: colorScheme.primary),
+          ),
+          Expanded(
+            flex: 1,
+            child: _buildHeaderCell('Quantity', color: colorScheme.primary),
+          ),
+          Expanded(
+            flex: 1,
+            child: _buildHeaderCell('Unit', color: colorScheme.primary),
+          ),
+          Expanded(
+            flex: 2,
+            child: _buildHeaderCell('Cost/Unit', color: colorScheme.primary),
+          ),
+          Expanded(
+            flex: 2,
+            child: _buildHeaderCell('Total Cost', color: colorScheme.primary),
+          ),
+          Expanded(
+            flex: 2,
+            child: _buildHeaderCell(
+              'Date Received',
+              color: colorScheme.primary,
+            ),
+          ),
+          Expanded(
+            flex: 1,
+            child: _buildHeaderCell('Sync', color: colorScheme.primary),
+          ),
         ],
       ),
     );
   }
-  
+
   Widget _buildBalanceTableHeader() {
+    final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      color: Colors.grey[200],
+      margin: const EdgeInsets.symmetric(horizontal: 16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      decoration: BoxDecoration(
+        color: colorScheme.primary.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: colorScheme.primary.withOpacity(0.1)),
+      ),
       child: Row(
         children: [
           Expanded(
-            flex: 3, 
+            flex: 3,
             child: InkWell(
               onTap: () {
                 setState(() {
@@ -1169,15 +1782,28 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
               },
               child: Row(
                 children: [
-                  Text('Product Name', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    'Product Name',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
                   if (_sortColumn == 'productName')
-                    Icon(_sortAscending ? Icons.arrow_upward : Icons.arrow_downward, size: 16),
+                    Icon(
+                      _sortAscending
+                          ? Icons.arrow_upward
+                          : Icons.arrow_downward,
+                      size: 16,
+                      color: colorScheme.primary,
+                    ),
                 ],
               ),
             ),
           ),
           Expanded(
-            flex: 2, 
+            flex: 2,
             child: InkWell(
               onTap: () {
                 setState(() {
@@ -1191,15 +1817,28 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
               },
               child: Row(
                 children: [
-                  Text('Total Received', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    'Total Received',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
                   if (_sortColumn == 'totalReceived')
-                    Icon(_sortAscending ? Icons.arrow_upward : Icons.arrow_downward, size: 16),
+                    Icon(
+                      _sortAscending
+                          ? Icons.arrow_upward
+                          : Icons.arrow_downward,
+                      size: 16,
+                      color: colorScheme.primary,
+                    ),
                 ],
               ),
             ),
           ),
           Expanded(
-            flex: 2, 
+            flex: 2,
             child: InkWell(
               onTap: () {
                 setState(() {
@@ -1213,27 +1852,67 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
               },
               child: Row(
                 children: [
-                  Text('Balance', style: TextStyle(fontWeight: FontWeight.bold)),
+                  Text(
+                    'Balance',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
                   if (_sortColumn == 'balanceQuantity')
-                    Icon(_sortAscending ? Icons.arrow_upward : Icons.arrow_downward, size: 16),
+                    Icon(
+                      _sortAscending
+                          ? Icons.arrow_upward
+                          : Icons.arrow_downward,
+                      size: 16,
+                      color: colorScheme.primary,
+                    ),
                 ],
               ),
             ),
           ),
-          Expanded(flex: 2, child: _buildHeaderCell('Last Updated')),
-          Expanded(flex: 1, child: _buildHeaderCell('Actions')),
+          Expanded(
+            flex: 2,
+            child: _buildHeaderCell('Last Updated', color: colorScheme.primary),
+          ),
+          Expanded(
+            flex: 1,
+            child: _buildHeaderCell('Actions', color: colorScheme.primary),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildHeaderCell(String text) {
-    return Text(text, style: const TextStyle(fontWeight: FontWeight.bold));
+  Widget _buildHeaderCell(String text, {int flex = 1, Color? color}) {
+    return Text(
+      text,
+      style: TextStyle(fontWeight: FontWeight.bold, color: color),
+    );
   }
 
   Widget _buildStockIntakeList() {
+    final colorScheme = Theme.of(context).colorScheme;
+
     if (_filteredStockIntakes.isEmpty) {
-      return const Center(child: Text('No stock intake records found'));
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.inventory_2_outlined,
+              size: 64,
+              color: colorScheme.primary.withOpacity(0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No stock intake records found',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      );
     }
 
     return ListView.builder(
@@ -1241,59 +1920,164 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
       itemBuilder: (context, index) {
         final intake = _filteredStockIntakes[index];
         return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(16.0),
             child: Row(
               children: [
                 Expanded(
                   flex: 3,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+                  child: Row(
                     children: [
-                      Text(
-                        intake.productName,
-                        style: const TextStyle(fontWeight: FontWeight.bold),
-                      ),
-                      if (intake.description != null &&
-                          intake.description!.isNotEmpty)
-                        Text(
-                          intake.description!,
-                          style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
-                          ),
-                          maxLines: 2,
-                          overflow: TextOverflow.ellipsis,
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
                         ),
+                        child: Center(
+                          child: Text(
+                            intake.productName.substring(0, 1).toUpperCase(),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.primary,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              intake.productName,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.bold,
+                              ),
+                            ),
+                            if (intake.description != null &&
+                                intake.description!.isNotEmpty)
+                              Text(
+                                intake.description!,
+                                style: const TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey,
+                                ),
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                          ],
+                        ),
+                      ),
                     ],
                   ),
                 ),
-                Expanded(flex: 1, child: Text('${intake.quantityReceived}')),
-                Expanded(flex: 1, child: Text(intake.unit)),
+                Expanded(
+                  flex: 1,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${intake.quantityReceived}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.blue[700]),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Text(intake.unit, textAlign: TextAlign.center),
+                ),
                 Expanded(
                   flex: 2,
                   child: Text(
                     '₦${NumberFormat('#,##0.00').format(intake.costPerUnit)}',
+                    style: TextStyle(color: Colors.grey[800]),
                   ),
                 ),
                 Expanded(
                   flex: 2,
                   child: Text(
                     '₦${NumberFormat('#,##0.00').format(intake.totalCost)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: colorScheme.primary,
+                    ),
                   ),
                 ),
                 Expanded(
                   flex: 2,
                   child: Text(
                     DateFormat('MMM dd, yyyy').format(intake.dateReceived),
+                    style: TextStyle(color: Colors.grey[700]),
                   ),
                 ),
                 Expanded(
                   flex: 1,
                   child: intake.isSynced
-                      ? const Icon(Icons.check_circle, color: Colors.green)
-                      : const Icon(Icons.sync, color: Colors.orange),
+                      ? Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.green[50],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.check_circle,
+                                color: Colors.green[700],
+                                size: 16,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Synced',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.green[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      : Container(
+                          padding: const EdgeInsets.all(4),
+                          decoration: BoxDecoration(
+                            color: Colors.orange[50],
+                            borderRadius: BorderRadius.circular(4),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                Icons.sync,
+                                color: Colors.orange[700],
+                                size: 16,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                'Pending',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.orange[700],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
                 ),
               ],
             ),
@@ -1302,12 +2086,14 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
       },
     );
   }
-  
+
   List<IntakeBalance> get _filteredBalances {
     return _intakeBalances.where((balance) {
       // Apply search filter
-      final matchesSearch = balance.productName.toLowerCase().contains(_balanceSearchQuery.toLowerCase());
-      
+      final matchesSearch = balance.productName.toLowerCase().contains(
+        _balanceSearchQuery.toLowerCase(),
+      );
+
       // Apply balance quantity filter
       bool matchesBalanceFilter = true;
       if (_balanceFilter == 'positive') {
@@ -1317,14 +2103,15 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
       } else if (_balanceFilter == 'negative') {
         matchesBalanceFilter = balance.balanceQuantity < 0;
       }
-      
+
       return matchesSearch && matchesBalanceFilter;
     }).toList();
   }
-  
+
   Widget _buildBalanceList() {
+    final colorScheme = Theme.of(context).colorScheme;
     List<IntakeBalance> filteredBalances = _filteredBalances;
-    
+
     // Sort the list based on selected column and direction
     filteredBalances.sort((a, b) {
       int result;
@@ -1339,75 +2126,158 @@ class _StockIntakeScreenState extends State<StockIntakeScreen> with SingleTicker
       }
       return _sortAscending ? result : -result;
     });
-    
+
     if (filteredBalances.isEmpty) {
-      return const Center(child: Text('No balance records found'));
+      return Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(
+              Icons.inventory_2_outlined,
+              size: 64,
+              color: colorScheme.primary.withOpacity(0.5),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'No balance records found',
+              style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            ),
+          ],
+        ),
+      );
     }
-    
+
     return ListView.builder(
       itemCount: filteredBalances.length,
       itemBuilder: (context, index) {
         final balance = filteredBalances[index];
         return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+          elevation: 2,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(12),
+          ),
           child: Padding(
-            padding: const EdgeInsets.all(8.0),
+            padding: const EdgeInsets.all(16.0),
             child: Row(
               children: [
                 Expanded(
                   flex: 3,
-                  child: Text(
-                    balance.productName,
-                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: colorScheme.primary.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Center(
+                          child: Text(
+                            balance.productName.substring(0, 1).toUpperCase(),
+                            style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: colorScheme.primary,
+                              fontSize: 18,
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          balance.productName,
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 Expanded(
                   flex: 2,
-                  child: Text('${balance.totalReceived}'),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${balance.totalReceived}',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(color: Colors.blue[700]),
+                    ),
+                  ),
                 ),
                 Expanded(
-                   flex: 2,
-                   child: Row(
-                     children: [
-                       Container(
-                         width: 12,
-                         height: 12,
-                         decoration: BoxDecoration(
-                           color: balance.balanceQuantity > 0 
-                               ? Colors.green 
-                               : balance.balanceQuantity < 0 
-                                   ? Colors.red 
-                                   : Colors.grey,
-                           shape: BoxShape.circle,
-                         ),
-                       ),
-                       const SizedBox(width: 8),
-                       Text(
-                         '${balance.balanceQuantity}',
-                         style: TextStyle(
-                           color: balance.balanceQuantity > 0 
-                               ? Colors.green 
-                               : balance.balanceQuantity < 0 
-                                   ? Colors.red 
-                                   : Colors.grey,
-                           fontWeight: FontWeight.bold,
-                         ),
-                       ),
-                     ],
-                   ),
-                 ),
+                  flex: 2,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Container(
+                        width: 12,
+                        height: 12,
+                        decoration: BoxDecoration(
+                          color: balance.balanceQuantity > 0
+                              ? Colors.green[400]
+                              : balance.balanceQuantity < 0
+                              ? Colors.red[400]
+                              : Colors.grey[400],
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: balance.balanceQuantity > 0
+                              ? Colors.green[50]
+                              : balance.balanceQuantity < 0
+                              ? Colors.red[50]
+                              : Colors.grey[50],
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Text(
+                          '${balance.balanceQuantity}',
+                          style: TextStyle(
+                            color: balance.balanceQuantity > 0
+                                ? Colors.green[700]
+                                : balance.balanceQuantity < 0
+                                ? Colors.red[700]
+                                : Colors.grey[700],
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
                 Expanded(
                   flex: 2,
                   child: Text(
                     DateFormat('MMM dd, yyyy').format(balance.lastUpdated),
+                    style: TextStyle(color: Colors.grey[700]),
+                    textAlign: TextAlign.center,
                   ),
                 ),
                 Expanded(
                   flex: 1,
                   child: IconButton(
-                    icon: const Icon(Icons.info_outline),
+                    icon: Icon(Icons.info_outline, color: colorScheme.primary),
                     onPressed: () => _showBalanceDetails(balance),
                     tooltip: 'View Details',
+                    style: IconButton.styleFrom(
+                      backgroundColor: colorScheme.primary.withOpacity(0.1),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
                   ),
                 ),
               ],

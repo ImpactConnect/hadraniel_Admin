@@ -111,12 +111,16 @@ class SyncService {
     try {
       final db = await _dbHelper.database;
       await db.insert('products', product.toMap());
-      
+
       // Update the intake balance when a product is assigned to an outlet
       final stockIntakeService = StockIntakeService();
+      final outletName = await getOutletName(product.outletId);
       await stockIntakeService.updateBalanceOnProductAssignment(
         product.productName,
         product.quantity,
+        product.outletId,
+        outletName,
+        product.costPerUnit,
       );
     } catch (e) {
       print('Error inserting product: $e');
@@ -127,17 +131,17 @@ class SyncService {
   Future<void> updateProduct(Product product) async {
     try {
       final db = await _dbHelper.database;
-      
+
       // Get the previous product to calculate quantity difference
       final List<Map<String, dynamic>> previousProductMaps = await db.query(
         'products',
         where: 'id = ?',
         whereArgs: [product.id],
       );
-      
+
       if (previousProductMaps.isNotEmpty) {
         final previousProduct = Product.fromMap(previousProductMaps.first);
-        
+
         // Update the product in the database
         await db.update(
           'products',
@@ -145,26 +149,35 @@ class SyncService {
           where: 'id = ?',
           whereArgs: [product.id],
         );
-        
+
         // Only update balance if the product name is the same
         if (previousProduct.productName == product.productName) {
           // Calculate the difference in quantity
-          final quantityDifference = product.quantity - previousProduct.quantity;
-          
+          final quantityDifference =
+              product.quantity - previousProduct.quantity;
+
           // Only update balance if there's a change in quantity
           if (quantityDifference != 0) {
             final stockIntakeService = StockIntakeService();
+            final outletName = await getOutletName(product.outletId);
             await stockIntakeService.updateBalanceOnProductAssignment(
               product.productName,
               quantityDifference,
+              product.outletId,
+              outletName,
+              product.costPerUnit,
             );
           }
         } else {
           // If product name changed, treat it as a new assignment
           final stockIntakeService = StockIntakeService();
+          final outletName = await getOutletName(product.outletId);
           await stockIntakeService.updateBalanceOnProductAssignment(
             product.productName,
             product.quantity,
+            product.outletId,
+            outletName,
+            product.costPerUnit,
           );
         }
       } else {
@@ -185,25 +198,29 @@ class SyncService {
   Future<void> deleteProduct(String productId) async {
     try {
       final db = await _dbHelper.database;
-      
+
       // Get the product details before deleting
       final List<Map<String, dynamic>> productMaps = await db.query(
         'products',
         where: 'id = ?',
         whereArgs: [productId],
       );
-      
+
       if (productMaps.isNotEmpty) {
         final product = Product.fromMap(productMaps.first);
-        
+
         // Delete the product
         await db.delete('products', where: 'id = ?', whereArgs: [productId]);
-        
+
         // Update the balance by adding back the quantity (negative assignment)
         final stockIntakeService = StockIntakeService();
+        final outletName = await getOutletName(product.outletId);
         await stockIntakeService.updateBalanceOnProductAssignment(
           product.productName,
           -product.quantity, // Negative quantity to add back to balance
+          product.outletId,
+          outletName,
+          product.costPerUnit,
         );
       } else {
         // If product doesn't exist, just try to delete
@@ -306,75 +323,102 @@ class SyncService {
       }).toList();
 
       // Get existing products to compare quantities
-      final List<Map<String, dynamic>> existingProductsMaps = await db.query('products');
+      final List<Map<String, dynamic>> existingProductsMaps = await db.query(
+        'products',
+      );
       final Map<String, Product> existingProducts = {};
       for (var map in existingProductsMaps) {
         final product = Product.fromMap(map);
         existingProducts[product.id] = product;
       }
-      
+
       final stockIntakeService = StockIntakeService();
-      
+
       // Update local database
       await db.transaction((txn) async {
         for (var product in products) {
           // Check if product exists and quantity has changed
           if (existingProducts.containsKey(product.id)) {
             final existingProduct = existingProducts[product.id]!;
-            
+
             // If product name is the same and quantity has changed
-            if (existingProduct.productName == product.productName && 
+            if (existingProduct.productName == product.productName &&
                 existingProduct.quantity != product.quantity) {
               // Calculate quantity difference
-              final quantityDifference = product.quantity - existingProduct.quantity;
-              
+              final quantityDifference =
+                  product.quantity - existingProduct.quantity;
+
               // Update balance
+              final outletName = await getOutletName(product.outletId);
               await stockIntakeService.updateBalanceOnProductAssignment(
                 product.productName,
                 quantityDifference,
+                product.outletId,
+                outletName,
+                product.costPerUnit,
               );
-            } 
+            }
             // If product name has changed, treat as deletion of old and addition of new
             else if (existingProduct.productName != product.productName) {
               // Remove old product quantity from balance
+              final existingOutletName = await getOutletName(existingProduct.outletId);
               await stockIntakeService.updateBalanceOnProductAssignment(
                 existingProduct.productName,
                 -existingProduct.quantity,
+                existingProduct.outletId,
+                existingOutletName,
+                existingProduct.costPerUnit,
               );
-              
+
               // Add new product quantity to balance
+              final outletName = await getOutletName(product.outletId);
               await stockIntakeService.updateBalanceOnProductAssignment(
                 product.productName,
                 product.quantity,
+                product.outletId,
+                outletName,
+                product.costPerUnit,
               );
             }
-          } 
+          }
           // New product, add its quantity to balance
           else {
+            final outletName = await getOutletName(product.outletId);
             await stockIntakeService.updateBalanceOnProductAssignment(
               product.productName,
               product.quantity,
+              product.outletId,
+              outletName,
+              product.costPerUnit,
             );
           }
-          
+
           // Insert or update the product
           await txn.insert('products', {
             ...product.toMap(),
             'is_synced': 1,
           }, conflictAlgorithm: ConflictAlgorithm.replace);
         }
-        
+
         // Handle deleted products (products that exist locally but not in the server response)
         for (var existingProduct in existingProducts.values) {
           if (!products.any((p) => p.id == existingProduct.id)) {
             // Product was deleted on server, remove its quantity from balance
+            final existingOutletName = await getOutletName(existingProduct.outletId);
             await stockIntakeService.updateBalanceOnProductAssignment(
               existingProduct.productName,
               -existingProduct.quantity,
+              existingProduct.outletId,
+              existingOutletName,
+              existingProduct.costPerUnit,
             );
-            
+
             // Delete the product locally
-            await txn.delete('products', where: 'id = ?', whereArgs: [existingProduct.id]);
+            await txn.delete(
+              'products',
+              where: 'id = ?',
+              whereArgs: [existingProduct.id],
+            );
           }
         }
       });
