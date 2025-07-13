@@ -5,6 +5,7 @@ import '../models/outlet_model.dart';
 import '../models/product_model.dart';
 import '../models/rep_model.dart';
 import '../models/sale_model.dart';
+import '../models/product_distribution_model.dart';
 import '../database/database_helper.dart';
 import 'stock_intake_service.dart';
 
@@ -260,6 +261,92 @@ class SyncService {
     } catch (e) {
       print('Error getting outlet name: $e');
       return 'Error';
+    }
+  }
+  
+  // Product Distributions Sync
+  Future<void> syncProductDistributionsToServer() async {
+    try {
+      final db = await _dbHelper.database;
+      final List<Map<String, dynamic>> maps = await db.query(
+        'product_distributions',
+        where: 'is_synced = ?',
+        whereArgs: [0],
+      );
+      
+      final distributions = maps.map((map) => ProductDistribution.fromMap(map)).toList();
+      
+      for (var distribution in distributions) {
+        // Upload to Supabase
+        await supabase.from('product_distributions').upsert({
+          'id': distribution.id,
+          'product_name': distribution.productName,
+          'outlet_id': distribution.outletId,
+          'outlet_name': distribution.outletName,
+          'quantity': distribution.quantity,
+          'cost_per_unit': distribution.costPerUnit,
+          'total_cost': distribution.totalCost,
+          'distribution_date': distribution.distributionDate.toIso8601String(),
+          'created_at': distribution.createdAt.toIso8601String(),
+        });
+        
+        // Mark as synced in local DB
+        await db.update(
+          'product_distributions',
+          {'is_synced': 1},
+          where: 'id = ?',
+          whereArgs: [distribution.id],
+        );
+      }
+    } catch (e) {
+      print('Error syncing product distributions to server: $e');
+      throw e;
+    }
+  }
+  
+  Future<void> syncProductDistributionsFromServer() async {
+    try {
+      final StockIntakeService stockIntakeService = StockIntakeService();
+      final response = await supabase.from('product_distributions').select();
+      final serverDistributions = (response as List)
+          .map((data) => ProductDistribution.fromJson(data))
+          .toList();
+      
+      final db = await _dbHelper.database;
+      
+      // Get existing local distributions
+      final List<Map<String, dynamic>> localMaps = await db.query('product_distributions');
+      final localDistributions = localMaps.map((map) => ProductDistribution.fromMap(map)).toList();
+      
+      // Create a map of local distributions by ID for easy lookup
+      final Map<String, ProductDistribution> localDistributionsMap = {
+        for (var dist in localDistributions) dist.id: dist
+      };
+      
+      await db.transaction((txn) async {
+        // Update or insert server distributions
+        for (var serverDist in serverDistributions) {
+          if (localDistributionsMap.containsKey(serverDist.id)) {
+            // Distribution exists locally, update if needed
+            await txn.update(
+              'product_distributions',
+              serverDist.toMap()..['is_synced'] = 1,
+              where: 'id = ?',
+              whereArgs: [serverDist.id],
+            );
+          } else {
+            // New distribution from server, insert it
+            await txn.insert(
+              'product_distributions',
+              serverDist.toMap()..['is_synced'] = 1,
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
+        }
+      });
+    } catch (e) {
+      print('Error syncing product distributions from server: $e');
+      throw e;
     }
   }
 
@@ -530,6 +617,8 @@ class SyncService {
     await syncCustomersToLocalDb();
     await syncSalesToLocalDb();
     await syncStockBalancesToLocalDb();
+    await syncProductDistributionsFromServer();
+    await syncProductDistributionsToServer();
   }
 
   // Customers Sync

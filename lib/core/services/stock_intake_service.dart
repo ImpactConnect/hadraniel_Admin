@@ -231,7 +231,7 @@ class StockIntakeService {
       where: 'id = ?',
       whereArgs: [existingBalance.id],
     );
-    
+
     // Record the distribution
     await addProductDistribution(
       productName: productName,
@@ -340,7 +340,7 @@ class StockIntakeService {
         ? 0
         : (result.first['count'] as num).toInt();
   }
-  
+
   // Add a product distribution record
   Future<ProductDistribution> addProductDistribution({
     required String productName,
@@ -353,7 +353,7 @@ class StockIntakeService {
     final db = await _db.database;
     final now = DateTime.now();
     final totalCost = quantity * costPerUnit;
-    
+
     final distribution = ProductDistribution(
       id: _uuid.v4(),
       productName: productName,
@@ -365,18 +365,20 @@ class StockIntakeService {
       distributionDate: distributionDate,
       createdAt: now,
     );
-    
+
     await db.insert(
       'product_distributions',
       distribution.toMap(),
       conflictAlgorithm: ConflictAlgorithm.replace,
     );
-    
+
     return distribution;
   }
-  
+
   // Get product distributions by product name
-  Future<List<ProductDistribution>> getProductDistributions(String productName) async {
+  Future<List<ProductDistribution>> getProductDistributions(
+    String productName,
+  ) async {
     final db = await _db.database;
     final List<Map<String, dynamic>> maps = await db.query(
       'product_distributions',
@@ -384,10 +386,10 @@ class StockIntakeService {
       whereArgs: [productName],
       orderBy: 'distribution_date DESC',
     );
-    
+
     return maps.map((map) => ProductDistribution.fromMap(map)).toList();
   }
-  
+
   // Get all product distributions
   Future<List<ProductDistribution>> getAllProductDistributions() async {
     final db = await _db.database;
@@ -395,7 +397,7 @@ class StockIntakeService {
       'product_distributions',
       orderBy: 'distribution_date DESC',
     );
-    
+
     return maps.map((map) => ProductDistribution.fromMap(map)).toList();
   }
 }

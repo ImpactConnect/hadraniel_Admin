@@ -34,7 +34,22 @@ class ProductDistribution {
       totalCost: (map['total_cost'] as num).toDouble(),
       distributionDate: DateTime.parse(map['distribution_date'] as String),
       createdAt: DateTime.parse(map['created_at'] as String),
-      isSynced: (map['is_synced'] as int) == 1,
+      isSynced: (map['is_synced'] as int?) == 1,
+    );
+  }
+  
+  factory ProductDistribution.fromJson(Map<String, dynamic> json) {
+    return ProductDistribution(
+      id: json['id'] as String,
+      productName: json['product_name'] as String,
+      outletId: json['outlet_id'] as String,
+      outletName: json['outlet_name'] as String,
+      quantity: (json['quantity'] as num).toDouble(),
+      costPerUnit: (json['cost_per_unit'] as num).toDouble(),
+      totalCost: (json['total_cost'] as num).toDouble(),
+      distributionDate: DateTime.parse(json['distribution_date'] as String),
+      createdAt: DateTime.parse(json['created_at'] as String),
+      isSynced: true, // Data from server is considered synced
     );
   }
 

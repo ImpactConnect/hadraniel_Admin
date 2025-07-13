@@ -569,10 +569,10 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   void _showBalanceDetails(IntakeBalance balance) async {
     final colorScheme = Theme.of(context).colorScheme;
     final StockIntakeService _stockIntakeService = StockIntakeService();
-    
+
     // Fetch distribution history for this product
-    List<ProductDistribution> distributions = 
-        await _stockIntakeService.getProductDistributions(balance.productName);
+    List<ProductDistribution> distributions = await _stockIntakeService
+        .getProductDistributions(balance.productName);
 
     showDialog(
       context: context,
@@ -592,12 +592,12 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: colorScheme.primary,
-                    fontSize: 18,
+                    fontSize: 16,
                   ),
                 ),
               ),
             ),
-            const SizedBox(width: 12),
+            const SizedBox(width: 8),
             Expanded(
               child: Text(
                 '${balance.productName} Balance Details',
@@ -612,44 +612,62 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         content: Container(
           width: double.maxFinite,
-          constraints: BoxConstraints(maxHeight: MediaQuery.of(context).size.height * 0.7),
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.7,
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildDetailItem(
-                icon: Icons.inventory_2_outlined,
-                label: 'Total Received',
-                value: '${balance.totalReceived}',
-                color: Colors.blue,
+              // Product metrics cards in a row
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMetricsCard(
+                      icon: Icons.inventory_2_outlined,
+                      label: 'Total Received',
+                      value: '${balance.totalReceived}',
+                      color: Colors.blue,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildMetricsCard(
+                      icon: Icons.assignment_outlined,
+                      label: 'Total Assigned',
+                      value: '${balance.totalAssigned}',
+                      color: Colors.orange,
+                    ),
+                  ),
+                ],
               ),
-              const Divider(),
-              _buildDetailItem(
-                icon: Icons.assignment_outlined,
-                label: 'Total Assigned',
-                value: '${balance.totalAssigned}',
-                color: Colors.orange,
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildMetricsCard(
+                      icon: Icons.account_balance_outlined,
+                      label: 'Balance Quantity',
+                      value: '${balance.balanceQuantity}',
+                      color: balance.balanceQuantity > 0
+                          ? Colors.green
+                          : balance.balanceQuantity < 0
+                          ? Colors.red
+                          : Colors.grey,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildMetricsCard(
+                      icon: Icons.calendar_today_outlined,
+                      label: 'Last Updated',
+                      value: DateFormat('MMM dd, yyyy').format(balance.lastUpdated),
+                      color: Colors.purple,
+                    ),
+                  ),
+                ],
               ),
-              const Divider(),
-              _buildDetailItem(
-                icon: Icons.account_balance_outlined,
-                label: 'Balance Quantity',
-                value: '${balance.balanceQuantity}',
-                color: balance.balanceQuantity > 0
-                    ? Colors.green
-                    : balance.balanceQuantity < 0
-                    ? Colors.red
-                    : Colors.grey,
-              ),
-              const Divider(),
-              _buildDetailItem(
-                icon: Icons.calendar_today_outlined,
-                label: 'Last Updated',
-                value: DateFormat('MMM dd, yyyy').format(balance.lastUpdated),
-                color: Colors.purple,
-              ),
-              const Divider(),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               Text(
                 'Distribution History',
                 style: TextStyle(
@@ -711,7 +729,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
             ),
             child: Icon(icon, color: color, size: 20),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 8),
           Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -733,7 +751,56 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
     );
   }
   
-  Widget _buildDistributionHistoryTable(List<ProductDistribution> distributions) {
+  Widget _buildMetricsCard({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(12.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Container(
+                  width: 32,
+                  height: 32,
+                  decoration: BoxDecoration(
+                    color: color.withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Icon(icon, color: color, size: 18),
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  label,
+                  style: TextStyle(color: Colors.grey[600], fontSize: 12),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              value,
+              style: TextStyle(
+                fontWeight: FontWeight.bold,
+                fontSize: 16,
+                color: color,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDistributionHistoryTable(
+    List<ProductDistribution> distributions,
+  ) {
     return Container(
       decoration: BoxDecoration(
         border: Border.all(color: Colors.grey.shade300),
@@ -743,7 +810,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
         children: [
           // Table header (sticky)
           Container(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             decoration: BoxDecoration(
               color: Colors.grey.shade100,
               borderRadius: const BorderRadius.only(
@@ -794,9 +861,12 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
               itemBuilder: (context, index) {
                 final distribution = distributions[index];
                 final bool isEven = index % 2 == 0;
-                
+
                 return Container(
-                  padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 8,
+                    horizontal: 12,
+                  ),
                   decoration: BoxDecoration(
                     color: isEven ? Colors.white : Colors.grey.shade50,
                     border: Border(
@@ -809,21 +879,23 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                         flex: 3,
                         child: Text(
                           distribution.outletName,
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(fontSize: 13),
                         ),
                       ),
                       Expanded(
                         flex: 2,
                         child: Text(
                           distribution.quantity.toString(),
-                          style: const TextStyle(fontSize: 14),
+                          style: const TextStyle(fontSize: 13),
                         ),
                       ),
                       Expanded(
                         flex: 2,
                         child: Text(
-                          DateFormat('MMM dd, yyyy').format(distribution.distributionDate),
-                          style: const TextStyle(fontSize: 14),
+                          DateFormat(
+                            'MMM dd, yyyy',
+                          ).format(distribution.distributionDate),
+                          style: const TextStyle(fontSize: 13),
                         ),
                       ),
                     ],
@@ -1029,16 +1101,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
         ],
         // Remove the hamburger menu for desktop view
         automaticallyImplyLeading: !isDesktop,
-        bottom: TabBar(
-          controller: _tabController,
-          indicatorColor: Theme.of(context).colorScheme.primary,
-          labelColor: Theme.of(context).colorScheme.primary,
-          unselectedLabelColor: Colors.grey,
-          tabs: const [
-            Tab(text: 'Intake Records', icon: Icon(Icons.receipt_long)),
-            Tab(text: 'Balance Summary', icon: Icon(Icons.balance)),
-          ],
-        ),
+        // TabBar removed from here
       ),
       drawer: !isDesktop ? Drawer(child: Sidebar()) : null,
       body: Row(
@@ -1055,27 +1118,61 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
           Expanded(
             child: _isLoading
                 ? const Center(child: LoadingIndicator())
-                : TabBarView(
-                    controller: _tabController,
+                : Column(
                     children: [
-                      // Tab 1: Intake Records (current view)
-                      Column(
-                        children: [
-                          _buildHeader(),
-                          _buildMetricsSection(),
-                          _buildFiltersSection(),
-                          _buildTableHeader(),
-                          Expanded(child: _buildStockIntakeList()),
-                        ],
+                      // Custom styled TabBar at the top of the content area
+                      Container(
+                        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.05),
+                              blurRadius: 5,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: TabBar(
+                          controller: _tabController,
+                          indicatorColor: Theme.of(context).colorScheme.primary,
+                          labelColor: Theme.of(context).colorScheme.primary,
+                          unselectedLabelColor: Colors.grey,
+                          indicatorSize: TabBarIndicatorSize.tab,
+                          dividerColor: Colors.transparent,
+                          tabs: const [
+                            Tab(text: 'Intake Records', icon: Icon(Icons.receipt_long)),
+                            Tab(text: 'Balance Summary', icon: Icon(Icons.balance)),
+                          ],
+                        ),
                       ),
-                      // Tab 2: Balance Summary
-                      Column(
-                        children: [
-                          _buildBalanceHeader(),
-                          _buildBalanceFiltersSection(),
-                          _buildBalanceTableHeader(),
-                          Expanded(child: _buildBalanceList()),
-                        ],
+                      // TabBarView for the content
+                      Expanded(
+                        child: TabBarView(
+                          controller: _tabController,
+                          children: [
+                            // Tab 1: Intake Records (current view)
+                            Column(
+                              children: [
+                                _buildHeader(),
+                                _buildMetricsSection(),
+                                _buildFiltersSection(),
+                                _buildTableHeader(),
+                                Expanded(child: _buildStockIntakeList()),
+                              ],
+                            ),
+                            // Tab 2: Balance Summary
+                            Column(
+                              children: [
+                                _buildBalanceHeader(),
+                                _buildBalanceFiltersSection(),
+                                _buildBalanceTableHeader(),
+                                Expanded(child: _buildBalanceList()),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -1216,17 +1313,18 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   Widget _buildMetricsSection() {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         children: [
           Expanded(
             child: Card(
               elevation: 2,
+              margin: const EdgeInsets.symmetric(vertical: 4.0),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Container(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(12.0),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
                   gradient: LinearGradient(
@@ -1239,6 +1337,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                   ),
                 ),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
@@ -1255,18 +1354,18 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                             size: 24,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         const Text(
                           'Total Stock Value',
                           style: TextStyle(fontSize: 14, color: Colors.white),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                     Text(
                       '₦${NumberFormat('#,##0.00').format(_totalStockValue)}',
                       style: const TextStyle(
-                        fontSize: 24,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: Colors.white,
                       ),
@@ -1276,7 +1375,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 12),
           Expanded(
             child: Card(
               elevation: 2,
@@ -1284,12 +1383,13 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                 borderRadius: BorderRadius.circular(12),
               ),
               child: Container(
-                padding: const EdgeInsets.all(16.0),
+                padding: const EdgeInsets.all(12.0),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(12),
                   color: Colors.white,
                 ),
                 child: Column(
+                  mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Row(
@@ -1306,18 +1406,18 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                             size: 24,
                           ),
                         ),
-                        const SizedBox(width: 12),
+                        const SizedBox(width: 8),
                         const Text(
                           'Total Items Received',
                           style: TextStyle(fontSize: 14, color: Colors.grey),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                     Text(
                       '${_filteredStockIntakes.length}',
                       style: TextStyle(
-                        fontSize: 24,
+                        fontSize: 20,
                         fontWeight: FontWeight.bold,
                         color: Colors.orange[700],
                       ),
@@ -1327,7 +1427,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
           Expanded(
             child: Card(
               elevation: 2,
@@ -1366,6 +1466,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                                         .toUpperCase(),
                                     style: TextStyle(
                                       color: colorScheme.primary,
+                                      fontSize: 14,
                                     ),
                                   ),
                                 ),
@@ -1396,7 +1497,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                   );
                 },
                 child: Container(
-                  padding: const EdgeInsets.all(16.0),
+                  padding: const EdgeInsets.all(12.0),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12),
                     color: Colors.white,
@@ -1415,21 +1516,21 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                             child: Icon(
                               Icons.category,
                               color: Colors.green[700],
-                              size: 24,
+                              size: 20,
                             ),
                           ),
-                          const SizedBox(width: 12),
+                          const SizedBox(width: 8),
                           const Text(
                             'Product Balances',
                             style: TextStyle(fontSize: 14, color: Colors.grey),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 16),
+                      const SizedBox(height: 8),
                       Text(
                         '${_intakeBalances.length} Products',
                         style: TextStyle(
-                          fontSize: 24,
+                          fontSize: 20,
                           fontWeight: FontWeight.bold,
                           color: Colors.green[700],
                         ),
@@ -1448,7 +1549,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   Widget _buildFiltersSection() {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Row(
         children: [
           Expanded(
@@ -1486,8 +1587,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                     borderSide: BorderSide(color: colorScheme.primary),
                   ),
                   contentPadding: const EdgeInsets.symmetric(
-                    vertical: 16.0,
-                    horizontal: 16.0,
+                    vertical: 12.0,
+                    horizontal: 12.0,
                   ),
                 ),
                 onChanged: (value) {
@@ -1498,7 +1599,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
               ),
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 8),
           Container(
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(12.0),
@@ -1519,8 +1620,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                 onTap: _showDateRangePicker,
                 child: Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 12,
+                    horizontal: 12,
+                    vertical: 8,
                   ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12.0),
@@ -1710,8 +1811,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   Widget _buildTableHeader() {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0),
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
       decoration: BoxDecoration(
         color: colorScheme.primary.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
@@ -1758,8 +1859,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   Widget _buildBalanceTableHeader() {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
-      margin: const EdgeInsets.symmetric(horizontal: 16.0),
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
       decoration: BoxDecoration(
         color: colorScheme.primary.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
@@ -1920,13 +2021,13 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       itemBuilder: (context, index) {
         final intake = _filteredStockIntakes[index];
         return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
           elevation: 2,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(12.0),
             child: Row(
               children: [
                 Expanded(
@@ -1934,8 +2035,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                   child: Row(
                     children: [
                       Container(
-                        width: 40,
-                        height: 40,
+                        width: 36,
+                        height: 36,
                         decoration: BoxDecoration(
                           color: colorScheme.primary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
@@ -1946,12 +2047,12 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: colorScheme.primary,
-                              fontSize: 18,
+                              fontSize: 16,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
@@ -2152,13 +2253,13 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       itemBuilder: (context, index) {
         final balance = filteredBalances[index];
         return Card(
-          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 6.0),
+          margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 4.0),
           elevation: 2,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
           child: Padding(
-            padding: const EdgeInsets.all(16.0),
+            padding: const EdgeInsets.all(12.0),
             child: Row(
               children: [
                 Expanded(
@@ -2166,8 +2267,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                   child: Row(
                     children: [
                       Container(
-                        width: 40,
-                        height: 40,
+                        width: 36,
+                        height: 36,
                         decoration: BoxDecoration(
                           color: colorScheme.primary.withOpacity(0.1),
                           borderRadius: BorderRadius.circular(8),
@@ -2178,12 +2279,12 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                             style: TextStyle(
                               fontWeight: FontWeight.bold,
                               color: colorScheme.primary,
-                              fontSize: 18,
+                              fontSize: 16,
                             ),
                           ),
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const SizedBox(width: 8),
                       Expanded(
                         child: Text(
                           balance.productName,

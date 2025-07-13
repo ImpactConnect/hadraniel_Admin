@@ -73,7 +73,7 @@ class DatabaseHelper {
         '''        CREATE TABLE customers (          id TEXT PRIMARY KEY,          full_name TEXT NOT NULL,          phone TEXT,          outlet_id TEXT,          total_outstanding REAL DEFAULT 0,          created_at TEXT NOT NULL,          is_synced INTEGER DEFAULT 0,          FOREIGN KEY (outlet_id) REFERENCES outlets (id)        )      ''',
       );
     }
-    
+
     if (oldVersion < 5) {
       // Add product_distributions table
       await db.execute('''
@@ -133,7 +133,7 @@ class DatabaseHelper {
         last_updated TEXT NOT NULL
       )
     ''');
-    
+
     // Product distributions table
     await db.execute('''
       CREATE TABLE product_distributions (
