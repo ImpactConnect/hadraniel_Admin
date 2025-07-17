@@ -309,15 +309,24 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                                           style: TextStyle(fontSize: 15),
                                         )
                                       : Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: _reps
-                                              .map((rep) => Padding(
-                                                    padding: const EdgeInsets.only(bottom: 4),
-                                                    child: Text(
-                                                      rep.fullName ?? 'Unnamed Rep',
-                                                      style: const TextStyle(fontSize: 15),
+                                              .map(
+                                                (rep) => Padding(
+                                                  padding:
+                                                      const EdgeInsets.only(
+                                                        bottom: 4,
+                                                      ),
+                                                  child: Text(
+                                                    rep.fullName ??
+                                                        'Unnamed Rep',
+                                                    style: const TextStyle(
+                                                      fontSize: 15,
                                                     ),
-                                                  ))
+                                                  ),
+                                                ),
+                                              )
                                               .toList(),
                                         ),
                                 ),

@@ -1,7 +1,9 @@
+import 'dart:io' show Platform;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite/sqflite.dart' show databaseFactory;
 import 'core/services/auth_service.dart';
 import 'core/database/database_helper.dart';
 import 'screens/auth/login_screen.dart';
@@ -20,7 +22,12 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   // Initialize SQLite for Windows
-  sqfliteFfiInit();
+  if (Platform.isWindows || Platform.isLinux) {
+    // Initialize FFI
+    sqfliteFfiInit();
+    // Change the default factory for windows
+    databaseFactory = databaseFactoryFfi;
+  }
 
   // Initialize DatabaseHelper
   final dbHelper = DatabaseHelper();

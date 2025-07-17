@@ -90,10 +90,7 @@ class RepService {
       final authResponse = await supabase.auth.signUp(
         email: email,
         password: password,
-        data: {
-          'full_name': fullName,
-          'role': 'rep',
-        },
+        data: {'full_name': fullName, 'role': 'rep'},
       );
 
       if (authResponse.user == null) throw 'Failed to create user';
@@ -113,7 +110,7 @@ class RepService {
         'outlet_id': rep.outletId,
         'full_name': rep.fullName,
         'role': rep.role,
-        'created_at': rep.createdAt
+        'created_at': rep.createdAt,
       });
 
       // Add to local database

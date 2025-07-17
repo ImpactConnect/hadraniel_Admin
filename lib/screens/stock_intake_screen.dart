@@ -542,21 +542,77 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   }
 
   void _showDateRangePicker() async {
-    final DateTimeRange? picked = await showDateRangePicker(
-      context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      initialDateRange: _startDate != null && _endDate != null
-          ? DateTimeRange(start: _startDate!, end: _endDate!)
-          : null,
-    );
+    // Get the screen size
+    final Size screenSize = MediaQuery.of(context).size;
 
-    if (picked != null) {
-      setState(() {
-        _startDate = picked.start;
-        _endDate = picked.end;
-      });
-    }
+    // Calculate the dialog size (70% of screen width, 60% of screen height)
+    final double dialogWidth = screenSize.width * 0.7;
+    final double dialogHeight = screenSize.height * 0.6;
+
+    // Show a custom dialog with DateRangePicker inside
+    await showDialog(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          child: Container(
+            width: dialogWidth,
+            height: dialogHeight,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Select Date Range',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+                const Divider(),
+                Expanded(
+                  child: Theme(
+                    data: Theme.of(context).copyWith(
+                      colorScheme: Theme.of(context).colorScheme.copyWith(
+                        primary: Theme.of(context).colorScheme.primary,
+                        onPrimary: Colors.white,
+                      ),
+                    ),
+                    child: DateRangePickerDialog(
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime.now(),
+                      initialDateRange: _startDate != null && _endDate != null
+                          ? DateTimeRange(start: _startDate!, end: _endDate!)
+                          : null,
+                      saveText: 'APPLY',
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ).then((value) {
+      if (value != null && value is DateTimeRange) {
+        setState(() {
+          _startDate = value.start;
+          _endDate = value.end;
+        });
+      }
+    });
   }
 
   void _clearDateFilter() {
@@ -661,7 +717,9 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                     child: _buildMetricsCard(
                       icon: Icons.calendar_today_outlined,
                       label: 'Last Updated',
-                      value: DateFormat('MMM dd, yyyy').format(balance.lastUpdated),
+                      value: DateFormat(
+                        'MMM dd, yyyy',
+                      ).format(balance.lastUpdated),
                       color: Colors.purple,
                     ),
                   ),
@@ -750,7 +808,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       ),
     );
   }
-  
+
   Widget _buildMetricsCard({
     required IconData icon,
     required String label,
@@ -910,7 +968,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   }
 
   List<StockIntake> get _filteredStockIntakes {
-    return _stockIntakes.where((intake) {
+    // First apply basic filters (search and date)
+    List<StockIntake> filtered = _stockIntakes.where((intake) {
       // Apply search filter
       final searchQuery = _searchQuery.toLowerCase();
       final productNameMatch = intake.productName.toLowerCase().contains(
@@ -954,6 +1013,59 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
 
       return matchesSearch && matchesDate;
     }).toList();
+
+    // Apply product filter
+    if (_selectedProductFilter != 'All Products') {
+      switch (_selectedProductFilter) {
+        case 'Low Stock':
+          // Filter for products with low stock (less than 10 units)
+          final lowStockProducts = _intakeBalances
+              .where((balance) => balance.balanceQuantity < 10)
+              .map((balance) => balance.productName)
+              .toSet();
+          filtered = filtered
+              .where((intake) => lowStockProducts.contains(intake.productName))
+              .toList();
+          break;
+        case 'High Value':
+          // Filter for high value products (cost per unit > 100)
+          filtered = filtered
+              .where((intake) => intake.costPerUnit > 100)
+              .toList();
+          break;
+        case 'Recently Added':
+          // Filter for products added in the last 7 days
+          final sevenDaysAgo = DateTime.now().subtract(const Duration(days: 7));
+          filtered = filtered
+              .where((intake) => intake.dateReceived.isAfter(sevenDaysAgo))
+              .toList();
+          break;
+      }
+    }
+
+    // Apply sorting
+    switch (_selectedSortOption) {
+      case 'Date (Newest)':
+        filtered.sort((a, b) => b.dateReceived.compareTo(a.dateReceived));
+        break;
+      case 'Date (Oldest)':
+        filtered.sort((a, b) => a.dateReceived.compareTo(b.dateReceived));
+        break;
+      case 'Price (High-Low)':
+        filtered.sort((a, b) => b.totalCost.compareTo(a.totalCost));
+        break;
+      case 'Price (Low-High)':
+        filtered.sort((a, b) => a.totalCost.compareTo(b.totalCost));
+        break;
+      case 'Name (A-Z)':
+        filtered.sort((a, b) => a.productName.compareTo(b.productName));
+        break;
+      case 'Name (Z-A)':
+        filtered.sort((a, b) => b.productName.compareTo(a.productName));
+        break;
+    }
+
+    return filtered;
   }
 
   double get _totalStockValue {
@@ -1085,6 +1197,138 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
     }
   }
 
+  Future<void> _exportIntakesToCSV() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final path =
+          '${directory.path}/stock_intakes_${DateTime.now().millisecondsSinceEpoch}.csv';
+      final file = File(path);
+
+      // Create CSV data
+      List<List<dynamic>> rows = [];
+
+      // Add header row
+      rows.add([
+        'Product Name',
+        'Quantity',
+        'Unit',
+        'Cost Per Unit',
+        'Total Cost',
+        'Date',
+        'Description',
+      ]);
+
+      // Add data rows
+      for (var intake in _filteredStockIntakes) {
+        rows.add([
+          intake.productName,
+          intake.quantityReceived,
+          intake.unit,
+          intake.costPerUnit,
+          intake.totalCost,
+          DateFormat('yyyy-MM-dd').format(intake.dateReceived),
+          intake.description,
+        ]);
+      }
+
+      // Convert to CSV
+      String csv = const ListToCsvConverter().convert(rows);
+
+      // Write to file
+      await file.writeAsString(csv);
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('CSV exported to: $path')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error exporting CSV: $e')));
+    }
+  }
+
+  Future<void> _exportIntakesToPDF() async {
+    try {
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          header: (pw.Context context) {
+            return pw.Header(
+              level: 0,
+              child: pw.Text(
+                'Stock Intake Report',
+                style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            );
+          },
+          footer: (pw.Context context) {
+            return pw.Footer(
+              trailing: pw.Text(
+                'Page ${context.pageNumber} of ${context.pagesCount}',
+                style: pw.TextStyle(fontSize: 10),
+              ),
+            );
+          },
+          build: (pw.Context context) => [
+            pw.Table.fromTextArray(
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.center,
+                2: pw.Alignment.center,
+                3: pw.Alignment.center,
+                4: pw.Alignment.center,
+                5: pw.Alignment.center,
+                6: pw.Alignment.centerLeft,
+              },
+              headers: [
+                'Product Name',
+                'Quantity',
+                'Unit',
+                'Cost Per Unit',
+                'Total Cost',
+                'Date',
+                'Description',
+              ],
+              data: _filteredStockIntakes.map((intake) {
+                return [
+                  intake.productName,
+                  intake.quantityReceived.toString(),
+                  intake.unit,
+                  intake.costPerUnit.toString(),
+                  NumberFormat('#,##0.00').format(intake.totalCost),
+                  DateFormat('yyyy-MM-dd').format(intake.dateReceived),
+                  intake.description,
+                ];
+              }).toList(),
+            ),
+          ],
+        ),
+      );
+
+      final directory = await getApplicationDocumentsDirectory();
+      final path =
+          '${directory.path}/stock_intakes_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final file = File(path);
+      await file.writeAsBytes(await pdf.save());
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('PDF exported to: $path')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error exporting PDF: $e')));
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDesktop = MediaQuery.of(context).size.width >= 768;
@@ -1093,6 +1337,24 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       appBar: AppBar(
         title: const Text('Stock Intake'),
         actions: [
+          // Only show export buttons when on the Intake Records tab
+          if (_tabController.index == 0) ...[
+            IconButton(
+              icon: const Icon(Icons.file_download),
+              onPressed: _exportIntakesToCSV,
+              tooltip: 'Export to CSV',
+            ),
+            IconButton(
+              icon: const Icon(Icons.picture_as_pdf),
+              onPressed: _exportIntakesToPDF,
+              tooltip: 'Export to PDF',
+            ),
+            IconButton(
+              icon: const Icon(Icons.add),
+              onPressed: _showAddIntakeDialog,
+              tooltip: 'Add Stock Intake',
+            ),
+          ],
           IconButton(
             icon: Icon(_isSyncing ? Icons.sync_disabled : Icons.sync),
             onPressed: _isSyncing ? null : _syncData,
@@ -1122,7 +1384,10 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                     children: [
                       // Custom styled TabBar at the top of the content area
                       Container(
-                        margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                        margin: const EdgeInsets.symmetric(
+                          horizontal: 16.0,
+                          vertical: 8.0,
+                        ),
                         decoration: BoxDecoration(
                           color: Colors.white,
                           borderRadius: BorderRadius.circular(12),
@@ -1142,8 +1407,14 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                           indicatorSize: TabBarIndicatorSize.tab,
                           dividerColor: Colors.transparent,
                           tabs: const [
-                            Tab(text: 'Intake Records', icon: Icon(Icons.receipt_long)),
-                            Tab(text: 'Balance Summary', icon: Icon(Icons.balance)),
+                            Tab(
+                              text: 'Intake Records',
+                              icon: Icon(Icons.receipt_long),
+                            ),
+                            Tab(
+                              text: 'Balance Summary',
+                              icon: Icon(Icons.balance),
+                            ),
                           ],
                         ),
                       ),
@@ -1179,13 +1450,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
           ),
         ],
       ),
-      floatingActionButton: _tabController.index == 0
-          ? FloatingActionButton(
-              onPressed: _showAddIntakeDialog,
-              child: const Icon(Icons.add),
-              tooltip: 'Add Stock Intake',
-            )
-          : null,
+      // Removed floating action buttons as they've been moved to the AppBar
     );
   }
 
@@ -1546,134 +1811,256 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
     );
   }
 
+  // Add state variables for additional filters
+  String _selectedProductFilter = 'All Products';
+  String _selectedSortOption = 'Date (Newest)';
+
   Widget _buildFiltersSection() {
     final colorScheme = Theme.of(context).colorScheme;
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Row(
+      child: Column(
         children: [
-          Expanded(
-            flex: 3,
-            child: Container(
-              decoration: BoxDecoration(
-                borderRadius: BorderRadius.circular(12.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
-                    spreadRadius: 1,
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: TextField(
-                controller: _searchController,
-                decoration: InputDecoration(
-                  hintText: 'Search by product name or description',
-                  hintStyle: TextStyle(color: Colors.grey[400]),
-                  prefixIcon: Icon(Icons.search, color: colorScheme.primary),
-                  filled: true,
-                  fillColor: Colors.white,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.0),
-                    borderSide: BorderSide.none,
-                  ),
-                  enabledBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.0),
-                    borderSide: BorderSide(color: Colors.grey.withOpacity(0.1)),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12.0),
-                    borderSide: BorderSide(color: colorScheme.primary),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    vertical: 12.0,
-                    horizontal: 12.0,
-                  ),
-                ),
-                onChanged: (value) {
-                  setState(() {
-                    _searchQuery = value;
-                  });
-                },
-              ),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Container(
-            decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(12.0),
-              color: Colors.white,
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.1),
-                  spreadRadius: 1,
-                  blurRadius: 3,
-                  offset: const Offset(0, 1),
-                ),
-              ],
-            ),
-            child: Material(
-              color: Colors.transparent,
-              child: InkWell(
-                borderRadius: BorderRadius.circular(12.0),
-                onTap: _showDateRangePicker,
+          Row(
+            children: [
+              // Reduced search bar
+              Expanded(
+                flex: 2,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 8,
-                  ),
                   decoration: BoxDecoration(
                     borderRadius: BorderRadius.circular(12.0),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        Icons.calendar_today,
-                        size: 20,
-                        color: colorScheme.primary,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        _startDate != null && _endDate != null
-                            ? '${DateFormat('MMM dd').format(_startDate!)} - ${DateFormat('MMM dd').format(_endDate!)}'
-                            : 'Select Date Range',
-                        style: TextStyle(color: colorScheme.onSurface),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        spreadRadius: 1,
+                        blurRadius: 3,
+                        offset: const Offset(0, 1),
                       ),
                     ],
                   ),
+                  child: TextField(
+                    controller: _searchController,
+                    decoration: InputDecoration(
+                      hintText: 'Search products',
+                      hintStyle: TextStyle(
+                        color: Colors.grey[400],
+                        fontSize: 14,
+                      ),
+                      prefixIcon: Icon(
+                        Icons.search,
+                        color: colorScheme.primary,
+                        size: 20,
+                      ),
+                      filled: true,
+                      fillColor: Colors.white,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide.none,
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide(
+                          color: Colors.grey.withOpacity(0.1),
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                        borderSide: BorderSide(color: colorScheme.primary),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                        vertical: 8.0,
+                        horizontal: 8.0,
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setState(() {
+                        _searchQuery = value;
+                      });
+                    },
+                  ),
                 ),
               ),
-            ),
-          ),
-          if (_startDate != null && _endDate != null) ...[
-            const SizedBox(width: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: Colors.white,
-                borderRadius: BorderRadius.circular(12.0),
-                boxShadow: [
-                  BoxShadow(
-                    color: Colors.grey.withOpacity(0.1),
-                    spreadRadius: 1,
-                    blurRadius: 3,
-                    offset: const Offset(0, 1),
-                  ),
-                ],
-              ),
-              child: IconButton(
-                onPressed: _clearDateFilter,
-                icon: const Icon(Icons.clear, color: Colors.red),
-                tooltip: 'Clear date filter',
-                style: IconButton.styleFrom(
-                  backgroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
+              const SizedBox(width: 8),
+              // Date range picker
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12.0),
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      spreadRadius: 1,
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: InkWell(
                     borderRadius: BorderRadius.circular(12.0),
+                    onTap: _showDateRangePicker,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.calendar_today,
+                            size: 18,
+                            color: colorScheme.primary,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            _startDate != null && _endDate != null
+                                ? '${DateFormat('MMM dd').format(_startDate!)} - ${DateFormat('MMM dd').format(_endDate!)}'
+                                : 'Date Range',
+                            style: TextStyle(
+                              color: colorScheme.onSurface,
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-          ],
+              if (_startDate != null && _endDate != null) ...[
+                const SizedBox(width: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12.0),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withOpacity(0.1),
+                        spreadRadius: 1,
+                        blurRadius: 3,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
+                  ),
+                  child: IconButton(
+                    onPressed: _clearDateFilter,
+                    icon: const Icon(Icons.clear, color: Colors.red, size: 18),
+                    tooltip: 'Clear date filter',
+                    style: IconButton.styleFrom(
+                      backgroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12.0),
+                      ),
+                      padding: const EdgeInsets.all(8),
+                    ),
+                  ),
+                ),
+              ],
+              const SizedBox(width: 8),
+              // Product filter dropdown
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12.0),
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      spreadRadius: 1,
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedProductFilter,
+                    icon: Icon(
+                      Icons.arrow_drop_down,
+                      color: colorScheme.primary,
+                    ),
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontSize: 14,
+                    ),
+                    items:
+                        <String>[
+                          'All Products',
+                          'Low Stock',
+                          'High Value',
+                          'Recently Added',
+                        ].map<DropdownMenuItem<String>>((String value) {
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(value),
+                          );
+                        }).toList(),
+                    onChanged: (String? newValue) {
+                      setState(() {
+                        _selectedProductFilter = newValue!;
+                      });
+                    },
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              // Sort options dropdown
+              Container(
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(12.0),
+                  color: Colors.white,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.grey.withOpacity(0.1),
+                      spreadRadius: 1,
+                      blurRadius: 3,
+                      offset: const Offset(0, 1),
+                    ),
+                  ],
+                ),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 4,
+                ),
+                child: DropdownButtonHideUnderline(
+                  child: DropdownButton<String>(
+                    value: _selectedSortOption,
+                    icon: Icon(Icons.sort, color: colorScheme.primary),
+                    style: TextStyle(
+                      color: colorScheme.onSurface,
+                      fontSize: 14,
+                    ),
+                    items:
+                        <String>[
+                          'Date (Newest)',
+                          'Date (Oldest)',
+                          'Price (High-Low)',
+                          'Price (Low-High)',
+                          'Name (A-Z)',
+                          'Name (Z-A)',
+                        ].map<DropdownMenuItem<String>>((String value) {
+                          return DropdownMenuItem<String>(
+                            value: value,
+                            child: Text(value),
+                          );
+                        }).toList(),
+                    onChanged: (String? newValue) {
+                      setState(() {
+                        _selectedSortOption = newValue!;
+                      });
+                    },
+                  ),
+                ),
+              ),
+            ],
+          ),
         ],
       ),
     );

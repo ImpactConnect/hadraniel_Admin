@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
+import 'dart:io';
+import 'package:csv/csv.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
 import '../../core/models/product_model.dart';
 import '../../core/models/outlet_model.dart';
 import '../../core/services/sync_service.dart';
@@ -115,6 +120,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
     try {
       await _syncService.migrateProductUnits(); // Migrate product units
       final products = await _syncService.getAllLocalProducts();
+
+      // Load outlets and populate cache
+      final outlets = await _syncService.getAllLocalOutlets();
+
+      // Pre-populate outlet cache for faster lookups
+      for (var outlet in outlets) {
+        // This will populate both _outletCache and _outletNameCache in SyncService
+        await _syncService.getOutletById(outlet.id);
+      }
+
       if (mounted) {
         setState(() {
           _products = products;
@@ -129,6 +144,232 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
   }
 
+  Future<void> _exportProductsToCSV() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final path =
+          '${directory.path}/products_${DateTime.now().millisecondsSinceEpoch}.csv';
+      final file = File(path);
+
+      // Create CSV data
+      List<List<dynamic>> rows = [];
+
+      // Add header row
+      rows.add([
+        'Product Name',
+        'Unit',
+        'Quantity',
+        'Cost Per Unit',
+        'Total Cost',
+        'Outlet',
+        'Date Added',
+      ]);
+
+      // Filter products based on search query and filters
+      var filteredProducts = _products.where((product) {
+        if (_searchQuery.isNotEmpty) {
+          return product.productName.toLowerCase().contains(
+            _searchQuery.toLowerCase(),
+          );
+        }
+        return true;
+      }).toList();
+
+      // Apply date filter if selected
+      if (_selectedStartDate != null && _selectedEndDate != null) {
+        filteredProducts = filteredProducts.where((product) {
+          return product.dateAdded.isAfter(_selectedStartDate!) &&
+              product.dateAdded.isBefore(
+                _selectedEndDate!.add(const Duration(days: 1)),
+              );
+        }).toList();
+      }
+
+      if (_selectedOutlet != null) {
+        filteredProducts = filteredProducts
+            .where((product) => product.outletId == _selectedOutlet)
+            .toList();
+      }
+
+      if (_selectedUnit != null) {
+        filteredProducts = filteredProducts
+            .where((product) => product.unit == _selectedUnit)
+            .toList();
+      }
+
+      // Add data rows
+      for (var product in filteredProducts) {
+        // Get outlet name synchronously from cache if possible
+        String outletName = 'Unknown';
+        try {
+          // This is a synchronous operation using cached data
+          outletName =
+              _syncService.getOutletNameSync(product.outletId) ?? 'Unknown';
+        } catch (e) {
+          // Fallback to unknown if there's an error
+        }
+
+        rows.add([
+          product.productName,
+          product.unit,
+          product.quantity.toString(),
+          product.costPerUnit.toStringAsFixed(2),
+          product.totalCost.toStringAsFixed(2),
+          outletName,
+          DateFormat('yyyy-MM-dd').format(product.dateAdded),
+        ]);
+      }
+
+      // Convert to CSV
+      String csv = const ListToCsvConverter().convert(rows);
+
+      // Write to file
+      await file.writeAsString(csv);
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('CSV exported to: $path')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error exporting CSV: $e')));
+    }
+  }
+
+  // Prepare data for PDF export
+  List<List<String>> _buildPdfData() {
+    List<List<String>> data = [];
+
+    // Filter products based on search query and filters
+    var filteredProducts = _products.where((product) {
+      if (_searchQuery.isNotEmpty) {
+        return product.productName.toLowerCase().contains(
+          _searchQuery.toLowerCase(),
+        );
+      }
+      return true;
+    }).toList();
+
+    // Apply date filter if selected
+    if (_selectedStartDate != null && _selectedEndDate != null) {
+      filteredProducts = filteredProducts.where((product) {
+        return product.dateAdded.isAfter(_selectedStartDate!) &&
+            product.dateAdded.isBefore(
+              _selectedEndDate!.add(const Duration(days: 1)),
+            );
+      }).toList();
+    }
+
+    if (_selectedOutlet != null) {
+      filteredProducts = filteredProducts
+          .where((product) => product.outletId == _selectedOutlet)
+          .toList();
+    }
+
+    if (_selectedUnit != null) {
+      filteredProducts = filteredProducts
+          .where((product) => product.unit == _selectedUnit)
+          .toList();
+    }
+
+    // Add data rows
+    for (var product in filteredProducts) {
+      // Get outlet name synchronously from cache if possible
+      String outletName = 'Unknown';
+      try {
+        // This is a synchronous operation using cached data
+        outletName =
+            _syncService.getOutletNameSync(product.outletId) ?? 'Unknown';
+      } catch (e) {
+        // Fallback to unknown if there's an error
+      }
+
+      data.add([
+        product.productName,
+        product.unit,
+        product.quantity.toString(),
+        product.costPerUnit.toStringAsFixed(2),
+        product.totalCost.toStringAsFixed(2),
+        outletName,
+        DateFormat('yyyy-MM-dd').format(product.dateAdded),
+      ]);
+    }
+
+    return data;
+  }
+
+  Future<void> _exportProductsToPDF() async {
+    try {
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          header: (pw.Context context) {
+            return pw.Header(
+              level: 0,
+              child: pw.Text(
+                'Products Report',
+                style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            );
+          },
+          footer: (pw.Context context) {
+            return pw.Footer(
+              trailing: pw.Text(
+                'Page ${context.pageNumber} of ${context.pagesCount}',
+                style: pw.TextStyle(fontSize: 10),
+              ),
+            );
+          },
+          build: (pw.Context context) => [
+            pw.Table.fromTextArray(
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.center,
+                2: pw.Alignment.center,
+                3: pw.Alignment.center,
+                4: pw.Alignment.center,
+                5: pw.Alignment.centerLeft,
+                6: pw.Alignment.center,
+              },
+              headers: [
+                'Product Name',
+                'Unit',
+                'Quantity',
+                'Cost Per Unit',
+                'Total Cost',
+                'Outlet',
+                'Date Added',
+              ],
+              data: _buildPdfData(),
+            ),
+          ],
+        ),
+      );
+
+      final directory = await getApplicationDocumentsDirectory();
+      final path =
+          '${directory.path}/products_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final file = File(path);
+      await file.writeAsBytes(await pdf.save());
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('PDF exported to: $path')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error exporting PDF: $e')));
+    }
+  }
+
   void _showProductDialog({Product? product}) {
     showDialog(
       context: context,
@@ -139,31 +380,36 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
   @override
   Widget build(BuildContext context) {
-    var filteredProducts = _products.where(
-      (product) => product.productName.toLowerCase().contains(
-        _searchQuery.toLowerCase(),
-      ),
-    );
+    // Filter products based on search query and filters
+    var filteredProducts = _products.where((product) {
+      if (_searchQuery.isNotEmpty) {
+        return product.productName.toLowerCase().contains(
+          _searchQuery.toLowerCase(),
+        );
+      }
+      return true;
+    }).toList();
 
+    // Apply date filter if selected
     if (_selectedStartDate != null && _selectedEndDate != null) {
       filteredProducts = filteredProducts.where((product) {
         return product.dateAdded.isAfter(_selectedStartDate!) &&
             product.dateAdded.isBefore(
               _selectedEndDate!.add(const Duration(days: 1)),
             );
-      });
+      }).toList();
     }
 
     if (_selectedOutlet != null) {
-      filteredProducts = filteredProducts.where(
-        (product) => product.outletId == _selectedOutlet,
-      );
+      filteredProducts = filteredProducts
+          .where((product) => product.outletId == _selectedOutlet)
+          .toList();
     }
 
     if (_selectedUnit != null) {
-      filteredProducts = filteredProducts.where(
-        (product) => product.unit == _selectedUnit,
-      );
+      filteredProducts = filteredProducts
+          .where((product) => product.unit == _selectedUnit)
+          .toList();
     }
 
     final theme = Theme.of(context);
@@ -171,6 +417,38 @@ class _ProductsScreenState extends State<ProductsScreen> {
 
     return DashboardLayout(
       title: 'Products',
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: _loadProducts,
+          tooltip: 'Refresh',
+        ),
+        IconButton(
+          icon: _isSyncing
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Icon(Icons.sync),
+          onPressed: _isSyncing ? null : _syncProducts,
+          tooltip: 'Sync Products',
+        ),
+        IconButton(
+          icon: const Icon(Icons.file_download),
+          onPressed: _exportProductsToCSV,
+          tooltip: 'Export to CSV',
+        ),
+        IconButton(
+          icon: const Icon(Icons.picture_as_pdf),
+          onPressed: _exportProductsToPDF,
+          tooltip: 'Export to PDF',
+        ),
+        const SizedBox(width: 8),
+      ],
       child: Container(
         color: Colors.grey[50],
         height: double.infinity,
@@ -192,44 +470,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Top row with title and sync button
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        'Product Inventory',
-                        style: theme.textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
-                      ),
-                      ElevatedButton.icon(
-                        icon: _isSyncing
-                            ? SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  color: Colors.white,
-                                  strokeWidth: 2,
-                                ),
-                              )
-                            : const Icon(Icons.sync),
-                        label: Text(
-                          _isSyncing ? 'Syncing...' : 'Sync Products',
-                        ),
-                        onPressed: _isSyncing ? null : _syncProducts,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(
-                            context,
-                          ).colorScheme.primary,
-                          foregroundColor: Colors.white,
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                        ),
-                      ),
-                    ],
+                  // Top row with title
+                  Text(
+                    'Product Inventory',
+                    style: theme.textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
                   ),
                   const SizedBox(height: 16),
 
@@ -245,6 +492,42 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Export buttons
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              ElevatedButton.icon(
+                                icon: const Icon(Icons.file_download, size: 18),
+                                label: const Text('Export CSV'),
+                                onPressed: _exportProductsToCSV,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.green,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              ElevatedButton.icon(
+                                icon: const Icon(
+                                  Icons.picture_as_pdf,
+                                  size: 18,
+                                ),
+                                label: const Text('Export PDF'),
+                                onPressed: _exportProductsToPDF,
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red,
+                                  foregroundColor: Colors.white,
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 16,
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 16),
+
                           // Search, Outlet and Unit filters in a single row
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,

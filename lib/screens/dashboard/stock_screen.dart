@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:sticky_headers/sticky_headers.dart';
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
+import 'package:intl/intl.dart';
+import 'dart:io';
+import 'package:csv/csv.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:path_provider/path_provider.dart';
 import '../../core/models/outlet_model.dart';
 import '../../core/models/product_model.dart';
 import '../../core/models/stock_balance_model.dart';
@@ -43,16 +49,18 @@ class _StockScreenState extends State<StockScreen> {
       alignment: Alignment.centerLeft,
       child: Text(
         text,
-        style: TextStyle(
-          color: Colors.grey.shade800,
-          fontSize: 14,
-        ),
+        style: TextStyle(color: Colors.grey.shade800, fontSize: 14),
         overflow: TextOverflow.ellipsis,
       ),
     );
   }
 
-  Widget _buildMetricCard(String title, String value, IconData icon, Color color) {
+  Widget _buildMetricCard(
+    String title,
+    String value,
+    IconData icon,
+    Color color,
+  ) {
     return Expanded(
       child: Card(
         elevation: 3,
@@ -63,10 +71,7 @@ class _StockScreenState extends State<StockScreen> {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [
-                color.withOpacity(0.8),
-                color.withOpacity(0.6),
-              ],
+              colors: [color.withOpacity(0.8), color.withOpacity(0.6)],
             ),
           ),
           padding: const EdgeInsets.all(16.0),
@@ -178,6 +183,252 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
+  Future<void> _exportStockToCSV() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final path =
+          '${directory.path}/stock_balances_${DateTime.now().millisecondsSinceEpoch}.csv';
+      final file = File(path);
+
+      // Create CSV data
+      List<List<dynamic>> rows = [];
+
+      // Add header row
+      rows.add([
+        'Product Name',
+        'Outlet',
+        'Given Quantity',
+        'Sold Quantity',
+        'Balance Quantity',
+        'Given Value',
+        'Balance Value',
+        'Last Updated',
+      ]);
+
+      // Add data rows
+      for (var stock in _stockBalances.where((stock) {
+        final product = _products.firstWhere(
+          (p) => p.id == stock.productId,
+          orElse: () => Product(
+            id: stock.productId,
+            productName: 'Unknown',
+            quantity: 0,
+            unit: 'N/A',
+            costPerUnit: 0,
+            totalCost: 0,
+            dateAdded: DateTime.now(),
+            outletId: '',
+            createdAt: DateTime.now(),
+            isSynced: false,
+          ),
+        );
+        final outlet = _outlets.firstWhere(
+          (o) => o.id == stock.outletId,
+          orElse: () =>
+              Outlet(id: stock.outletId, name: 'Unknown', createdAt: null),
+        );
+
+        return product.productName.toLowerCase().contains(
+              _searchQuery.toLowerCase(),
+            ) ||
+            outlet.name.toLowerCase().contains(_searchQuery.toLowerCase());
+      })) {
+        final product = _products.firstWhere(
+          (p) => p.id == stock.productId,
+          orElse: () => Product(
+            id: stock.productId,
+            productName: 'Unknown',
+            quantity: 0,
+            unit: 'N/A',
+            costPerUnit: 0,
+            totalCost: 0,
+            dateAdded: DateTime.now(),
+            outletId: '',
+            createdAt: DateTime.now(),
+            isSynced: false,
+          ),
+        );
+        final outlet = _outlets.firstWhere(
+          (o) => o.id == stock.outletId,
+          orElse: () =>
+              Outlet(id: stock.outletId, name: 'Unknown', createdAt: null),
+        );
+
+        rows.add([
+          product.productName,
+          outlet.name,
+          stock.givenQuantity.toString(),
+          stock.soldQuantity.toString(),
+          stock.balanceQuantity.toString(),
+          stock.totalGivenValue?.toStringAsFixed(2) ?? '0.00',
+          stock.balanceValue?.toStringAsFixed(2) ?? '0.00',
+          stock.lastUpdated != null
+              ? DateFormat('yyyy-MM-dd').format(stock.lastUpdated!)
+              : 'N/A',
+        ]);
+      }
+
+      // Convert to CSV
+      String csv = const ListToCsvConverter().convert(rows);
+
+      // Write to file
+      await file.writeAsString(csv);
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('CSV exported to: $path')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error exporting CSV: $e')));
+    }
+  }
+
+  Future<void> _exportStockToPDF() async {
+    try {
+      final pdf = pw.Document();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4,
+          margin: const pw.EdgeInsets.all(32),
+          header: (pw.Context context) {
+            return pw.Header(
+              level: 0,
+              child: pw.Text(
+                'Stock Balance Report',
+                style: pw.TextStyle(
+                  fontSize: 20,
+                  fontWeight: pw.FontWeight.bold,
+                ),
+              ),
+            );
+          },
+          footer: (pw.Context context) {
+            return pw.Footer(
+              trailing: pw.Text(
+                'Page ${context.pageNumber} of ${context.pagesCount}',
+                style: pw.TextStyle(fontSize: 10),
+              ),
+            );
+          },
+          build: (pw.Context context) => [
+            pw.Table.fromTextArray(
+              headerStyle: pw.TextStyle(fontWeight: pw.FontWeight.bold),
+              headerDecoration: pw.BoxDecoration(color: PdfColors.grey300),
+              cellAlignments: {
+                0: pw.Alignment.centerLeft,
+                1: pw.Alignment.centerLeft,
+                2: pw.Alignment.center,
+                3: pw.Alignment.center,
+                4: pw.Alignment.center,
+                5: pw.Alignment.center,
+                6: pw.Alignment.center,
+                7: pw.Alignment.center,
+              },
+              headers: [
+                'Product Name',
+                'Outlet',
+                'Given Quantity',
+                'Sold Quantity',
+                'Balance Quantity',
+                'Given Value',
+                'Balance Value',
+                'Last Updated',
+              ],
+              data: _stockBalances
+                  .where((stock) {
+                    final product = _products.firstWhere(
+                      (p) => p.id == stock.productId,
+                      orElse: () => Product(
+                        id: stock.productId,
+                        productName: 'Unknown',
+                        quantity: 0,
+                        unit: 'N/A',
+                        costPerUnit: 0,
+                        totalCost: 0,
+                        dateAdded: DateTime.now(),
+                        outletId: '',
+                        createdAt: DateTime.now(),
+                        isSynced: false,
+                      ),
+                    );
+                    final outlet = _outlets.firstWhere(
+                      (o) => o.id == stock.outletId,
+                      orElse: () => Outlet(
+                        id: stock.outletId,
+                        name: 'Unknown',
+                        createdAt: null,
+                      ),
+                    );
+
+                    return product.productName.toLowerCase().contains(
+                          _searchQuery.toLowerCase(),
+                        ) ||
+                        outlet.name.toLowerCase().contains(
+                          _searchQuery.toLowerCase(),
+                        );
+                  })
+                  .map((stock) {
+                    final product = _products.firstWhere(
+                      (p) => p.id == stock.productId,
+                      orElse: () => Product(
+                        id: stock.productId,
+                        productName: 'Unknown',
+                        quantity: 0,
+                        unit: 'N/A',
+                        costPerUnit: 0,
+                        totalCost: 0,
+                        dateAdded: DateTime.now(),
+                        outletId: '',
+                        createdAt: DateTime.now(),
+                        isSynced: false,
+                      ),
+                    );
+                    final outlet = _outlets.firstWhere(
+                      (o) => o.id == stock.outletId,
+                      orElse: () => Outlet(
+                        id: stock.outletId,
+                        name: 'Unknown',
+                        createdAt: null,
+                      ),
+                    );
+
+                    return [
+                      product.productName,
+                      outlet.name,
+                      stock.givenQuantity.toString(),
+                      stock.soldQuantity.toString(),
+                      stock.balanceQuantity.toString(),
+                      stock.totalGivenValue?.toStringAsFixed(2) ?? '0.00',
+                      stock.balanceValue?.toStringAsFixed(2) ?? '0.00',
+                      stock.lastUpdated != null
+                          ? DateFormat('yyyy-MM-dd').format(stock.lastUpdated!)
+                          : 'N/A',
+                    ];
+                  })
+                  .toList(),
+            ),
+          ],
+        ),
+      );
+
+      final directory = await getApplicationDocumentsDirectory();
+      final path =
+          '${directory.path}/stock_balances_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final file = File(path);
+      await file.writeAsBytes(await pdf.save());
+
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('PDF exported to: $path')));
+    } catch (e) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text('Error exporting PDF: $e')));
+    }
+  }
+
   void _setDateFilter(String filter) {
     final now = DateTime.now();
     setState(() {
@@ -227,7 +478,7 @@ class _StockScreenState extends State<StockScreen> {
       builder: (BuildContext context) {
         DateTime? startDate = _startDate;
         DateTime? endDate = _endDate;
-        
+
         return Dialog(
           child: Container(
             width: 300, // Reduced width for the calendar popup
@@ -245,7 +496,9 @@ class _StockScreenState extends State<StockScreen> {
                       ? [startDate, endDate]
                       : [],
                   onValueChanged: (dates) {
-                    if (dates.length == 2 && dates[0] != null && dates[1] != null) {
+                    if (dates.length == 2 &&
+                        dates[0] != null &&
+                        dates[1] != null) {
                       startDate = dates[0]!;
                       endDate = dates[1]!;
                     }
@@ -324,40 +577,42 @@ class _StockScreenState extends State<StockScreen> {
 
     return DashboardLayout(
       title: 'Stock Management',
+      actions: [
+        IconButton(
+          icon: const Icon(Icons.refresh),
+          onPressed: _loadData,
+          tooltip: 'Refresh',
+        ),
+        IconButton(
+          icon: _isSyncing
+              ? SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(
+                    color: Colors.white,
+                    strokeWidth: 2,
+                  ),
+                )
+              : const Icon(Icons.sync),
+          onPressed: _isSyncing ? null : _syncData,
+          tooltip: 'Sync Stock',
+        ),
+        IconButton(
+          icon: const Icon(Icons.file_download),
+          onPressed: _exportStockToCSV,
+          tooltip: 'Export to CSV',
+        ),
+        IconButton(
+          icon: const Icon(Icons.picture_as_pdf),
+          onPressed: _exportStockToPDF,
+          tooltip: 'Export to PDF',
+        ),
+        const SizedBox(width: 8),
+      ],
       child: Column(
         children: [
-          // Sync button with improved styling
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                ElevatedButton.icon(
-                  icon: _isSyncing
-                      ? SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                      : const Icon(Icons.sync, size: 20),
-                  label: Text(_isSyncing ? 'Syncing...' : 'Sync Stock'),
-                  style: ElevatedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    backgroundColor: Theme.of(context).colorScheme.primary,
-                    elevation: 2,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(8),
-                    ),
-                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  ),
-                  onPressed: _isSyncing ? null : _syncData,
-                ),
-              ],
-            ),
-          ),
+          // Spacing at the top
+          const SizedBox(height: 8),
           if (_isLoading)
             const Expanded(child: Center(child: CircularProgressIndicator()))
           else
@@ -367,7 +622,10 @@ class _StockScreenState extends State<StockScreen> {
                 children: [
                   // Metric cards with improved spacing
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16.0,
+                      vertical: 8.0,
+                    ),
                     child: Row(
                       children: [
                         _buildMetricCard(
@@ -410,13 +668,15 @@ class _StockScreenState extends State<StockScreen> {
                       ],
                     ),
                   ),
-                  
+
                   // Unified filter section with card styling
                   Padding(
                     padding: const EdgeInsets.fromLTRB(16.0, 8.0, 16.0, 8.0),
                     child: Card(
                       elevation: 2,
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
                       child: Padding(
                         padding: const EdgeInsets.all(12.0),
                         child: Column(
@@ -427,10 +687,13 @@ class _StockScreenState extends State<StockScreen> {
                               children: [
                                 Text(
                                   'Filters',
-                                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                    fontWeight: FontWeight.bold,
-                                    color: Theme.of(context).colorScheme.primary,
-                                  ),
+                                  style: Theme.of(context).textTheme.titleMedium
+                                      ?.copyWith(
+                                        fontWeight: FontWeight.bold,
+                                        color: Theme.of(
+                                          context,
+                                        ).colorScheme.primary,
+                                      ),
                                 ),
                                 const SizedBox(width: 16),
                                 Expanded(
@@ -444,15 +707,23 @@ class _StockScreenState extends State<StockScreen> {
                                           "This week",
                                           "Last 7 days",
                                           "This month",
-                                          "Last month"
+                                          "Last month",
                                         ].map(
                                           (filter) => Padding(
-                                            padding: const EdgeInsets.only(right: 8.0),
+                                            padding: const EdgeInsets.only(
+                                              right: 8.0,
+                                            ),
                                             child: FilterChip(
                                               label: Text(filter),
-                                              selected: _activeDateFilter == filter,
-                                              selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                                              checkmarkColor: Theme.of(context).colorScheme.primary,
+                                              selected:
+                                                  _activeDateFilter == filter,
+                                              selectedColor: Theme.of(context)
+                                                  .colorScheme
+                                                  .primary
+                                                  .withOpacity(0.2),
+                                              checkmarkColor: Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
                                               onSelected: (selected) {
                                                 if (selected) {
                                                   _setDateFilter(filter);
@@ -464,15 +735,21 @@ class _StockScreenState extends State<StockScreen> {
                                           ),
                                         ),
                                         Padding(
-                                          padding: const EdgeInsets.only(right: 8.0),
+                                          padding: const EdgeInsets.only(
+                                            right: 8.0,
+                                          ),
                                           child: ActionChip(
                                             avatar: Icon(
                                               Icons.date_range,
                                               size: 18,
-                                              color: Theme.of(context).colorScheme.primary,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.primary,
                                             ),
                                             label: Text(
-                                              _activeDateFilter.isEmpty ? 'Select Date' : _activeDateFilter,
+                                              _activeDateFilter.isEmpty
+                                                  ? 'Select Date'
+                                                  : _activeDateFilter,
                                             ),
                                             onPressed: _showDateRangePicker,
                                           ),
@@ -482,7 +759,9 @@ class _StockScreenState extends State<StockScreen> {
                                             avatar: Icon(
                                               Icons.clear,
                                               size: 18,
-                                              color: Theme.of(context).colorScheme.error,
+                                              color: Theme.of(
+                                                context,
+                                              ).colorScheme.error,
                                             ),
                                             label: const Text('Clear Filter'),
                                             onPressed: _clearDateFilter,
@@ -493,9 +772,9 @@ class _StockScreenState extends State<StockScreen> {
                                 ),
                               ],
                             ),
-                            
+
                             const SizedBox(height: 12),
-                            
+
                             // Search and dropdown filters in a single row
                             Row(
                               children: [
@@ -508,9 +787,14 @@ class _StockScreenState extends State<StockScreen> {
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(8),
                                       ),
-                                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                            horizontal: 12,
+                                          ),
                                     ),
-                                    onChanged: (value) => setState(() => _searchQuery = value),
+                                    onChanged: (value) =>
+                                        setState(() => _searchQuery = value),
                                   ),
                                 ),
                                 const SizedBox(width: 12),
@@ -523,7 +807,11 @@ class _StockScreenState extends State<StockScreen> {
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(8),
                                       ),
-                                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                            horizontal: 12,
+                                          ),
                                     ),
                                     items: [
                                       const DropdownMenuItem(
@@ -555,7 +843,11 @@ class _StockScreenState extends State<StockScreen> {
                                       border: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(8),
                                       ),
-                                      contentPadding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
+                                            vertical: 10,
+                                            horizontal: 12,
+                                          ),
                                     ),
                                     items: [
                                       const DropdownMenuItem(
@@ -584,14 +876,16 @@ class _StockScreenState extends State<StockScreen> {
                       ),
                     ),
                   ),
-                  
+
                   // Table with sticky header and centered content
                   Expanded(
                     child: Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 16.0),
                       child: Card(
                         elevation: 2,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         clipBehavior: Clip.antiAlias,
                         child: Column(
                           children: [
@@ -620,7 +914,9 @@ class _StockScreenState extends State<StockScreen> {
                                 child: SingleChildScrollView(
                                   scrollDirection: Axis.horizontal,
                                   child: Column(
-                                    children: filteredStockBalances.map((stock) {
+                                    children: filteredStockBalances.map((
+                                      stock,
+                                    ) {
                                       final product = _products.firstWhere(
                                         (p) => p.id == stock.productId,
                                         orElse: () => Product(
@@ -649,11 +945,12 @@ class _StockScreenState extends State<StockScreen> {
                                         onTap: () {
                                           showDialog(
                                             context: context,
-                                            builder: (context) => StockDetailDialog(
-                                              stock: stock,
-                                              product: product,
-                                              outlet: outlet,
-                                            ),
+                                            builder: (context) =>
+                                                StockDetailDialog(
+                                                  stock: stock,
+                                                  product: product,
+                                                  outlet: outlet,
+                                                ),
                                           );
                                         },
                                         child: Container(
@@ -671,7 +968,10 @@ class _StockScreenState extends State<StockScreen> {
                                                 product.productName,
                                                 200,
                                               ),
-                                              _buildContentCell(outlet.name, 150),
+                                              _buildContentCell(
+                                                outlet.name,
+                                                150,
+                                              ),
                                               _buildContentCell(
                                                 stock.givenQuantity.toString(),
                                                 100,
@@ -681,7 +981,8 @@ class _StockScreenState extends State<StockScreen> {
                                                 100,
                                               ),
                                               _buildContentCell(
-                                                stock.balanceQuantity.toString(),
+                                                stock.balanceQuantity
+                                                    .toString(),
                                                 100,
                                               ),
                                               _buildContentCell(

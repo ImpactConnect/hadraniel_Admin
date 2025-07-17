@@ -5,12 +5,14 @@ class DashboardLayout extends StatelessWidget {
   final Widget child;
   final String title;
   final Widget? floatingActionButton;
+  final List<Widget>? actions;
 
   const DashboardLayout({
     super.key,
     required this.child,
     required this.title,
     this.floatingActionButton,
+    this.actions,
   });
 
   @override
@@ -26,14 +28,7 @@ class DashboardLayout extends StatelessWidget {
         foregroundColor: Colors.white,
         // Remove the hamburger menu for desktop view
         automaticallyImplyLeading: !isDesktop,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.notifications_outlined),
-            onPressed: () {},
-            tooltip: 'Notifications',
-          ),
-          const SizedBox(width: 8),
-        ],
+        actions: actions ?? [],
       ),
       body: Row(
         crossAxisAlignment: CrossAxisAlignment.start,

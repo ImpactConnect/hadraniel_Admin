@@ -102,4 +102,19 @@ class Product {
       isSynced: isSynced ?? this.isSynced,
     );
   }
+
+  Map<String, dynamic> toCloudMap() {
+    return {
+      'id': id,
+      'product_name': productName,
+      'quantity': quantity,
+      'unit': unit,
+      'cost_per_unit': costPerUnit,
+      'date_added': dateAdded.toIso8601String(),
+      'last_updated': lastUpdated?.toIso8601String(),
+      'description': description,
+      'outlet_id': outletId,
+      'created_at': createdAt.toIso8601String(),
+    };
+  }
 }

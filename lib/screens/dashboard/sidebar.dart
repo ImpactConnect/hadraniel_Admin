@@ -119,7 +119,7 @@ class Sidebar extends StatelessWidget {
                   _buildNavItem(
                     context: context,
                     icon: Icons.assessment,
-                    title: 'Stock Balance',
+                    title: 'Outlets Stock',
                     route: '/stock',
                     colorScheme: colorScheme,
                   ),

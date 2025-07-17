@@ -1,4 +1,6 @@
+import 'dart:io' show Platform;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 
 class DatabaseHelper {
@@ -18,11 +20,14 @@ class DatabaseHelper {
   }
 
   Future<Database> _initDatabase() async {
-    final databasePath = await databaseFactoryFfi.getDatabasesPath();
+    final dbFactory = Platform.isWindows || Platform.isLinux
+        ? databaseFactoryFfi
+        : databaseFactory;
+    final databasePath = await dbFactory.getDatabasesPath();
     final path = join(databasePath, 'admin_app.db');
     print('Database path: $path'); // Debug log
 
-    return await databaseFactoryFfi.openDatabase(
+    return await dbFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
         version: 5,
@@ -198,10 +203,32 @@ class DatabaseHelper {
         id TEXT PRIMARY KEY,
         outlet_id TEXT NOT NULL,
         customer_id TEXT,
-        total_amount REAL,
+        rep_id TEXT,
+        vat REAL DEFAULT 0,
+        total_amount REAL DEFAULT 0,
+        amount_paid REAL DEFAULT 0,
+        outstanding_amount REAL DEFAULT 0,
         is_paid INTEGER DEFAULT 0,
         created_at TEXT,
-        FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+        updated_at TEXT,
+        FOREIGN KEY (outlet_id) REFERENCES outlets (id),
+        FOREIGN KEY (customer_id) REFERENCES customers (id),
+        FOREIGN KEY (rep_id) REFERENCES profiles (id)
+      )
+    ''');
+
+    // Sale Items table
+    await db.execute('''
+      CREATE TABLE sale_items (
+        id TEXT PRIMARY KEY,
+        sale_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        quantity REAL NOT NULL,
+        unit_price REAL NOT NULL,
+        total REAL NOT NULL,
+        created_at TEXT,
+        FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
+        FOREIGN KEY (product_id) REFERENCES products (id)
       )
     ''');
 
@@ -246,6 +273,7 @@ class DatabaseHelper {
       await txn.delete('outlets');
       await txn.delete('products');
       await txn.delete('reps');
+      await txn.delete('sale_items');
       await txn.delete('sales');
       await txn.delete('customers');
       await txn.delete('sync_queue');
