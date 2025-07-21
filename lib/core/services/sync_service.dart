@@ -815,7 +815,7 @@ class SyncService {
   Future<void> syncProductsToLocalDb() async {
     try {
       final db = await _dbHelper.database;
-      
+
       // First sync local changes to cloud in a single transaction
       await db.transaction((txn) async {
         final unsyncedProducts = await txn.query(
@@ -865,10 +865,10 @@ class SyncService {
       }
 
       final stockIntakeService = StockIntakeService();
-      
+
       // Prepare balance updates outside the transaction
       final balanceUpdates = <Future<void>>[];
-      
+
       // Update local database
       await db.transaction((txn) async {
         for (var product in products) {
@@ -892,7 +892,7 @@ class SyncService {
                   product.outletId,
                   outletName,
                   product.costPerUnit,
-                )
+                ),
               );
             }
             // If product name has changed, treat as deletion of old and addition of new
@@ -908,7 +908,7 @@ class SyncService {
                   existingProduct.outletId,
                   existingOutletName,
                   existingProduct.costPerUnit,
-                )
+                ),
               );
 
               // Queue new product quantity balance update
@@ -920,7 +920,7 @@ class SyncService {
                   product.outletId,
                   outletName,
                   product.costPerUnit,
-                )
+                ),
               );
             }
           }
@@ -934,7 +934,7 @@ class SyncService {
                 product.outletId,
                 outletName,
                 product.costPerUnit,
-              )
+              ),
             );
           }
 
@@ -959,7 +959,7 @@ class SyncService {
                 existingProduct.outletId,
                 existingOutletName,
                 existingProduct.costPerUnit,
-              )
+              ),
             );
 
             // Delete the product locally

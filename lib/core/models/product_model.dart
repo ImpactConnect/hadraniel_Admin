@@ -28,19 +28,20 @@ class Product {
   });
 
   factory Product.fromMap(Map<String, dynamic> map) {
+    final quantity = map['quantity'] != null
+        ? (map['quantity'] as num).toDouble()
+        : 0.0;
+    final costPerUnit = map['cost_per_unit'] != null
+        ? (map['cost_per_unit'] as num).toDouble()
+        : 0.0;
+    
     return Product(
       id: map['id']?.toString() ?? '',
       productName: map['product_name']?.toString() ?? '',
-      quantity: map['quantity'] != null
-          ? (map['quantity'] as num).toDouble()
-          : 0.0,
+      quantity: quantity,
       unit: map['unit']?.toString() ?? '',
-      costPerUnit: map['cost_per_unit'] != null
-          ? (map['cost_per_unit'] as num).toDouble()
-          : 0.0,
-      totalCost: map['total_cost'] != null
-          ? (map['total_cost'] as num).toDouble()
-          : 0.0,
+      costPerUnit: costPerUnit,
+      totalCost: quantity * costPerUnit,  // Calculate totalCost consistently
       dateAdded: map['date_added'] != null
           ? DateTime.parse(map['date_added'] as String)
           : DateTime.now(),
@@ -110,6 +111,7 @@ class Product {
       'quantity': quantity,
       'unit': unit,
       'cost_per_unit': costPerUnit,
+      'total_cost': quantity * costPerUnit,
       'date_added': dateAdded.toIso8601String(),
       'last_updated': lastUpdated?.toIso8601String(),
       'description': description,
