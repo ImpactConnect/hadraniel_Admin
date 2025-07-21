@@ -492,42 +492,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          // Export buttons
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.end,
-                            children: [
-                              ElevatedButton.icon(
-                                icon: const Icon(Icons.file_download, size: 18),
-                                label: const Text('Export CSV'),
-                                onPressed: _exportProductsToCSV,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.green,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              ElevatedButton.icon(
-                                icon: const Icon(
-                                  Icons.picture_as_pdf,
-                                  size: 18,
-                                ),
-                                label: const Text('Export PDF'),
-                                onPressed: _exportProductsToPDF,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    horizontal: 16,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 16),
-
                           // Search, Outlet and Unit filters in a single row
                           Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
