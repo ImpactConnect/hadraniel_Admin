@@ -534,7 +534,7 @@ class SyncService {
   Future<void> insertProduct(Product product) async {
     try {
       final db = await _dbHelper.database;
-      await db.insert('products', product.toMap());
+      await db.insert('products', {...product.toMap(), 'is_synced': 0});
 
       // Update the intake balance when a product is assigned to an outlet
       final stockIntakeService = StockIntakeService();
@@ -566,10 +566,10 @@ class SyncService {
       if (previousProductMaps.isNotEmpty) {
         final previousProduct = Product.fromMap(previousProductMaps.first);
 
-        // Update the product in the database
+        // Update the product in the database and mark it for syncing
         await db.update(
           'products',
-          product.toMap(),
+          {...product.toMap(), 'is_synced': 0},
           where: 'id = ?',
           whereArgs: [product.id],
         );
@@ -603,10 +603,10 @@ class SyncService {
           );
         }
       } else {
-        // If product doesn't exist (shouldn't happen), just update
+        // If product doesn't exist (shouldn't happen), just update and mark for syncing
         await db.update(
           'products',
-          product.toMap(),
+          {...product.toMap(), 'is_synced': 0},
           where: 'id = ?',
           whereArgs: [product.id],
         );
@@ -814,27 +814,30 @@ class SyncService {
   // Products Sync
   Future<void> syncProductsToLocalDb() async {
     try {
-      // Get all local products that need syncing
       final db = await _dbHelper.database;
-      final unsyncedProducts = await db.query(
-        'products',
-        where: 'is_synced = ?',
-        whereArgs: [0],
-      );
-
-      // Push unsynced products to Supabase
-      for (var productMap in unsyncedProducts) {
-        final product = Product.fromMap(productMap);
-        await supabase.from('products').upsert(product.toCloudMap());
-
-        // Mark as synced locally
-        await db.update(
+      
+      // First sync local changes to cloud in a single transaction
+      await db.transaction((txn) async {
+        final unsyncedProducts = await txn.query(
           'products',
-          {'is_synced': 1},
-          where: 'id = ?',
-          whereArgs: [product.id],
+          where: 'is_synced = ?',
+          whereArgs: [0],
         );
-      }
+
+        // Push unsynced products to Supabase
+        for (var productMap in unsyncedProducts) {
+          final product = Product.fromMap(productMap);
+          await supabase.from('products').upsert(product.toCloudMap());
+
+          // Mark as synced locally
+          await txn.update(
+            'products',
+            {'is_synced': 1},
+            where: 'id = ?',
+            whereArgs: [product.id],
+          );
+        }
+      });
 
       // Pull latest products from Supabase
       final response = await supabase.from('products').select();
@@ -862,7 +865,10 @@ class SyncService {
       }
 
       final stockIntakeService = StockIntakeService();
-
+      
+      // Prepare balance updates outside the transaction
+      final balanceUpdates = <Future<void>>[];
+      
       // Update local database
       await db.transaction((txn) async {
         for (var product in products) {
@@ -877,50 +883,58 @@ class SyncService {
               final quantityDifference =
                   product.quantity - existingProduct.quantity;
 
-              // Update balance
+              // Queue balance update
               final outletName = await getOutletName(product.outletId);
-              await stockIntakeService.updateBalanceOnProductAssignment(
-                product.productName,
-                quantityDifference,
-                product.outletId,
-                outletName,
-                product.costPerUnit,
+              balanceUpdates.add(
+                stockIntakeService.updateBalanceOnProductAssignment(
+                  product.productName,
+                  quantityDifference,
+                  product.outletId,
+                  outletName,
+                  product.costPerUnit,
+                )
               );
             }
             // If product name has changed, treat as deletion of old and addition of new
             else if (existingProduct.productName != product.productName) {
-              // Remove old product quantity from balance
+              // Queue removal of old product quantity from balance
               final existingOutletName = await getOutletName(
                 existingProduct.outletId,
               );
-              await stockIntakeService.updateBalanceOnProductAssignment(
-                existingProduct.productName,
-                -existingProduct.quantity,
-                existingProduct.outletId,
-                existingOutletName,
-                existingProduct.costPerUnit,
+              balanceUpdates.add(
+                stockIntakeService.updateBalanceOnProductAssignment(
+                  existingProduct.productName,
+                  -existingProduct.quantity,
+                  existingProduct.outletId,
+                  existingOutletName,
+                  existingProduct.costPerUnit,
+                )
               );
 
-              // Add new product quantity to balance
+              // Queue new product quantity balance update
               final outletName = await getOutletName(product.outletId);
-              await stockIntakeService.updateBalanceOnProductAssignment(
+              balanceUpdates.add(
+                stockIntakeService.updateBalanceOnProductAssignment(
+                  product.productName,
+                  product.quantity,
+                  product.outletId,
+                  outletName,
+                  product.costPerUnit,
+                )
+              );
+            }
+          }
+          // New product, queue its quantity balance update
+          else {
+            final outletName = await getOutletName(product.outletId);
+            balanceUpdates.add(
+              stockIntakeService.updateBalanceOnProductAssignment(
                 product.productName,
                 product.quantity,
                 product.outletId,
                 outletName,
                 product.costPerUnit,
-              );
-            }
-          }
-          // New product, add its quantity to balance
-          else {
-            final outletName = await getOutletName(product.outletId);
-            await stockIntakeService.updateBalanceOnProductAssignment(
-              product.productName,
-              product.quantity,
-              product.outletId,
-              outletName,
-              product.costPerUnit,
+              )
             );
           }
 
@@ -934,16 +948,18 @@ class SyncService {
         // Handle deleted products (products that exist locally but not in the server response)
         for (var existingProduct in existingProducts.values) {
           if (!products.any((p) => p.id == existingProduct.id)) {
-            // Product was deleted on server, remove its quantity from balance
+            // Queue removal of deleted product's quantity from balance
             final existingOutletName = await getOutletName(
               existingProduct.outletId,
             );
-            await stockIntakeService.updateBalanceOnProductAssignment(
-              existingProduct.productName,
-              -existingProduct.quantity,
-              existingProduct.outletId,
-              existingOutletName,
-              existingProduct.costPerUnit,
+            balanceUpdates.add(
+              stockIntakeService.updateBalanceOnProductAssignment(
+                existingProduct.productName,
+                -existingProduct.quantity,
+                existingProduct.outletId,
+                existingOutletName,
+                existingProduct.costPerUnit,
+              )
             );
 
             // Delete the product locally
@@ -955,6 +971,9 @@ class SyncService {
           }
         }
       });
+
+      // Execute all balance updates after the transaction is complete
+      await Future.wait(balanceUpdates);
     } catch (e) {
       print('Error syncing products: $e');
       throw e;
