@@ -82,12 +82,16 @@ class _MyAppState extends State<MyApp> {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Hadraniel Admin',
-      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      theme: ThemeData(
+        primarySwatch: Colors.blue,
+        useMaterial3: true,
+        platform: TargetPlatform.android, // Force Material design
+      ),
       home: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : _isAuthenticated
-          ? const DashboardScreen()
-          : const LoginScreen(),
+              ? const DashboardScreen()
+              : const LoginScreen(),
       routes: {
         '/login': (context) => const LoginScreen(),
         '/dashboard': (context) => const DashboardScreen(),

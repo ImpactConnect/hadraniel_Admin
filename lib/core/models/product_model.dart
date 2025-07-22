@@ -34,14 +34,14 @@ class Product {
     final costPerUnit = map['cost_per_unit'] != null
         ? (map['cost_per_unit'] as num).toDouble()
         : 0.0;
-    
+
     return Product(
       id: map['id']?.toString() ?? '',
       productName: map['product_name']?.toString() ?? '',
       quantity: quantity,
       unit: map['unit']?.toString() ?? '',
       costPerUnit: costPerUnit,
-      totalCost: quantity * costPerUnit,  // Calculate totalCost consistently
+      totalCost: quantity * costPerUnit, // Calculate totalCost consistently
       dateAdded: map['date_added'] != null
           ? DateTime.parse(map['date_added'] as String)
           : DateTime.now(),

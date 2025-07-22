@@ -198,51 +198,63 @@ class StockIntakeService {
   ) async {
     final db = await _db.database;
     final now = DateTime.now();
+    
+    // Wrap all operations in a single transaction to prevent locking
+    return await db.transaction((txn) async {
+      // Check if product exists in intake_balances
+      final List<Map<String, dynamic>> existingBalances = await txn.query(
+        'intake_balances',
+        where: 'product_name = ?',
+        whereArgs: [productName],
+      );
 
-    // Check if product exists in intake_balances
-    final List<Map<String, dynamic>> existingBalances = await db.query(
-      'intake_balances',
-      where: 'product_name = ?',
-      whereArgs: [productName],
-    );
+      if (existingBalances.isEmpty) {
+        return false; // Product not found
+      }
 
-    if (existingBalances.isEmpty) {
-      return false; // Product not found
-    }
+      final existingBalance = IntakeBalance.fromMap(existingBalances.first);
 
-    final existingBalance = IntakeBalance.fromMap(existingBalances.first);
+      // Check if there's enough balance
+      if (existingBalance.balanceQuantity < quantity) {
+        return false; // Not enough balance
+      }
 
-    // Check if there's enough balance
-    if (existingBalance.balanceQuantity < quantity) {
-      return false; // Not enough balance
-    }
+      final updatedTotalAssigned = existingBalance.totalAssigned + quantity;
+      final updatedBalanceQuantity =
+          existingBalance.totalReceived - updatedTotalAssigned;
 
-    final updatedTotalAssigned = existingBalance.totalAssigned + quantity;
-    final updatedBalanceQuantity =
-        existingBalance.totalReceived - updatedTotalAssigned;
+      await txn.update(
+        'intake_balances',
+        {
+          'total_assigned': updatedTotalAssigned,
+          'balance_quantity': updatedBalanceQuantity,
+          'last_updated': now.toIso8601String(),
+        },
+        where: 'id = ?',
+        whereArgs: [existingBalance.id],
+      );
 
-    await db.update(
-      'intake_balances',
-      {
-        'total_assigned': updatedTotalAssigned,
-        'balance_quantity': updatedBalanceQuantity,
-        'last_updated': now.toIso8601String(),
-      },
-      where: 'id = ?',
-      whereArgs: [existingBalance.id],
-    );
+      // Record the distribution within the same transaction
+      final distribution = ProductDistribution(
+        id: _uuid.v4(),
+        productName: productName,
+        outletId: outletId,
+        outletName: outletName,
+        quantity: quantity,
+        costPerUnit: costPerUnit,
+        totalCost: quantity * costPerUnit,
+        distributionDate: now,
+        createdAt: now,
+      );
 
-    // Record the distribution
-    await addProductDistribution(
-      productName: productName,
-      outletId: outletId,
-      outletName: outletName,
-      quantity: quantity,
-      costPerUnit: costPerUnit,
-      distributionDate: now,
-    );
+      await txn.insert(
+        'product_distributions',
+        distribution.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
 
-    return true;
+      return true;
+    });
   }
 
   // Get all intake balances
@@ -349,6 +361,7 @@ class StockIntakeService {
     required double quantity,
     required double costPerUnit,
     required DateTime distributionDate,
+    Transaction? txn,
   }) async {
     final db = await _db.database;
     final now = DateTime.now();
@@ -366,11 +379,22 @@ class StockIntakeService {
       createdAt: now,
     );
 
-    await db.insert(
-      'product_distributions',
-      distribution.toMap(),
-      conflictAlgorithm: ConflictAlgorithm.replace,
-    );
+    if (txn != null) {
+      await txn.insert(
+        'product_distributions',
+        distribution.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+    } else {
+      // Wrap in a transaction if one wasn't provided
+      await db.transaction((txn) async {
+        await txn.insert(
+          'product_distributions',
+          distribution.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      });
+    }
 
     return distribution;
   }

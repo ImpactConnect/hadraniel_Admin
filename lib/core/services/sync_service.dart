@@ -43,12 +43,48 @@ class SyncService {
   }) async {
     final db = await _dbHelper.database;
 
+    // First check if we have any sales and sale_items
+    final salesCount = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM sales'),
+    );
+    final saleItemsCount = Sqflite.firstIntValue(
+      await db.rawQuery('SELECT COUNT(*) FROM sale_items'),
+    );
+    print('Total sales in DB: $salesCount');
+    print('Total sale items in DB: $saleItemsCount');
+
+    if (productId != null) {
+      final productSaleItemsCount = Sqflite.firstIntValue(
+        await db.rawQuery(
+          'SELECT COUNT(*) FROM sale_items WHERE product_id = ?',
+          [productId],
+        ),
+      );
+      print('Sale items for product $productId: $productSaleItemsCount');
+    }
+
     String query = '''
-      SELECT s.* FROM sales s
+      SELECT 
+        s.id as sale_id,
+        s.created_at,
+        s.outlet_id,
+        s.customer_id,
+        si.quantity,
+        si.unit_price,
+        si.total as total_amount,
+        si.product_id
+      FROM sales s
+      INNER JOIN sale_items si ON si.sale_id = s.id
       WHERE 1=1
     ''';
 
     List<dynamic> args = [];
+
+    // Add product filter if provided
+    if (productId != null) {
+      query += ' AND si.product_id = ?';
+      args.add(productId);
+    }
 
     // Add date range filter if provided
     if (startDate != null) {
@@ -73,50 +109,19 @@ class SyncService {
       args.add(repId);
     }
 
-    // Add product filter if provided - this requires joining with sale_items
-    if (productId != null) {
-      query = '''
-        SELECT DISTINCT s.* FROM sales s
-        INNER JOIN sale_items si ON s.id = si.sale_id
-        WHERE si.product_id = ?
-      ''';
-
-      // Reset args and add product ID as first argument
-      args = [productId];
-
-      // Re-add other filters
-      if (startDate != null) {
-        query += ' AND s.created_at >= ?';
-        args.add(startDate.toIso8601String());
-      }
-
-      if (endDate != null) {
-        query += ' AND s.created_at <= ?';
-        args.add(endDate.toIso8601String());
-      }
-
-      if (outletId != null) {
-        query += ' AND s.outlet_id = ?';
-        args.add(outletId);
-      }
-
-      if (repId != null) {
-        query += ' AND s.rep_id = ?';
-        args.add(repId);
-      }
-    }
-
     query += ' ORDER BY s.created_at DESC';
 
+    print('Executing query: $query');
+    print('Query args: $args');
+
     final List<Map<String, dynamic>> sales = await db.rawQuery(query, args);
+    print('Raw query results: $sales');
 
     List<Map<String, dynamic>> salesWithDetails = [];
 
     for (var sale in sales) {
-      final saleId = sale['id'] as String;
       final saleOutletId = sale['outlet_id'] as String;
       final customerId = sale['customer_id'] as String?;
-      final saleRepId = sale['rep_id'] as String?;
 
       // Get outlet name
       String outletName = await getOutletName(saleOutletId);
@@ -127,25 +132,14 @@ class SyncService {
         customerName = await getCustomerName(customerId);
       }
 
-      // Get rep name if rep_id is not null
-      String repName = '';
-      if (saleRepId != null) {
-        repName = await getRepName(saleRepId);
-      }
-
-      // Get sale items
-      final saleItems = await getSaleItems(saleId);
-      final itemCount = saleItems.length;
-
       salesWithDetails.add({
         ...sale,
         'outlet_name': outletName,
         'customer_name': customerName,
-        'rep_name': repName,
-        'item_count': itemCount,
       });
     }
 
+    print('Final sales with details: $salesWithDetails');
     return salesWithDetails;
   }
 
@@ -335,57 +329,92 @@ class SyncService {
         'Supabase auth: ${supabase.auth.currentSession != null ? 'authenticated' : 'not authenticated'}',
       );
 
+      // First sync local changes to cloud
+      final db = await _dbHelper.database;
+      await db.transaction((txn) async {
+        final unsyncedSales = await txn.query(
+          'sales',
+          where: 'is_synced = ?',
+          whereArgs: [0],
+        );
+
+        // Push unsynced sales to Supabase
+        for (var saleMap in unsyncedSales) {
+          final sale = Sale.fromMap(saleMap);
+          await supabase.from('sales').upsert(sale.toMap());
+
+          // Mark as synced locally
+          await txn.update(
+            'sales',
+            {'is_synced': 1},
+            where: 'id = ?',
+            whereArgs: [sale.id],
+          );
+
+          // Also sync the sale items
+          final saleItems = await txn.query(
+            'sale_items',
+            where: 'sale_id = ?',
+            whereArgs: [sale.id],
+          );
+
+          for (var itemMap in saleItems) {
+            final item = SaleItem.fromMap(itemMap);
+            await supabase.from('sale_items').upsert(item.toCloudMap());
+
+            // Mark as synced locally
+            await txn.update(
+              'sale_items',
+              {'is_synced': 1},
+              where: 'id = ?',
+              whereArgs: [item.id],
+            );
+          }
+        }
+      });
+
       final response = await supabase.from('sales').select();
       print('Raw response: $response');
       final sales = response as List<dynamic>;
       print('Found ${sales.length} sales in cloud database');
 
-      final db = await _dbHelper.database;
+      // Use a single transaction for the entire sync operation to prevent database locking
+      await db.transaction((txn) async {
+        // First check if we have any sales in the local database
+        final localCount = Sqflite.firstIntValue(
+          await txn.rawQuery('SELECT COUNT(*) FROM sales'),
+        );
+        print('Local sales count: $localCount');
 
-      // First check if we have any sales in the local database
-      final localCount = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM sales'),
-      );
-      print('Local sales count: $localCount');
+        // Only clear and re-insert if we have data to sync or if local DB is empty
+        if (sales.isNotEmpty || localCount == 0) {
+          // Clear existing sales and sale_items within the transaction
+          await txn.delete('sale_items');
+          await txn.delete('sales');
 
-      // Only clear and re-insert if we have data to sync or if local DB is empty
-      if (sales.isNotEmpty || localCount == 0) {
-        final batch = db.batch();
-
-        // Clear existing sales and sale_items
-        batch.delete('sale_items');
-        batch.delete('sales');
-
-        // Insert new sales
-        for (final saleData in sales) {
-          try {
-            print('Processing sale: ${saleData['id']}');
-            final sale = Sale.fromMap(saleData as Map<String, dynamic>);
-            print(
-              'Mapped to Sale: ${sale.id}, outletId: ${sale.outletId}, totalAmount: ${sale.totalAmount}',
-            );
-            batch.insert('sales', sale.toMap());
-          } catch (e) {
-            print('Error processing sale ${saleData['id']}: $e');
-            print('Raw sale data: $saleData');
+          // Insert new sales
+          for (final saleData in sales) {
+            try {
+              print('Processing sale: ${saleData['id']}');
+              final sale = Sale.fromMap(saleData as Map<String, dynamic>);
+              print(
+                'Mapped to Sale: ${sale.id}, outletId: ${sale.outletId}, totalAmount: ${sale.totalAmount}',
+              );
+              await txn.insert('sales', {...sale.toMap(), 'is_synced': 1});
+            } catch (e) {
+              print('Error processing sale ${saleData['id']}: $e');
+              print('Raw sale data: $saleData');
+              // Continue with next sale instead of failing the entire transaction
+            }
           }
-        }
-
-        try {
-          await batch.commit();
           print('Successfully synced ${sales.length} sales to local database');
-        } catch (commitError) {
-          print('Error committing sales batch: $commitError');
-          rethrow;
+        } else {
+          print('No sales to sync from cloud database');
         }
+      });
 
-        // Now sync sale items for each sale
-        await syncSaleItemsToLocalDb();
-      } else {
-        print('No sales to sync from cloud database');
-        // Still try to sync sale items in case there are orphaned records
-        await syncSaleItemsToLocalDb();
-      }
+      // Sync sale items in a separate transaction
+      await syncSaleItemsToLocalDb();
     } catch (e) {
       print('Error syncing sales: $e');
       rethrow;
@@ -420,46 +449,43 @@ class SyncService {
 
       final db = await _dbHelper.database;
 
-      // First check if we have any sale items in the local database
-      final localCount = Sqflite.firstIntValue(
-        await db.rawQuery('SELECT COUNT(*) FROM sale_items'),
-      );
-      print('Local sale items count: $localCount');
+      // Use a transaction for the entire sync operation to prevent database locking
+      await db.transaction((txn) async {
+        // First check if we have any sale items in the local database
+        final localCount = Sqflite.firstIntValue(
+          await txn.rawQuery('SELECT COUNT(*) FROM sale_items'),
+        );
+        print('Local sale items count: $localCount');
 
-      // Only clear and re-insert if we have data to sync or if local DB is empty
-      if (saleItems.isNotEmpty || localCount == 0) {
-        final batch = db.batch();
+        // Only clear and re-insert if we have data to sync or if local DB is empty
+        if (saleItems.isNotEmpty || localCount == 0) {
+          // Clear existing sale items within the transaction
+          await txn.delete('sale_items');
 
-        // Clear existing sale items
-        batch.delete('sale_items');
-
-        // Insert new sale items
-        for (final itemData in saleItems) {
-          try {
-            print('Processing sale item: ${itemData['id']}');
-            final saleItem = SaleItem.fromMap(itemData as Map<String, dynamic>);
-            print(
-              'Mapped to SaleItem: ${saleItem.id}, saleId: ${saleItem.saleId}, productId: ${saleItem.productId}',
-            );
-            batch.insert('sale_items', saleItem.toMap());
-          } catch (e) {
-            print('Error processing sale item ${itemData['id']}: $e');
-            print('Raw item data: $itemData');
+          // Insert new sale items
+          for (final itemData in saleItems) {
+            try {
+              print('Processing sale item: ${itemData['id']}');
+              final saleItem =
+                  SaleItem.fromMap(itemData as Map<String, dynamic>);
+              print(
+                'Mapped to SaleItem: ${saleItem.id}, saleId: ${saleItem.saleId}, productId: ${saleItem.productId}',
+              );
+              await txn
+                  .insert('sale_items', {...saleItem.toMap(), 'is_synced': 1});
+            } catch (e) {
+              print('Error processing sale item ${itemData['id']}: $e');
+              print('Raw item data: $itemData');
+              // Continue with next item instead of failing the entire transaction
+            }
           }
-        }
-
-        try {
-          await batch.commit();
           print(
             'Successfully synced ${saleItems.length} sale items to local database',
           );
-        } catch (commitError) {
-          print('Error committing sale items batch: $commitError');
-          rethrow;
+        } else {
+          print('No sale items to sync from cloud database');
         }
-      } else {
-        print('No sale items to sync from cloud database');
-      }
+      });
     } catch (e) {
       print('Error syncing sale items: $e');
       rethrow;
@@ -485,9 +511,8 @@ class SyncService {
   Future<void> syncProfilesToLocalDb() async {
     try {
       final response = await supabase.from('profiles').select();
-      final profiles = (response as List)
-          .map((data) => Profile.fromMap(data))
-          .toList();
+      final profiles =
+          (response as List).map((data) => Profile.fromMap(data)).toList();
 
       final db = await _dbHelper.database;
       await db.transaction((txn) async {
@@ -508,8 +533,7 @@ class SyncService {
   // Outlets Sync
   Future<void> syncOutletsToLocalDb([List<Outlet>? outlets]) async {
     try {
-      final outletsToSync =
-          outlets ??
+      final outletsToSync = outlets ??
           (await supabase.from('outlets').select() as List)
               .map((data) => Outlet.fromMap(data))
               .toList();
@@ -704,38 +728,42 @@ class SyncService {
   Future<void> syncProductDistributionsToServer() async {
     try {
       final db = await _dbHelper.database;
-      final List<Map<String, dynamic>> maps = await db.query(
-        'product_distributions',
-        where: 'is_synced = ?',
-        whereArgs: [0],
-      );
 
-      final distributions = maps
-          .map((map) => ProductDistribution.fromMap(map))
-          .toList();
-
-      for (var distribution in distributions) {
-        // Upload to Supabase
-        await supabase.from('product_distributions').upsert({
-          'id': distribution.id,
-          'product_name': distribution.productName,
-          'outlet_id': distribution.outletId,
-          'outlet_name': distribution.outletName,
-          'quantity': distribution.quantity,
-          'cost_per_unit': distribution.costPerUnit,
-          'total_cost': distribution.totalCost,
-          'distribution_date': distribution.distributionDate.toIso8601String(),
-          'created_at': distribution.createdAt.toIso8601String(),
-        });
-
-        // Mark as synced in local DB
-        await db.update(
+      // Use a transaction to query unsynchronized distributions
+      await db.transaction((txn) async {
+        final List<Map<String, dynamic>> maps = await txn.query(
           'product_distributions',
-          {'is_synced': 1},
-          where: 'id = ?',
-          whereArgs: [distribution.id],
+          where: 'is_synced = ?',
+          whereArgs: [0],
         );
-      }
+
+        final distributions =
+            maps.map((map) => ProductDistribution.fromMap(map)).toList();
+
+        for (var distribution in distributions) {
+          // Upload to Supabase
+          await supabase.from('product_distributions').upsert({
+            'id': distribution.id,
+            'product_name': distribution.productName,
+            'outlet_id': distribution.outletId,
+            'outlet_name': distribution.outletName,
+            'quantity': distribution.quantity,
+            'cost_per_unit': distribution.costPerUnit,
+            'total_cost': distribution.totalCost,
+            'distribution_date':
+                distribution.distributionDate.toIso8601String(),
+            'created_at': distribution.createdAt.toIso8601String(),
+          });
+
+          // Mark as synced in local DB within the transaction
+          await txn.update(
+            'product_distributions',
+            {'is_synced': 1},
+            where: 'id = ?',
+            whereArgs: [distribution.id],
+          );
+        }
+      });
     } catch (e) {
       print('Error syncing product distributions to server: $e');
       throw e;
@@ -756,9 +784,8 @@ class SyncService {
       final List<Map<String, dynamic>> localMaps = await db.query(
         'product_distributions',
       );
-      final localDistributions = localMaps
-          .map((map) => ProductDistribution.fromMap(map))
-          .toList();
+      final localDistributions =
+          localMaps.map((map) => ProductDistribution.fromMap(map)).toList();
 
       // Create a map of local distributions by ID for easy lookup
       final Map<String, ProductDistribution> localDistributionsMap = {
@@ -866,10 +893,10 @@ class SyncService {
 
       final stockIntakeService = StockIntakeService();
 
-      // Prepare balance updates outside the transaction
-      final balanceUpdates = <Future<void>>[];
+      // Create a list to track all balance updates needed
+      final List<Map<String, dynamic>> balanceUpdateData = [];
 
-      // Update local database
+      // First transaction: Update products table
       await db.transaction((txn) async {
         for (var product in products) {
           // Check if product exists and quantity has changed
@@ -883,84 +910,63 @@ class SyncService {
               final quantityDifference =
                   product.quantity - existingProduct.quantity;
 
-              // Queue balance update
-              final outletName = await getOutletName(product.outletId);
-              balanceUpdates.add(
-                stockIntakeService.updateBalanceOnProductAssignment(
-                  product.productName,
-                  quantityDifference,
-                  product.outletId,
-                  outletName,
-                  product.costPerUnit,
-                ),
-              );
+              // Add to balance update data list
+              balanceUpdateData.add({
+                'productName': product.productName,
+                'quantity': quantityDifference,
+                'outletId': product.outletId,
+                'costPerUnit': product.costPerUnit,
+              });
             }
             // If product name has changed, treat as deletion of old and addition of new
             else if (existingProduct.productName != product.productName) {
-              // Queue removal of old product quantity from balance
-              final existingOutletName = await getOutletName(
-                existingProduct.outletId,
-              );
-              balanceUpdates.add(
-                stockIntakeService.updateBalanceOnProductAssignment(
-                  existingProduct.productName,
-                  -existingProduct.quantity,
-                  existingProduct.outletId,
-                  existingOutletName,
-                  existingProduct.costPerUnit,
-                ),
-              );
+              // Add removal of old product quantity to balance update data
+              balanceUpdateData.add({
+                'productName': existingProduct.productName,
+                'quantity': -existingProduct.quantity,
+                'outletId': existingProduct.outletId,
+                'costPerUnit': existingProduct.costPerUnit,
+              });
 
-              // Queue new product quantity balance update
-              final outletName = await getOutletName(product.outletId);
-              balanceUpdates.add(
-                stockIntakeService.updateBalanceOnProductAssignment(
-                  product.productName,
-                  product.quantity,
-                  product.outletId,
-                  outletName,
-                  product.costPerUnit,
-                ),
-              );
+              // Add new product quantity to balance update data
+              balanceUpdateData.add({
+                'productName': product.productName,
+                'quantity': product.quantity,
+                'outletId': product.outletId,
+                'costPerUnit': product.costPerUnit,
+              });
             }
           }
-          // New product, queue its quantity balance update
+          // New product, add its quantity to balance update data
           else {
-            final outletName = await getOutletName(product.outletId);
-            balanceUpdates.add(
-              stockIntakeService.updateBalanceOnProductAssignment(
-                product.productName,
-                product.quantity,
-                product.outletId,
-                outletName,
-                product.costPerUnit,
-              ),
-            );
+            balanceUpdateData.add({
+              'productName': product.productName,
+              'quantity': product.quantity,
+              'outletId': product.outletId,
+              'costPerUnit': product.costPerUnit,
+            });
           }
 
           // Insert or update the product
-          await txn.insert('products', {
-            ...product.toMap(),
-            'is_synced': 1,
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
+          await txn.insert(
+              'products',
+              {
+                ...product.toMap(),
+                'is_synced': 1,
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace);
         }
 
         // Handle deleted products (products that exist locally but not in the server response)
         for (var existingProduct in existingProducts.values) {
           if (!products.any((p) => p.id == existingProduct.id)) {
-            // Queue removal of deleted product's quantity from balance
-            final existingOutletName = await getOutletName(
-              existingProduct.outletId,
-            );
-            balanceUpdates.add(
-              stockIntakeService.updateBalanceOnProductAssignment(
-                existingProduct.productName,
-                -existingProduct.quantity,
-                existingProduct.outletId,
-                existingOutletName,
-                existingProduct.costPerUnit,
-              ),
-            );
+            // Add removal of deleted product's quantity to balance update data
+            balanceUpdateData.add({
+              'productName': existingProduct.productName,
+              'quantity': -existingProduct.quantity,
+              'outletId': existingProduct.outletId,
+              'costPerUnit': existingProduct.costPerUnit,
+            });
 
             // Delete the product locally
             await txn.delete(
@@ -972,8 +978,19 @@ class SyncService {
         }
       });
 
-      // Execute all balance updates after the transaction is complete
-      await Future.wait(balanceUpdates);
+      // Process all balance updates one by one to prevent locking
+      for (var updateData in balanceUpdateData) {
+        final outletName = await getOutletName(updateData['outletId']);
+        // Process each balance update without wrapping in a transaction
+        // since updateBalanceOnProductAssignment already performs its own DB operations
+        await stockIntakeService.updateBalanceOnProductAssignment(
+          updateData['productName'],
+          updateData['quantity'],
+          updateData['outletId'],
+          outletName,
+          updateData['costPerUnit'],
+        );
+      }
     } catch (e) {
       print('Error syncing products: $e');
       throw e;
@@ -983,10 +1000,8 @@ class SyncService {
   // Reps Sync
   Future<void> syncRepsToLocalDb() async {
     try {
-      final response = await supabase
-          .from('profiles')
-          .select()
-          .eq('role', 'rep');
+      final response =
+          await supabase.from('profiles').select().eq('role', 'rep');
       final reps = (response as List).map((data) => Rep.fromMap(data)).toList();
 
       final db = await _dbHelper.database;
@@ -1075,47 +1090,62 @@ class SyncService {
 
   // Sync All Data
   Future<void> syncAll() async {
-    await syncProfilesToLocalDb();
-    await syncOutletsToLocalDb();
-    await syncProductsToLocalDb();
-    await syncRepsToLocalDb();
-    await syncCustomersToLocalDb();
-    await syncSalesToLocalDb();
-    await syncStockBalancesToLocalDb();
-    await syncProductDistributionsFromServer();
-    await syncProductDistributionsToServer();
+    try {
+      // Sync user and outlet data
+      await syncProfilesToLocalDb();
+      await syncOutletsToLocalDb();
+      await syncRepsToLocalDb();
+      await syncCustomersToLocalDb();
+
+      // Sync product data with proper transaction handling
+      await syncProductsToLocalDb();
+
+      // Sync sales data with proper transaction handling
+      await syncSalesToLocalDb();
+
+      // Sync stock-related data
+      await syncStockBalancesToLocalDb();
+      await syncProductDistributionsFromServer();
+      await syncProductDistributionsToServer();
+    } catch (e) {
+      print('Error in syncAll: $e');
+      throw e;
+    }
   }
 
   // Customers Sync
   Future<void> syncCustomersToLocalDb() async {
     try {
-      // Get all local customers that need syncing
       final db = await _dbHelper.database;
-      final unsyncedCustomers = await db.query(
-        'customers',
-        where: 'is_synced = ?',
-        whereArgs: [0],
-      );
 
-      // Push unsynced customers to Supabase
-      for (var customerMap in unsyncedCustomers) {
-        await supabase.from('customers').upsert({
-          'id': customerMap['id'],
-          'full_name': customerMap['full_name'],
-          'phone': customerMap['phone'],
-          'outlet_id': customerMap['outlet_id'],
-          'total_outstanding': customerMap['total_outstanding'],
-          'created_at': customerMap['created_at'],
-        });
-
-        // Mark as synced locally
-        await db.update(
+      // First sync local changes to cloud in a transaction
+      await db.transaction((txn) async {
+        final unsyncedCustomers = await txn.query(
           'customers',
-          {'is_synced': 1},
-          where: 'id = ?',
-          whereArgs: [customerMap['id']],
+          where: 'is_synced = ?',
+          whereArgs: [0],
         );
-      }
+
+        // Push unsynced customers to Supabase
+        for (var customerMap in unsyncedCustomers) {
+          await supabase.from('customers').upsert({
+            'id': customerMap['id'],
+            'full_name': customerMap['full_name'],
+            'phone': customerMap['phone'],
+            'outlet_id': customerMap['outlet_id'],
+            'total_outstanding': customerMap['total_outstanding'],
+            'created_at': customerMap['created_at'],
+          });
+
+          // Mark as synced locally
+          await txn.update(
+            'customers',
+            {'is_synced': 1},
+            where: 'id = ?',
+            whereArgs: [customerMap['id']],
+          );
+        }
+      });
 
       // Pull latest customers from Supabase
       final response = await supabase.from('customers').select();
@@ -1124,15 +1154,18 @@ class SyncService {
       // Update local database
       await db.transaction((txn) async {
         for (var customerData in customers) {
-          await txn.insert('customers', {
-            'id': customerData['id'],
-            'full_name': customerData['full_name'],
-            'phone': customerData['phone'],
-            'outlet_id': customerData['outlet_id'],
-            'total_outstanding': customerData['total_outstanding'],
-            'created_at': customerData['created_at'],
-            'is_synced': 1,
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
+          await txn.insert(
+              'customers',
+              {
+                'id': customerData['id'],
+                'full_name': customerData['full_name'],
+                'phone': customerData['phone'],
+                'outlet_id': customerData['outlet_id'],
+                'total_outstanding': customerData['total_outstanding'],
+                'created_at': customerData['created_at'],
+                'is_synced': 1,
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
     } catch (e) {
@@ -1167,12 +1200,15 @@ class SyncService {
   }) async {
     try {
       final db = await _dbHelper.database;
-      await db.insert('sync_queue', {
-        'table_name': table,
-        'record_id': id,
-        'is_delete': isDelete ? 1 : 0,
-        'created_at': DateTime.now().toIso8601String(),
-      }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await db.insert(
+          'sync_queue',
+          {
+            'table_name': table,
+            'record_id': id,
+            'is_delete': isDelete ? 1 : 0,
+            'created_at': DateTime.now().toIso8601String(),
+          },
+          conflictAlgorithm: ConflictAlgorithm.replace);
     } catch (e) {
       print('Error marking for sync: $e');
       throw e;
@@ -1220,10 +1256,44 @@ class SyncService {
 
   Future<void> syncStockBalancesToLocalDb() async {
     try {
+      final db = await _dbHelper.database;
+
+      // First sync local changes to cloud in a transaction
+      await db.transaction((txn) async {
+        final unsyncedBalances = await txn.query(
+          'stock_balances',
+          where: 'synced = ?',
+          whereArgs: [0],
+        );
+
+        // Push unsynced balances to Supabase
+        for (var balanceMap in unsyncedBalances) {
+          await supabase.from('stock_balances').upsert({
+            'id': balanceMap['id'],
+            'outlet_id': balanceMap['outlet_id'],
+            'product_id': balanceMap['product_id'],
+            'given_quantity': balanceMap['given_quantity'],
+            'sold_quantity': balanceMap['sold_quantity'],
+            'balance_quantity': balanceMap['balance_quantity'],
+            'last_updated': balanceMap['last_updated'],
+            'created_at': balanceMap['created_at']
+          });
+
+          // Mark as synced locally
+          await txn.update(
+            'stock_balances',
+            {'synced': 1},
+            where: 'id = ?',
+            whereArgs: [balanceMap['id']],
+          );
+        }
+      });
+
+      // Pull latest balances from Supabase
       final response = await supabase.from('stock_balances').select();
       final stockBalances = response as List<dynamic>;
 
-      final db = await _dbHelper.database;
+      // Update local database in a separate transaction
       await db.transaction((txn) async {
         // Create stock_balances table if it doesn't exist
         await txn.execute('''
@@ -1245,17 +1315,20 @@ class SyncService {
 
         // Insert new stock balances
         for (var stockData in stockBalances) {
-          await txn.insert('stock_balances', {
-            'id': stockData['id'],
-            'outlet_id': stockData['outlet_id'],
-            'product_id': stockData['product_id'],
-            'given_quantity': stockData['given_quantity'],
-            'sold_quantity': stockData['sold_quantity'] ?? 0,
-            'balance_quantity': stockData['balance_quantity'],
-            'last_updated': stockData['last_updated'],
-            'created_at': stockData['created_at'],
-            'synced': 1,
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
+          await txn.insert(
+              'stock_balances',
+              {
+                'id': stockData['id'],
+                'outlet_id': stockData['outlet_id'],
+                'product_id': stockData['product_id'],
+                'given_quantity': stockData['given_quantity'],
+                'sold_quantity': stockData['sold_quantity'] ?? 0,
+                'balance_quantity': stockData['balance_quantity'],
+                'last_updated': stockData['last_updated'],
+                'created_at': stockData['created_at'],
+                'synced': 1,
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
     } catch (e) {
@@ -1346,6 +1419,84 @@ class SyncService {
     }
   }
 
+  Future<void> syncStockIntakesToLocalDb() async {
+    try {
+      final db = await _dbHelper.database;
+
+      // First sync local changes to cloud in a transaction
+      await db.transaction((txn) async {
+        final unsyncedIntakes = await txn.query(
+          'stock_intake',
+          where: 'is_synced = ?',
+          whereArgs: [0],
+        );
+
+        // Push unsynced intakes to Supabase
+        for (var intakeMap in unsyncedIntakes) {
+          final intake = ProductDistribution.fromMap(intakeMap);
+          await supabase.from('stock_intake').upsert(intake.toMap());
+
+          // Mark as synced locally
+          await txn.update(
+            'stock_intake',
+            {'is_synced': 1},
+            where: 'id = ?',
+            whereArgs: [intake.id],
+          );
+        }
+      });
+
+      // Pull latest intakes from Supabase
+      final response = await supabase.from('stock_intake').select();
+      final intakes = (response as List)
+          .map((data) => ProductDistribution.fromMap(data))
+          .toList();
+
+      // Update local database in a transaction
+      await db.transaction((txn) async {
+        // Clear existing intakes
+        await txn.delete('stock_intake');
+
+        // Insert new intakes
+        for (var intake in intakes) {
+          await txn.insert(
+            'stock_intake',
+            {
+              ...intake.toMap(),
+              'is_synced': 1,
+            },
+          );
+        }
+      });
+
+      // Also sync intake balances
+      final balanceResponse = await supabase.from('intake_balances').select();
+      final balances = (balanceResponse as List)
+          .map((data) => ProductDistribution.fromMap(data))
+          .toList();
+
+      // Use a separate transaction for intake balances
+      await db.transaction((txn) async {
+        // Clear existing balances
+        await txn.delete('intake_balances');
+
+        // Insert new balances
+        for (var balance in balances) {
+          await txn.insert(
+            'intake_balances',
+            {
+              ...balance.toMap(),
+              'is_synced': 1,
+            },
+          );
+        }
+      });
+    } catch (e) {
+      print('Error syncing stock intakes: $e');
+      throw e;
+    }
+  }
+
   Future<void> syncStockIntakesFromSupabase() async {
     try {
       final response = await supabase.from('stock_intake').select();
@@ -1371,18 +1522,21 @@ class SyncService {
 
         // Insert stock intakes
         for (final intakeData in stockIntakes) {
-          await txn.insert('stock_intake', {
-            'id': intakeData['id'],
-            'product_name': intakeData['product_name'],
-            'quantity_received': intakeData['quantity_received'],
-            'unit': intakeData['unit'],
-            'cost_per_unit': intakeData['cost_per_unit'],
-            'total_cost': intakeData['total_cost'],
-            'description': intakeData['description'],
-            'date_received': intakeData['date_received'],
-            'created_at': intakeData['created_at'],
-            'is_synced': 1,
-          }, conflictAlgorithm: ConflictAlgorithm.replace);
+          await txn.insert(
+              'stock_intake',
+              {
+                'id': intakeData['id'],
+                'product_name': intakeData['product_name'],
+                'quantity_received': intakeData['quantity_received'],
+                'unit': intakeData['unit'],
+                'cost_per_unit': intakeData['cost_per_unit'],
+                'total_cost': intakeData['total_cost'],
+                'description': intakeData['description'],
+                'date_received': intakeData['date_received'],
+                'created_at': intakeData['created_at'],
+                'is_synced': 1,
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace);
         }
       });
     } catch (e) {

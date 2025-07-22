@@ -169,8 +169,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
       var filteredProducts = _products.where((product) {
         if (_searchQuery.isNotEmpty) {
           return product.productName.toLowerCase().contains(
-            _searchQuery.toLowerCase(),
-          );
+                _searchQuery.toLowerCase(),
+              );
         }
         return true;
       }).toList();
@@ -244,8 +244,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
     var filteredProducts = _products.where((product) {
       if (_searchQuery.isNotEmpty) {
         return product.productName.toLowerCase().contains(
-          _searchQuery.toLowerCase(),
-        );
+              _searchQuery.toLowerCase(),
+            );
       }
       return true;
     }).toList();
@@ -384,8 +384,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
     var filteredProducts = _products.where((product) {
       if (_searchQuery.isNotEmpty) {
         return product.productName.toLowerCase().contains(
-          _searchQuery.toLowerCase(),
-        );
+              _searchQuery.toLowerCase(),
+            );
       }
       return true;
     }).toList();
@@ -560,9 +560,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                         ),
                                         contentPadding:
                                             const EdgeInsets.symmetric(
-                                              horizontal: 16,
-                                              vertical: 8,
-                                            ),
+                                          horizontal: 16,
+                                          vertical: 8,
+                                        ),
                                       ),
                                       items: [
                                         const DropdownMenuItem(
@@ -717,8 +717,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                             'Clear Filter',
                                             style: TextStyle(color: Colors.red),
                                           ),
-                                          backgroundColor: Colors.red
-                                              .withOpacity(0.1),
+                                          backgroundColor:
+                                              Colors.red.withOpacity(0.1),
                                           onPressed: _clearDateFilter,
                                         ),
                                       ),
@@ -1009,9 +1009,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
                 Text(
                   'Select Date Range',
                   style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                    fontWeight: FontWeight.bold,
-                    color: Theme.of(context).colorScheme.primary,
-                  ),
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
                 ),
                 const SizedBox(height: 16),
                 SizedBox(
@@ -1025,8 +1025,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
                     ),
                     value:
                         _selectedStartDate != null && _selectedEndDate != null
-                        ? [_selectedStartDate!, _selectedEndDate!]
-                        : [],
+                            ? [_selectedStartDate!, _selectedEndDate!]
+                            : [],
                     onValueChanged: (dates) {
                       if (dates.isNotEmpty &&
                           dates.length >= 2 &&
