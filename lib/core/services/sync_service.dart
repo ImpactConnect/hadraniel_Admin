@@ -55,9 +55,11 @@ class SyncService {
         s.amount_paid,
         s.outstanding_amount,
         s.is_paid,
-        COUNT(si.id) as item_count
+        COUNT(si.id) as item_count,
+        GROUP_CONCAT(p.product_name, ', ') as product_names
       FROM sales s
       LEFT JOIN sale_items si ON si.sale_id = s.id
+      LEFT JOIN products p ON si.product_id = p.id
       WHERE 1=1
     ''';
 

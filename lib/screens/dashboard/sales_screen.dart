@@ -441,11 +441,10 @@ class _SalesScreenState extends State<SalesScreen> {
                                 Expanded(flex: 2, child: _buildFlexHeaderCell('Date')),
                                 Expanded(flex: 2, child: _buildFlexHeaderCell('Outlet')),
                                 Expanded(flex: 2, child: _buildFlexHeaderCell('Customer')),
-                                Expanded(flex: 2, child: _buildFlexHeaderCell('Rep')),
+                                Expanded(flex: 3, child: _buildFlexHeaderCell('Product Name')),
                                 Expanded(flex: 1, child: _buildFlexHeaderCell('Items')),
                                 Expanded(flex: 2, child: _buildFlexHeaderCell('Total Amount')),
                                 Expanded(flex: 2, child: _buildFlexHeaderCell('Amount Paid')),
-                                Expanded(flex: 2, child: _buildFlexHeaderCell('Outstanding')),
                                 Expanded(flex: 1, child: _buildFlexHeaderCell('Status')),
                               ],
                             ),
@@ -493,9 +492,9 @@ class _SalesScreenState extends State<SalesScreen> {
                                         ),
                                       ),
                                       Expanded(
-                                        flex: 2,
+                                        flex: 3,
                                         child: _buildFlexCell(
-                                          sale['rep_name'] ?? 'N/A',
+                                          sale['product_names'] ?? 'N/A',
                                         ),
                                       ),
                                       Expanded(
@@ -518,17 +517,6 @@ class _SalesScreenState extends State<SalesScreen> {
                                           currencyFormat.format(
                                             sale['amount_paid'] ?? 0,
                                           ),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        flex: 2,
-                                        child: _buildFlexCell(
-                                          currencyFormat.format(
-                                            sale['outstanding_amount'] ?? 0,
-                                          ),
-                                          textColor: sale['is_paid'] == 1
-                                              ? Colors.green
-                                              : Colors.orange,
                                         ),
                                       ),
                                       Expanded(
