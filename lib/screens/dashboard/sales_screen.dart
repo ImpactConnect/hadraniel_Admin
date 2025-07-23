@@ -1,5 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'dart:io';
+import 'package:path_provider/path_provider.dart';
+import 'package:csv/csv.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:intl/intl.dart';
 import '../../widgets/dashboard_layout.dart';
 import '../../core/services/sync_service.dart';
 import '../../core/models/outlet_model.dart';
@@ -31,6 +37,8 @@ class _SalesScreenState extends State<SalesScreen> {
   String? _selectedOutletId;
   String? _selectedRepId;
   String? _selectedProductId;
+  DateTime? _customStartDate;
+  DateTime? _customEndDate;
 
   // Lists for dropdowns
   List<Outlet> _outlets = [];
@@ -86,36 +94,42 @@ class _SalesScreenState extends State<SalesScreen> {
     DateTime? startDate;
     DateTime? endDate;
 
-    // Set date range based on selected filter
-    final now = DateTime.now();
-    switch (_selectedDateFilter) {
-      case 'Today':
-        startDate = DateTime(now.year, now.month, now.day);
-        endDate = startDate.add(const Duration(days: 1));
-        break;
-      case 'Yesterday':
-        startDate = DateTime(now.year, now.month, now.day - 1);
-        endDate = DateTime(now.year, now.month, now.day);
-        break;
-      case 'Last 7 Days':
-        startDate = DateTime(now.year, now.month, now.day - 7);
-        endDate = DateTime(now.year, now.month, now.day + 1);
-        break;
-      case 'This Month':
-        startDate = DateTime(now.year, now.month, 1);
-        endDate = (now.month < 12)
-            ? DateTime(now.year, now.month + 1, 1)
-            : DateTime(now.year + 1, 1, 1);
-        break;
-      case 'Last Month':
-        startDate = (now.month > 1)
-            ? DateTime(now.year, now.month - 1, 1)
-            : DateTime(now.year - 1, 12, 1);
-        endDate = DateTime(now.year, now.month, 1);
-        break;
-      default: // All Time
-        startDate = null;
-        endDate = null;
+    // Use custom date range if available
+    if (_customStartDate != null && _customEndDate != null) {
+      startDate = _customStartDate;
+      endDate = _customEndDate;
+    } else {
+      // Set date range based on selected filter
+      final now = DateTime.now();
+      switch (_selectedDateFilter) {
+        case 'Today':
+          startDate = DateTime(now.year, now.month, now.day);
+          endDate = startDate.add(const Duration(days: 1));
+          break;
+        case 'Yesterday':
+          startDate = DateTime(now.year, now.month, now.day - 1);
+          endDate = DateTime(now.year, now.month, now.day);
+          break;
+        case 'Last 7 Days':
+          startDate = DateTime(now.year, now.month, now.day - 7);
+          endDate = DateTime(now.year, now.month, now.day + 1);
+          break;
+        case 'This Month':
+          startDate = DateTime(now.year, now.month, 1);
+          endDate = (now.month < 12)
+              ? DateTime(now.year, now.month + 1, 1)
+              : DateTime(now.year + 1, 1, 1);
+          break;
+        case 'Last Month':
+          startDate = (now.month > 1)
+              ? DateTime(now.year, now.month - 1, 1)
+              : DateTime(now.year - 1, 12, 1);
+          endDate = DateTime(now.year, now.month, 1);
+          break;
+        default: // All Time
+          startDate = null;
+          endDate = null;
+      }
     }
 
     // Get sales with applied filters
@@ -142,6 +156,33 @@ class _SalesScreenState extends State<SalesScreen> {
     return DashboardLayout(
       title: 'Sales',
       actions: [
+        PopupMenuButton<String>(
+          icon: const Icon(Icons.file_download),
+          tooltip: 'Export',
+          onSelected: (String value) {
+            if (value == 'csv') {
+              _exportToCSV();
+            } else if (value == 'pdf') {
+              _exportToPDF();
+            }
+          },
+          itemBuilder: (BuildContext context) => <PopupMenuEntry<String>>[
+            const PopupMenuItem<String>(
+              value: 'csv',
+              child: ListTile(
+                leading: Icon(Icons.table_chart),
+                title: Text('Export as CSV'),
+              ),
+            ),
+            const PopupMenuItem<String>(
+              value: 'pdf',
+              child: ListTile(
+                leading: Icon(Icons.picture_as_pdf),
+                title: Text('Export as PDF'),
+              ),
+            ),
+          ],
+        ),
         IconButton(
           icon: const Icon(Icons.refresh),
           onPressed: _loadData,
@@ -158,9 +199,11 @@ class _SalesScreenState extends State<SalesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        _buildFilters(),
+        const SizedBox(height: 24),
         _buildMetricsCards(),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
+        _buildFilters(),
+        const SizedBox(height: 20),
         Expanded(child: _buildSalesTable()),
       ],
     );
@@ -185,20 +228,19 @@ class _SalesScreenState extends State<SalesScreen> {
               DropdownButton<String>(
                 value: _selectedDateFilter,
                 hint: const Text('Date Range'),
-                items:
-                    [
-                      'All Time',
-                      'Today',
-                      'Yesterday',
-                      'Last 7 Days',
-                      'This Month',
-                      'Last Month',
-                    ].map((String value) {
-                      return DropdownMenuItem<String>(
-                        value: value,
-                        child: Text(value),
-                      );
-                    }).toList(),
+                items: [
+                  'All Time',
+                  'Today',
+                  'Yesterday',
+                  'Last 7 Days',
+                  'This Month',
+                  'Last Month',
+                ].map((String value) {
+                  return DropdownMenuItem<String>(
+                    value: value,
+                    child: Text(value),
+                  );
+                }).toList(),
                 onChanged: (newValue) {
                   setState(() {
                     _selectedDateFilter = newValue!;
@@ -287,6 +329,17 @@ class _SalesScreenState extends State<SalesScreen> {
                 },
               ),
 
+              // Calendar date range filter
+              ElevatedButton.icon(
+                onPressed: _showDateRangePicker,
+                icon: const Icon(Icons.calendar_today),
+                label: Text(_getDateRangeText()),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade100,
+                  foregroundColor: Colors.blue.shade900,
+                ),
+              ),
+
               // Clear filters button
               ElevatedButton.icon(
                 onPressed: () {
@@ -295,6 +348,8 @@ class _SalesScreenState extends State<SalesScreen> {
                     _selectedOutletId = null;
                     _selectedRepId = null;
                     _selectedProductId = null;
+                    _customStartDate = null;
+                    _customEndDate = null;
                   });
                   _applyFilters().then((_) {
                     setState(() {});
@@ -438,14 +493,29 @@ class _SalesScreenState extends State<SalesScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             child: Row(
                               children: [
-                                Expanded(flex: 2, child: _buildFlexHeaderCell('Date')),
-                                Expanded(flex: 2, child: _buildFlexHeaderCell('Outlet')),
-                                Expanded(flex: 2, child: _buildFlexHeaderCell('Customer')),
-                                Expanded(flex: 3, child: _buildFlexHeaderCell('Product Name')),
-                                Expanded(flex: 1, child: _buildFlexHeaderCell('Items')),
-                                Expanded(flex: 2, child: _buildFlexHeaderCell('Total Amount')),
-                                Expanded(flex: 2, child: _buildFlexHeaderCell('Amount Paid')),
-                                Expanded(flex: 1, child: _buildFlexHeaderCell('Status')),
+                                Expanded(
+                                    flex: 2,
+                                    child: _buildFlexHeaderCell('Date')),
+                                Expanded(
+                                    flex: 2,
+                                    child: _buildFlexHeaderCell('Outlet')),
+                                Expanded(
+                                    flex: 2,
+                                    child: _buildFlexHeaderCell('Customer')),
+                                Expanded(
+                                    flex: 3,
+                                    child:
+                                        _buildFlexHeaderCell('Product Name')),
+                                Expanded(
+                                    flex: 1,
+                                    child: _buildFlexHeaderCell('Items')),
+                                Expanded(
+                                    flex: 2,
+                                    child:
+                                        _buildFlexHeaderCell('Total Amount')),
+                                Expanded(
+                                    flex: 2,
+                                    child: _buildFlexHeaderCell('Amount Paid')),
                               ],
                             ),
                           ),
@@ -461,76 +531,64 @@ class _SalesScreenState extends State<SalesScreen> {
                                   symbol: '₦',
                                 );
 
-                                return Container(
-                                  color: isEven
-                                      ? Colors.grey.shade50
-                                      : Colors.white,
-                                  child: Row(
-                                    children: [
-                                      Expanded(
-                                        flex: 2,
-                                        child: _buildFlexCell(
-                                          sale['created_at'] != null
-                                              ? dateFormat.format(
-                                                  DateTime.parse(
-                                                    sale['created_at'],
-                                                  ),
-                                                )
-                                              : 'N/A',
-                                        ),
-                                      ),
-                                      Expanded(
-                                        flex: 2,
-                                        child: _buildFlexCell(
-                                          sale['outlet_name'] ?? 'Unknown',
-                                        ),
-                                      ),
-                                      Expanded(
-                                        flex: 2,
-                                        child: _buildFlexCell(
-                                          sale['customer_name'] ?? 'Walk-in',
-                                        ),
-                                      ),
-                                      Expanded(
-                                        flex: 3,
-                                        child: _buildFlexCell(
-                                          sale['product_names'] ?? 'N/A',
-                                        ),
-                                      ),
-                                      Expanded(
-                                        flex: 1,
-                                        child: _buildFlexCell(
-                                          sale['item_count'].toString(),
-                                        ),
-                                      ),
-                                      Expanded(
-                                        flex: 2,
-                                        child: _buildFlexCell(
-                                          currencyFormat.format(
-                                            sale['total_amount'] ?? 0,
+                                return InkWell(
+                                  onTap: () => _showSaleDetails(sale),
+                                  child: Container(
+                                    color: isEven
+                                        ? Colors.grey.shade50
+                                        : Colors.white,
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          flex: 2,
+                                          child: _buildFlexCell(
+                                            sale['created_at'] != null
+                                                ? dateFormat.format(
+                                                    DateTime.parse(
+                                                      sale['created_at'],
+                                                    ),
+                                                  )
+                                                : 'N/A',
                                           ),
                                         ),
-                                      ),
-                                      Expanded(
-                                        flex: 2,
-                                        child: _buildFlexCell(
-                                          currencyFormat.format(
-                                            sale['amount_paid'] ?? 0,
+                                        Expanded(
+                                          flex: 2,
+                                          child: _buildFlexCell(
+                                            sale['outlet_name'] ?? 'Unknown',
                                           ),
                                         ),
-                                      ),
-                                      Expanded(
-                                        flex: 1,
-                                        child: _buildFlexCell(
-                                          sale['is_paid'] == 1
-                                              ? 'Paid'
-                                              : 'Unpaid',
-                                          textColor: sale['is_paid'] == 1
-                                              ? Colors.green
-                                              : Colors.orange,
+                                        Expanded(
+                                          flex: 2,
+                                          child: _buildFlexCell(
+                                            sale['customer_name'] ?? 'Walk-in',
+                                          ),
                                         ),
-                                      ),
-                                    ],
+                                        Expanded(
+                                          flex: 3,
+                                          child: _buildProductCell(sale),
+                                        ),
+                                        Expanded(
+                                          flex: 1,
+                                          child: _buildQuantityCell(sale),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: _buildFlexCell(
+                                            currencyFormat.format(
+                                              sale['total_amount'] ?? 0,
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: _buildFlexCell(
+                                            currencyFormat.format(
+                                              sale['amount_paid'] ?? 0,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
                                   ),
                                 );
                               },
@@ -583,8 +641,7 @@ class _SalesScreenState extends State<SalesScreen> {
     return Container(
       width: width,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
-      child:
-          widget ??
+      child: widget ??
           Text(
             text,
             style: TextStyle(color: textColor),
@@ -600,14 +657,333 @@ class _SalesScreenState extends State<SalesScreen> {
   }) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
-      child:
-          widget ??
+      child: widget ??
           Text(
             text,
             style: TextStyle(color: textColor),
             overflow: TextOverflow.ellipsis,
           ),
     );
+  }
+
+  Widget _buildProductCell(Map<String, dynamic> sale) {
+    final productNames = sale['product_names'] as String? ?? 'N/A';
+    final products = productNames.split(', ');
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+      child: products.length > 1
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: products
+                  .map((product) => Text(
+                        product.trim(),
+                        style: const TextStyle(fontSize: 12),
+                        overflow: TextOverflow.ellipsis,
+                      ))
+                  .toList(),
+            )
+          : Text(
+              productNames,
+              overflow: TextOverflow.ellipsis,
+            ),
+    );
+  }
+
+  Widget _buildQuantityCell(Map<String, dynamic> sale) {
+    final productNames = sale['product_names'] as String? ?? 'N/A';
+    final products = productNames.split(', ');
+    final itemCount = sale['item_count'] ?? 0;
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+      child: products.length > 1
+          ? Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: List.generate(
+                  products.length,
+                  (index) => Text(
+                        '${(itemCount / products.length).round()}',
+                        style: const TextStyle(fontSize: 12),
+                      )),
+            )
+          : Text(
+              itemCount.toString(),
+            ),
+    );
+  }
+
+  String _getDateRangeText() {
+    if (_customStartDate != null && _customEndDate != null) {
+      final dateFormat = DateFormat('MMM d, yyyy');
+      return '${dateFormat.format(_customStartDate!)} - ${dateFormat.format(_customEndDate!)}';
+    }
+    return 'Custom Date Range';
+  }
+
+  Future<void> _showDateRangePicker() async {
+    final DateTimeRange? picked = await showDialog<DateTimeRange>(
+      context: context,
+      builder: (BuildContext context) {
+        return Dialog(
+          child: Container(
+            width: 400,
+            height: 500,
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'Select Date Range',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: CalendarDatePicker(
+                    initialDate: _customStartDate ?? DateTime.now(),
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                    onDateChanged: (date) {
+                      // This will be handled by the date range picker
+                    },
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    TextButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      child: const Text('Cancel'),
+                    ),
+                    ElevatedButton(
+                      onPressed: () async {
+                        final range = await showDateRangePicker(
+                          context: context,
+                          firstDate: DateTime(2020),
+                          lastDate: DateTime.now(),
+                          initialDateRange:
+                              _customStartDate != null && _customEndDate != null
+                                  ? DateTimeRange(
+                                      start: _customStartDate!,
+                                      end: _customEndDate!)
+                                  : null,
+                        );
+                        Navigator.of(context).pop(range);
+                      },
+                      child: const Text('Select Range'),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (picked != null) {
+      setState(() {
+        _customStartDate = picked.start;
+        _customEndDate = picked.end;
+        _selectedDateFilter = 'Custom';
+      });
+      await _applyFilters();
+      setState(() {});
+    }
+  }
+
+  Future<void> _exportToCSV() async {
+    try {
+      final csvData = _generateCSVList();
+      final csvString = const ListToCsvConverter().convert(csvData);
+
+      // Get downloads directory
+      Directory? downloadsDir;
+      if (Platform.isWindows) {
+        final userProfile = Platform.environment['USERPROFILE'];
+        if (userProfile != null) {
+          downloadsDir = Directory('$userProfile\\Downloads');
+        }
+      } else {
+        downloadsDir = await getDownloadsDirectory();
+      }
+
+      if (downloadsDir == null || !await downloadsDir.exists()) {
+        downloadsDir = await getApplicationDocumentsDirectory();
+      }
+
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final fileName = 'sales_export_$timestamp.csv';
+      final file = File('${downloadsDir.path}/$fileName');
+
+      await file.writeAsString(csvString);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('CSV exported successfully to ${file.path}'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Export failed: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _exportToPDF() async {
+    try {
+      final pdf = pw.Document();
+      final csvData = _generateCSVList();
+
+      pdf.addPage(
+        pw.MultiPage(
+          pageFormat: PdfPageFormat.a4.landscape,
+          margin: const pw.EdgeInsets.all(20),
+          build: (pw.Context context) {
+            return [
+              pw.Header(
+                level: 0,
+                child: pw.Text(
+                  'Sales Export Report',
+                  style: pw.TextStyle(
+                    fontSize: 24,
+                    fontWeight: pw.FontWeight.bold,
+                  ),
+                ),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Text(
+                'Generated on: ${DateFormat('MMMM d, yyyy h:mm a').format(DateTime.now())}',
+                style: const pw.TextStyle(fontSize: 12),
+              ),
+              pw.SizedBox(height: 20),
+              pw.Table.fromTextArray(
+                context: context,
+                data: csvData,
+                headerStyle: pw.TextStyle(
+                  fontWeight: pw.FontWeight.bold,
+                  fontSize: 10,
+                ),
+                cellStyle: const pw.TextStyle(fontSize: 9),
+                headerDecoration: const pw.BoxDecoration(
+                  color: PdfColors.grey300,
+                ),
+                cellHeight: 25,
+                cellAlignments: {
+                  0: pw.Alignment.centerLeft,
+                  1: pw.Alignment.centerLeft,
+                  2: pw.Alignment.centerLeft,
+                  3: pw.Alignment.centerLeft,
+                  4: pw.Alignment.centerLeft,
+                  5: pw.Alignment.centerRight,
+                  6: pw.Alignment.centerRight,
+                },
+              ),
+            ];
+          },
+        ),
+      );
+
+      // Get downloads directory
+      Directory? downloadsDir;
+      if (Platform.isWindows) {
+        final userProfile = Platform.environment['USERPROFILE'];
+        if (userProfile != null) {
+          downloadsDir = Directory('$userProfile\\Downloads');
+        }
+      } else {
+        downloadsDir = await getDownloadsDirectory();
+      }
+
+      if (downloadsDir == null || !await downloadsDir.exists()) {
+        downloadsDir = await getApplicationDocumentsDirectory();
+      }
+
+      final timestamp = DateFormat('yyyyMMdd_HHmmss').format(DateTime.now());
+      final fileName = 'sales_export_$timestamp.pdf';
+      final file = File('${downloadsDir.path}/$fileName');
+
+      await file.writeAsBytes(await pdf.save());
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('PDF exported successfully to ${file.path}'),
+            duration: const Duration(seconds: 3),
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('PDF export failed: $e')),
+        );
+      }
+    }
+  }
+
+  List<List<String>> _generateCSVList() {
+    final data = <List<String>>[];
+
+    // CSV Header
+    data.add([
+      'Date',
+      'Sales ID',
+      'Customer',
+      'Product ID',
+      'Product Name',
+      'Quantity',
+      'Amount Paid'
+    ]);
+
+    // CSV Data
+    for (final sale in _sales) {
+      final date =
+          DateFormat('yyyy-MM-dd').format(DateTime.parse(sale['created_at']));
+      final saleId = sale['id'] ?? '';
+      final customer = sale['customer_name'] ?? 'Walk-in';
+      final productNames = sale['product_names'] ?? 'N/A';
+      final products = productNames.split(', ');
+      final itemCount = sale['item_count'] ?? 0;
+      final amountPaid = sale['amount_paid'] ?? 0;
+
+      // For multiple products, create separate rows
+      if (products.length > 1) {
+        for (int i = 0; i < products.length; i++) {
+          final productName = products[i].trim();
+          final quantity = (itemCount / products.length).round();
+          data.add([
+            date,
+            saleId,
+            customer,
+            '',
+            productName,
+            quantity.toString(),
+            amountPaid.toString()
+          ]);
+        }
+      } else {
+        data.add([
+          date,
+          saleId,
+          customer,
+          '',
+          productNames,
+          itemCount.toString(),
+          amountPaid.toString()
+        ]);
+      }
+    }
+
+    return data;
   }
 
   void _showSaleDetails(Map<String, dynamic> sale) async {
@@ -620,174 +996,553 @@ class _SalesScreenState extends State<SalesScreen> {
 
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(
-          'Sale Details - ${dateFormat.format(DateTime.parse(sale['created_at']))}',
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
         ),
-        content: Container(
-          width: MediaQuery.of(context).size.width * 0.6,
-          height: MediaQuery.of(context).size.height * 0.6,
+        child: Container(
+          width: MediaQuery.of(context).size.width * 0.7,
+          height: MediaQuery.of(context).size.height * 0.8,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Colors.blue.shade50,
+                Colors.white,
+              ],
+            ),
+          ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Sale info
-              Card(
-                margin: EdgeInsets.zero,
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Outlet: ${sale['outlet_name']}',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Customer: ${sale['customer_name'] ?? 'Walk-in'}',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Sales Rep: ${sale['rep_name'] ?? 'N/A'}',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        'Status: ${sale['is_paid'] == 1 ? 'Paid' : 'Unpaid'}',
-                        style: TextStyle(
-                          fontSize: 16,
-                          color: sale['is_paid'] == 1
-                              ? Colors.green
-                              : Colors.orange,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
+              // Modern Header
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(16),
+                    topRight: Radius.circular(16),
                   ),
+                  gradient: LinearGradient(
+                    colors: [Colors.blue.shade600, Colors.blue.shade800],
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: const Icon(
+                        Icons.receipt_long,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Sale Details',
+                            style: TextStyle(
+                              color: Colors.white,
+                              fontSize: 24,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            dateFormat
+                                .format(DateTime.parse(sale['created_at'])),
+                            style: TextStyle(
+                              color: Colors.white.withOpacity(0.9),
+                              fontSize: 14,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+                  ],
                 ),
               ),
 
-              const SizedBox(height: 16),
-              const Text(
-                'Items',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 8),
-
-              // Items table
+              // Content
               Expanded(
-                child: Container(
-                  decoration: BoxDecoration(
-                    border: Border.all(color: Colors.grey.shade300),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+                  child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: SingleChildScrollView(
                   child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      // Table header
+                      // Sale Information Cards
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildInfoCard(
+                              'Outlet',
+                              sale['outlet_name'] ?? 'N/A',
+                              Icons.store,
+                              Colors.purple,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildInfoCard(
+                              'Customer',
+                              sale['customer_name'] ?? 'Walk-in',
+                              Icons.person,
+                              Colors.green,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildInfoCard(
+                              'Sales Rep',
+                              sale['rep_name'] ?? 'N/A',
+                              Icons.badge,
+                              Colors.orange,
+                            ),
+                          ),
+                          const SizedBox(width: 16),
+                          Expanded(
+                            child: _buildStatusCard(
+                              'Payment Status',
+                              sale['is_paid'] == 1 ? 'Paid' : 'Unpaid',
+                              sale['is_paid'] == 1,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Items Section
                       Container(
-                        color: Theme.of(context).primaryColor,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        child: Row(
-                          children: [
-                            Expanded(
-                              flex: 3,
-                              child: _buildDetailHeaderCell('Product'),
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(12),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.grey.withOpacity(0.1),
+                              spreadRadius: 2,
+                              blurRadius: 8,
+                              offset: const Offset(0, 2),
                             ),
-                            Expanded(child: _buildDetailHeaderCell('Quantity')),
-                            Expanded(
-                              child: _buildDetailHeaderCell('Unit Price'),
-                            ),
-                            Expanded(child: _buildDetailHeaderCell('Total')),
                           ],
                         ),
-                      ),
-                      // Table body
-                      Expanded(
-                        child: ListView.builder(
-                          itemCount: saleItems.length,
-                          itemBuilder: (context, index) {
-                            final item = saleItems[index];
-                            final isEven = index % 2 == 0;
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade100,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Icon(
+                                    Icons.shopping_cart,
+                                    color: Colors.blue.shade700,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  'Items Purchased',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 12,
+                                    vertical: 6,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade50,
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    '${saleItems.length} items',
+                                    style: TextStyle(
+                                      color: Colors.blue.shade700,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
 
-                            return Container(
-                              color: isEven
-                                  ? Colors.grey.shade50
-                                  : Colors.white,
-                              child: Row(
+                            // Items List
+                            Container(
+                              height: 150,
+                              decoration: BoxDecoration(
+                                border: Border.all(color: Colors.grey.shade200),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: Column(
                                 children: [
-                                  Expanded(
-                                    flex: 3,
-                                    child: _buildDetailCell(
-                                      item['product_name'] ?? 'Unknown Product',
+                                  // Table header
+                                  Container(
+                                    decoration: BoxDecoration(
+                                      color: Colors.grey.shade100,
+                                      borderRadius: const BorderRadius.only(
+                                        topLeft: Radius.circular(8),
+                                        topRight: Radius.circular(8),
+                                      ),
+                                    ),
+                                    padding: const EdgeInsets.symmetric(
+                                        vertical: 12),
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          flex: 3,
+                                          child:
+                                              _buildModernHeaderCell('Product'),
+                                        ),
+                                        Expanded(
+                                            child:
+                                                _buildModernHeaderCell('Qty')),
+                                        Expanded(
+                                          child: _buildModernHeaderCell(
+                                              'Unit Price'),
+                                        ),
+                                        Expanded(
+                                            child: _buildModernHeaderCell(
+                                                'Total')),
+                                      ],
                                     ),
                                   ),
+                                  // Table body
                                   Expanded(
-                                    child: _buildDetailCell(
-                                      item['quantity'].toString(),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _buildDetailCell(
-                                      currencyFormat.format(item['unit_price'] ?? 0),
-                                    ),
-                                  ),
-                                  Expanded(
-                                    child: _buildDetailCell(
-                                      currencyFormat.format(item['total'] ?? 0),
+                                    child: ListView.builder(
+                                      itemCount: saleItems.length,
+                                      itemBuilder: (context, index) {
+                                        final item = saleItems[index];
+                                        final isEven = index % 2 == 0;
+
+                                        return Container(
+                                          color: isEven
+                                              ? Colors.grey.shade50
+                                              : Colors.white,
+                                          child: Row(
+                                            children: [
+                                              Expanded(
+                                                flex: 3,
+                                                child: _buildModernCell(
+                                                  item['product_name'] ??
+                                                      'Unknown Product',
+                                                ),
+                                              ),
+                                              Expanded(
+                                                child: _buildModernCell(
+                                                  item['quantity'].toString(),
+                                                ),
+                                              ),
+                                              Expanded(
+                                                child: _buildModernCell(
+                                                  currencyFormat.format(
+                                                      item['unit_price'] ?? 0),
+                                                ),
+                                              ),
+                                              Expanded(
+                                                child: _buildModernCell(
+                                                  currencyFormat.format(
+                                                      item['total'] ?? 0),
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
                                     ),
                                   ),
                                 ],
                               ),
-                            );
-                          },
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Summary Section
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            colors: [Colors.blue.shade50, Colors.blue.shade100],
+                          ),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.blue.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(8),
+                                  decoration: BoxDecoration(
+                                    color: Colors.blue.shade600,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: const Icon(
+                                    Icons.summarize,
+                                    color: Colors.white,
+                                    size: 20,
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Text(
+                                  'Payment Summary',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.blue.shade800,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 16),
+                            _buildSummaryRow(
+                              'Total Amount:',
+                              currencyFormat.format(sale['total_amount'] ?? 0),
+                              Colors.blue.shade700,
+                            ),
+                            const SizedBox(height: 8),
+                            _buildSummaryRow(
+                              'Amount Paid:',
+                              currencyFormat.format(sale['amount_paid'] ?? 0),
+                              Colors.green.shade700,
+                            ),
+                            const SizedBox(height: 8),
+                            _buildSummaryRow(
+                              'Outstanding Amount:',
+                              currencyFormat
+                                  .format(sale['outstanding_amount'] ?? 0),
+                              (sale['outstanding_amount'] ?? 0) > 0
+                                  ? Colors.red.shade700
+                                  : Colors.green.shade700,
+                            ),
+                            if ((sale['amount_paid'] ?? 0) >
+                                (sale['total_amount'] ?? 0)) ...[
+                              const SizedBox(height: 8),
+                              _buildSummaryRow(
+                                'Overpayment:',
+                                currencyFormat.format(
+                                    (sale['amount_paid'] ?? 0) -
+                                        (sale['total_amount'] ?? 0)),
+                                Colors.blue.shade700,
+                              ),
+                            ],
+                          ],
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-
-              const SizedBox(height: 16),
-
-              // Summary
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        'Total Amount: ${currencyFormat.format(sale['total_amount'] ?? 0)}',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Amount Paid: ${currencyFormat.format(sale['amount_paid'] ?? 0)}',
-                        style: const TextStyle(fontSize: 16),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Outstanding: ${currencyFormat.format(sale['outstanding_amount'] ?? 0)}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
+              )),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Close'),
+      ),
+    );
+  }
+
+  Widget _buildInfoCard(
+      String title, String value, IconData icon, Color color) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
           ),
         ],
       ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  icon,
+                  color: color,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.bold,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildStatusCard(String title, String value, bool isPaid) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color:
+                      (isPaid ? Colors.green : Colors.orange).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(
+                  isPaid ? Icons.check_circle : Icons.pending,
+                  color: isPaid ? Colors.green : Colors.orange,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: Colors.grey.shade600,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            decoration: BoxDecoration(
+              color: (isPaid ? Colors.green : Colors.orange).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isPaid ? Colors.green : Colors.orange,
+                width: 1,
+              ),
+            ),
+            child: Text(
+              value,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.bold,
+                color: isPaid ? Colors.green.shade700 : Colors.orange.shade700,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildModernHeaderCell(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0),
+      child: Text(
+        text,
+        style: TextStyle(
+          fontWeight: FontWeight.bold,
+          color: Colors.grey.shade700,
+          fontSize: 14,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildModernCell(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12.0, vertical: 12.0),
+      child: Text(
+        text,
+        style: const TextStyle(fontSize: 13),
+      ),
+    );
+  }
+
+  Widget _buildSummaryRow(String label, String value, Color valueColor) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: [
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 14,
+            color: Colors.grey.shade700,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: valueColor,
+          ),
+        ),
+      ],
     );
   }
 

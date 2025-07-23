@@ -44,7 +44,7 @@ class DatabaseHelper {
         ALTER TABLE products ADD COLUMN is_synced INTEGER DEFAULT 0
       ''');
     }
-    
+
     if (oldVersion < 6) {
       // Add is_synced column to sales and sale_items tables if they don't exist
       try {
@@ -54,7 +54,7 @@ class DatabaseHelper {
       } catch (e) {
         print('Error adding is_synced to sales: $e');
       }
-      
+
       try {
         await db.execute('''
           ALTER TABLE sale_items ADD COLUMN is_synced INTEGER DEFAULT 0

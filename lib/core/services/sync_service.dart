@@ -67,7 +67,8 @@ class SyncService {
 
     // Add product filter if provided (filter by sales that contain the product)
     if (productId != null) {
-      query += ' AND s.id IN (SELECT DISTINCT sale_id FROM sale_items WHERE product_id = ?)';
+      query +=
+          ' AND s.id IN (SELECT DISTINCT sale_id FROM sale_items WHERE product_id = ?)';
       args.add(productId);
     }
 

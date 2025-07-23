@@ -123,9 +123,8 @@ class StockIntakeService {
       whereArgs.add(productName);
     }
 
-    final String whereClause = whereConditions.isNotEmpty
-        ? whereConditions.join(' AND ')
-        : '';
+    final String whereClause =
+        whereConditions.isNotEmpty ? whereConditions.join(' AND ') : '';
 
     final List<Map<String, dynamic>> maps = await db.query(
       'stock_intake',
@@ -198,7 +197,7 @@ class StockIntakeService {
   ) async {
     final db = await _db.database;
     final now = DateTime.now();
-    
+
     // Wrap all operations in a single transaction to prevent locking
     return await db.transaction((txn) async {
       // Check if product exists in intake_balances
