@@ -26,6 +26,9 @@ class SyncService {
   // Cache for rep names
   final Map<String, String> _repNameCache = {};
 
+  // Public getter for database access
+  Future<Database> get database => _dbHelper.database;
+
   // Sales methods
   Future<List<Sale>> getAllLocalSales() async {
     final db = await _dbHelper.database;
@@ -1103,7 +1106,7 @@ class SyncService {
       await syncStockBalancesToLocalDb();
       await syncProductDistributionsFromServer();
       await syncProductDistributionsToServer();
-      
+
       // Sync stock intake data
       await syncStockIntakesToLocalDb();
     } catch (e) {
@@ -1472,12 +1475,16 @@ class SyncService {
             );
           }
         });
-        
-        print('Successfully synced ${intakes.length} stock intakes from Supabase');
+
+        print(
+            'Successfully synced ${intakes.length} stock intakes from Supabase');
       } catch (downloadError) {
         print('Error downloading stock intakes from Supabase: $downloadError');
-        if (downloadError.toString().contains('relation "public.stock_intake" does not exist')) {
-          print('The stock_intake table does not exist in Supabase. Please run the migration file: 20240301000000_create_stock_intake_tables.sql');
+        if (downloadError
+            .toString()
+            .contains('relation "public.stock_intake" does not exist')) {
+          print(
+              'The stock_intake table does not exist in Supabase. Please run the migration file: 20240301000000_create_stock_intake_tables.sql');
         }
       }
 
@@ -1501,7 +1508,7 @@ class SyncService {
               last_updated TEXT NOT NULL
             )
           ''');
-          
+
           // Clear existing balances
           await txn.delete('intake_balances');
 
@@ -1513,12 +1520,16 @@ class SyncService {
             );
           }
         });
-        
-        print('Successfully synced ${balances.length} intake balances from Supabase');
+
+        print(
+            'Successfully synced ${balances.length} intake balances from Supabase');
       } catch (balanceError) {
         print('Error downloading intake balances from Supabase: $balanceError');
-        if (balanceError.toString().contains('relation "public.intake_balances" does not exist')) {
-          print('The intake_balances table does not exist in Supabase. Please run the migration file: 20240301000000_create_stock_intake_tables.sql');
+        if (balanceError
+            .toString()
+            .contains('relation "public.intake_balances" does not exist')) {
+          print(
+              'The intake_balances table does not exist in Supabase. Please run the migration file: 20240301000000_create_stock_intake_tables.sql');
         }
       }
     } catch (e) {
@@ -1557,13 +1568,19 @@ class SyncService {
               {
                 'id': intakeData['id'] as String? ?? '',
                 'product_name': intakeData['product_name'] as String? ?? '',
-                'quantity_received': (intakeData['quantity_received'] as num?)?.toDouble() ?? 0.0,
+                'quantity_received':
+                    (intakeData['quantity_received'] as num?)?.toDouble() ??
+                        0.0,
                 'unit': intakeData['unit'] as String? ?? '',
-                'cost_per_unit': (intakeData['cost_per_unit'] as num?)?.toDouble() ?? 0.0,
-                'total_cost': (intakeData['total_cost'] as num?)?.toDouble() ?? 0.0,
+                'cost_per_unit':
+                    (intakeData['cost_per_unit'] as num?)?.toDouble() ?? 0.0,
+                'total_cost':
+                    (intakeData['total_cost'] as num?)?.toDouble() ?? 0.0,
                 'description': intakeData['description'] as String?,
-                'date_received': intakeData['date_received'] as String? ?? DateTime.now().toIso8601String(),
-                'created_at': intakeData['created_at'] as String? ?? DateTime.now().toIso8601String(),
+                'date_received': intakeData['date_received'] as String? ??
+                    DateTime.now().toIso8601String(),
+                'created_at': intakeData['created_at'] as String? ??
+                    DateTime.now().toIso8601String(),
                 'is_synced': 1,
               },
               conflictAlgorithm: ConflictAlgorithm.replace);

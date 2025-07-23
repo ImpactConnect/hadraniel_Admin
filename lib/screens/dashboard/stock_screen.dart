@@ -665,6 +665,13 @@ class _StockScreenState extends State<StockScreen> {
                           Icons.account_balance_wallet,
                           Colors.purple,
                         ),
+                        const SizedBox(width: 16),
+                        _buildMetricCard(
+                          'Low Stock Items',
+                          '${filteredStockBalances.where((stock) => stock.givenQuantity > 0 && (stock.balanceQuantity / stock.givenQuantity) < 0.75).length}',
+                          Icons.warning,
+                          Colors.red,
+                        ),
                       ],
                     ),
                   ),
@@ -972,19 +979,59 @@ class _StockScreenState extends State<StockScreen> {
                                                 outlet.name,
                                                 150,
                                               ),
-                                              _buildContentCell(
-                                                stock.givenQuantity.toString(),
-                                                100,
-                                              ),
+                                              Container(
+                                                 width: 120,
+                                                 height: 52,
+                                                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                                 alignment: Alignment.centerLeft,
+                                                 child: Column(
+                                                   mainAxisAlignment: MainAxisAlignment.center,
+                                                   crossAxisAlignment: CrossAxisAlignment.start,
+                                                   children: [
+                                                     Text(
+                                                       stock.givenQuantity.toString(),
+                                                       style: TextStyle(color: Colors.grey.shade800, fontSize: 14),
+                                                       overflow: TextOverflow.ellipsis,
+                                                     ),
+                                                     if (stock.givenQuantity > 0 && (stock.balanceQuantity / stock.givenQuantity) < 0.75)
+                                                       Text(
+                                                         '${((stock.balanceQuantity / stock.givenQuantity) * 100).toStringAsFixed(1)}%',
+                                                         style: const TextStyle(
+                                                           color: Colors.red,
+                                                           fontSize: 10,
+                                                           fontWeight: FontWeight.bold,
+                                                         ),
+                                                       ),
+                                                   ],
+                                                 ),
+                                               ),
                                               _buildContentCell(
                                                 stock.soldQuantity.toString(),
                                                 100,
                                               ),
-                                              _buildContentCell(
-                                                stock.balanceQuantity
-                                                    .toString(),
-                                                100,
-                                              ),
+                                              Container(
+                                                 width: 120,
+                                                 height: 52,
+                                                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
+                                                 alignment: Alignment.centerLeft,
+                                                 child: Row(
+                                                   children: [
+                                                     Expanded(
+                                                       child: Text(
+                                                         stock.balanceQuantity.toString(),
+                                                         style: TextStyle(color: Colors.grey.shade800, fontSize: 14),
+                                                         overflow: TextOverflow.ellipsis,
+                                                       ),
+                                                     ),
+                                                     if (stock.givenQuantity > 0 && (stock.balanceQuantity / stock.givenQuantity) < 0.75)
+                                                       const Icon(
+                                                         Icons.warning,
+                                                         color: Colors.red,
+                                                         size: 14,
+                                                       ),
+                                                   ],
+                                                 ),
+                                               ),
                                               _buildContentCell(
                                                 '₦${product.costPerUnit}',
                                                 120,
