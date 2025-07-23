@@ -17,12 +17,12 @@ class IntakeBalance {
 
   factory IntakeBalance.fromMap(Map<String, dynamic> map) {
     return IntakeBalance(
-      id: map['id'] as String,
-      productName: map['product_name'] as String,
-      totalReceived: (map['total_received'] as num).toDouble(),
-      totalAssigned: (map['total_assigned'] as num).toDouble(),
-      balanceQuantity: (map['balance_quantity'] as num).toDouble(),
-      lastUpdated: DateTime.parse(map['last_updated'] as String),
+      id: map['id'] as String? ?? '',
+      productName: map['product_name'] as String? ?? '',
+      totalReceived: (map['total_received'] as num?)?.toDouble() ?? 0.0,
+      totalAssigned: (map['total_assigned'] as num?)?.toDouble() ?? 0.0,
+      balanceQuantity: (map['balance_quantity'] as num?)?.toDouble() ?? 0.0,
+      lastUpdated: DateTime.tryParse(map['last_updated'] as String? ?? '') ?? DateTime.now(),
     );
   }
 

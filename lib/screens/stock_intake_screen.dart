@@ -259,14 +259,39 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       await _stockIntakeService.createStockIntakeTable();
       await _stockIntakeService.createIntakeBalancesTable();
 
+      // First try to get data from local database
       final stockIntakes = await _stockIntakeService.getAllIntakes();
       final intakeBalances = await _stockIntakeService.getAllIntakeBalances();
 
-      setState(() {
-        _stockIntakes = stockIntakes;
-        _intakeBalances = intakeBalances;
-        _isLoading = false;
-      });
+      // If local database is empty, sync from Supabase
+      if (stockIntakes.isEmpty && intakeBalances.isEmpty) {
+        try {
+          await _syncService.syncStockIntakesToLocalDb();
+          // Reload data after syncing
+          final syncedStockIntakes = await _stockIntakeService.getAllIntakes();
+          final syncedIntakeBalances = await _stockIntakeService.getAllIntakeBalances();
+          
+          setState(() {
+            _stockIntakes = syncedStockIntakes;
+            _intakeBalances = syncedIntakeBalances;
+            _isLoading = false;
+          });
+        } catch (syncError) {
+          print('Error syncing from Supabase: $syncError');
+          // Still show local data even if sync fails
+          setState(() {
+            _stockIntakes = stockIntakes;
+            _intakeBalances = intakeBalances;
+            _isLoading = false;
+          });
+        }
+      } else {
+        setState(() {
+          _stockIntakes = stockIntakes;
+          _intakeBalances = intakeBalances;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
       setState(() {
         _isLoading = false;
@@ -285,7 +310,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
     });
 
     try {
-      // Sync stock intakes to Supabase
+      // First sync local changes to Supabase
       for (final intake in _stockIntakes.where((i) => !i.isSynced)) {
         final success = await _syncService.syncStockIntakeToSupabase(intake);
         if (success) {
@@ -297,6 +322,9 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       for (final balance in _intakeBalances) {
         await _syncService.syncIntakeBalancesToSupabase(balance);
       }
+
+      // Then sync from Supabase to local database
+      await _syncService.syncStockIntakesToLocalDb();
 
       // Refresh data
       await _loadData();

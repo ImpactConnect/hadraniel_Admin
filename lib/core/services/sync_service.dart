@@ -8,6 +8,8 @@ import '../models/rep_model.dart';
 import '../models/sale_model.dart';
 import '../models/sale_item_model.dart';
 import '../models/product_distribution_model.dart';
+import '../models/stock_intake_model.dart';
+import '../models/intake_balance_model.dart';
 import '../database/database_helper.dart';
 import 'stock_intake_service.dart';
 
@@ -1101,6 +1103,9 @@ class SyncService {
       await syncStockBalancesToLocalDb();
       await syncProductDistributionsFromServer();
       await syncProductDistributionsToServer();
+      
+      // Sync stock intake data
+      await syncStockIntakesToLocalDb();
     } catch (e) {
       print('Error in syncAll: $e');
       throw e;
@@ -1361,13 +1366,13 @@ class SyncService {
       await supabase.from('stock_intake').insert({
         'id': stockIntake.id,
         'product_name': stockIntake.productName,
-        'quantity': stockIntake.quantityReceived,
+        'quantity_received': stockIntake.quantityReceived,
         'unit': stockIntake.unit,
         'cost_per_unit': stockIntake.costPerUnit,
-        // 'total_cost' is generated in the database
+        'total_cost': stockIntake.totalCost,
         'description': stockIntake.description,
-        'received_date': stockIntake.dateReceived.toIso8601String(),
-        // 'created_at' is generated in the database
+        'date_received': stockIntake.dateReceived.toIso8601String(),
+        'created_at': stockIntake.createdAt.toIso8601String(),
       });
       return true;
     } catch (e) {
@@ -1427,64 +1432,95 @@ class SyncService {
 
         // Push unsynced intakes to Supabase
         for (var intakeMap in unsyncedIntakes) {
-          final intake = ProductDistribution.fromMap(intakeMap);
-          await supabase.from('stock_intake').upsert(intake.toMap());
-
-          // Mark as synced locally
-          await txn.update(
-            'stock_intake',
-            {'is_synced': 1},
-            where: 'id = ?',
-            whereArgs: [intake.id],
-          );
+          final intake = StockIntake.fromMap(intakeMap);
+          try {
+            await supabase.from('stock_intake').upsert(intake.toMap());
+            // Mark as synced locally
+            await txn.update(
+              'stock_intake',
+              {'is_synced': 1},
+              where: 'id = ?',
+              whereArgs: [intake.id],
+            );
+          } catch (uploadError) {
+            print('Error uploading intake ${intake.id}: $uploadError');
+            // Continue with other intakes even if one fails
+          }
         }
       });
 
       // Pull latest intakes from Supabase
-      final response = await supabase.from('stock_intake').select();
-      final intakes = (response as List)
-          .map((data) => ProductDistribution.fromMap(data))
-          .toList();
+      try {
+        final response = await supabase.from('stock_intake').select();
+        final intakes = (response as List)
+            .map((data) => StockIntake.fromMap(data))
+            .toList();
 
-      // Update local database in a transaction
-      await db.transaction((txn) async {
-        // Clear existing intakes
-        await txn.delete('stock_intake');
+        // Update local database in a transaction
+        await db.transaction((txn) async {
+          // Clear existing intakes
+          await txn.delete('stock_intake');
 
-        // Insert new intakes
-        for (var intake in intakes) {
-          await txn.insert(
-            'stock_intake',
-            {
-              ...intake.toMap(),
-              'is_synced': 1,
-            },
-          );
+          // Insert new intakes
+          for (var intake in intakes) {
+            await txn.insert(
+              'stock_intake',
+              {
+                ...intake.toMap(),
+                'is_synced': 1,
+              },
+            );
+          }
+        });
+        
+        print('Successfully synced ${intakes.length} stock intakes from Supabase');
+      } catch (downloadError) {
+        print('Error downloading stock intakes from Supabase: $downloadError');
+        if (downloadError.toString().contains('relation "public.stock_intake" does not exist')) {
+          print('The stock_intake table does not exist in Supabase. Please run the migration file: 20240301000000_create_stock_intake_tables.sql');
         }
-      });
+      }
 
       // Also sync intake balances
-      final balanceResponse = await supabase.from('intake_balances').select();
-      final balances = (balanceResponse as List)
-          .map((data) => ProductDistribution.fromMap(data))
-          .toList();
+      try {
+        final balanceResponse = await supabase.from('intake_balances').select();
+        final balances = (balanceResponse as List)
+            .map((data) => IntakeBalance.fromMap(data))
+            .toList();
 
-      // Use a separate transaction for intake balances
-      await db.transaction((txn) async {
-        // Clear existing balances
-        await txn.delete('intake_balances');
+        // Use a separate transaction for intake balances
+        await db.transaction((txn) async {
+          // Create table if it doesn't exist
+          await txn.execute('''
+            CREATE TABLE IF NOT EXISTS intake_balances (
+              id TEXT PRIMARY KEY,
+              product_name TEXT NOT NULL,
+              total_received REAL NOT NULL,
+              total_assigned REAL DEFAULT 0,
+              balance_quantity REAL NOT NULL,
+              last_updated TEXT NOT NULL
+            )
+          ''');
+          
+          // Clear existing balances
+          await txn.delete('intake_balances');
 
-        // Insert new balances
-        for (var balance in balances) {
-          await txn.insert(
-            'intake_balances',
-            {
-              ...balance.toMap(),
-              'is_synced': 1,
-            },
-          );
+          // Insert new balances
+          for (var balance in balances) {
+            await txn.insert(
+              'intake_balances',
+              balance.toMap(),
+            );
+          }
+        });
+        
+        print('Successfully synced ${balances.length} intake balances from Supabase');
+      } catch (balanceError) {
+        print('Error downloading intake balances from Supabase: $balanceError');
+        if (balanceError.toString().contains('relation "public.intake_balances" does not exist')) {
+          print('The intake_balances table does not exist in Supabase. Please run the migration file: 20240301000000_create_stock_intake_tables.sql');
         }
-      });
+      }
     } catch (e) {
       print('Error syncing stock intakes: $e');
       throw e;
@@ -1519,15 +1555,15 @@ class SyncService {
           await txn.insert(
               'stock_intake',
               {
-                'id': intakeData['id'],
-                'product_name': intakeData['product_name'],
-                'quantity_received': intakeData['quantity_received'],
-                'unit': intakeData['unit'],
-                'cost_per_unit': intakeData['cost_per_unit'],
-                'total_cost': intakeData['total_cost'],
-                'description': intakeData['description'],
-                'date_received': intakeData['date_received'],
-                'created_at': intakeData['created_at'],
+                'id': intakeData['id'] as String? ?? '',
+                'product_name': intakeData['product_name'] as String? ?? '',
+                'quantity_received': (intakeData['quantity_received'] as num?)?.toDouble() ?? 0.0,
+                'unit': intakeData['unit'] as String? ?? '',
+                'cost_per_unit': (intakeData['cost_per_unit'] as num?)?.toDouble() ?? 0.0,
+                'total_cost': (intakeData['total_cost'] as num?)?.toDouble() ?? 0.0,
+                'description': intakeData['description'] as String?,
+                'date_received': intakeData['date_received'] as String? ?? DateTime.now().toIso8601String(),
+                'created_at': intakeData['created_at'] as String? ?? DateTime.now().toIso8601String(),
                 'is_synced': 1,
               },
               conflictAlgorithm: ConflictAlgorithm.replace);

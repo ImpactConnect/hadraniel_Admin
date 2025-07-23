@@ -199,11 +199,11 @@ class _SalesScreenState extends State<SalesScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         _buildMetricsCards(),
-        const SizedBox(height: 24),
+        const SizedBox(height: 16),
         _buildFilters(),
-        const SizedBox(height: 20),
+        const SizedBox(height: 8),
         Expanded(child: _buildSalesTable()),
       ],
     );
@@ -211,18 +211,18 @@ class _SalesScreenState extends State<SalesScreen> {
 
   Widget _buildFilters() {
     return Padding(
-      padding: const EdgeInsets.all(16.0),
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           const Text(
             'Filters',
-            style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
           ),
           const SizedBox(height: 8),
           Wrap(
-            spacing: 16,
-            runSpacing: 16,
+            spacing: 12,
+            runSpacing: 8,
             children: [
               // Date filter
               DropdownButton<String>(
@@ -235,6 +235,7 @@ class _SalesScreenState extends State<SalesScreen> {
                   'Last 7 Days',
                   'This Month',
                   'Last Month',
+                  'Custom',
                 ].map((String value) {
                   return DropdownMenuItem<String>(
                     value: value,
@@ -724,64 +725,16 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Future<void> _showDateRangePicker() async {
-    final DateTimeRange? picked = await showDialog<DateTimeRange>(
+    final DateTimeRange? picked = await showDateRangePicker(
       context: context,
-      builder: (BuildContext context) {
-        return Dialog(
-          child: Container(
-            width: 400,
-            height: 500,
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                const Text(
-                  'Select Date Range',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                const SizedBox(height: 16),
-                Expanded(
-                  child: CalendarDatePicker(
-                    initialDate: _customStartDate ?? DateTime.now(),
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime.now(),
-                    onDateChanged: (date) {
-                      // This will be handled by the date range picker
-                    },
-                  ),
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
-                    ),
-                    ElevatedButton(
-                      onPressed: () async {
-                        final range = await showDateRangePicker(
-                          context: context,
-                          firstDate: DateTime(2020),
-                          lastDate: DateTime.now(),
-                          initialDateRange:
-                              _customStartDate != null && _customEndDate != null
-                                  ? DateTimeRange(
-                                      start: _customStartDate!,
-                                      end: _customEndDate!)
-                                  : null,
-                        );
-                        Navigator.of(context).pop(range);
-                      },
-                      child: const Text('Select Range'),
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
+      firstDate: DateTime(2020),
+      lastDate: DateTime.now(),
+      initialDateRange: _customStartDate != null && _customEndDate != null
+          ? DateTimeRange(
+              start: _customStartDate!,
+              end: _customEndDate!,
+            )
+          : null,
     );
 
     if (picked != null) {
@@ -1106,25 +1059,13 @@ class _SalesScreenState extends State<SalesScreen> {
                               Colors.green,
                             ),
                           ),
-                        ],
-                      ),
-                      const SizedBox(height: 16),
-                      Row(
-                        children: [
+                          const SizedBox(width: 16),
                           Expanded(
                             child: _buildInfoCard(
                               'Sales Rep',
                               sale['rep_name'] ?? 'N/A',
                               Icons.badge,
                               Colors.orange,
-                            ),
-                          ),
-                          const SizedBox(width: 16),
-                          Expanded(
-                            child: _buildStatusCard(
-                              'Payment Status',
-                              sale['is_paid'] == 1 ? 'Paid' : 'Unpaid',
-                              sale['is_paid'] == 1,
                             ),
                           ),
                         ],

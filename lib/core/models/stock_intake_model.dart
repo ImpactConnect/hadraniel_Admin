@@ -25,16 +25,16 @@ class StockIntake {
 
   factory StockIntake.fromMap(Map<String, dynamic> map) {
     return StockIntake(
-      id: map['id'] as String,
-      productName: map['product_name'] as String,
-      quantityReceived: (map['quantity_received'] as num).toDouble(),
-      unit: map['unit'] as String,
-      costPerUnit: (map['cost_per_unit'] as num).toDouble(),
-      totalCost: (map['total_cost'] as num).toDouble(),
+      id: map['id'] as String? ?? '',
+      productName: map['product_name'] as String? ?? '',
+      quantityReceived: (map['quantity_received'] as num?)?.toDouble() ?? 0.0,
+      unit: map['unit'] as String? ?? '',
+      costPerUnit: (map['cost_per_unit'] as num?)?.toDouble() ?? 0.0,
+      totalCost: (map['total_cost'] as num?)?.toDouble() ?? 0.0,
       description: map['description'] as String?,
-      dateReceived: DateTime.parse(map['date_received'] as String),
-      createdAt: DateTime.parse(map['created_at'] as String),
-      isSynced: map['is_synced'] == 1,
+      dateReceived: DateTime.tryParse(map['date_received'] as String? ?? '') ?? DateTime.now(),
+      createdAt: DateTime.tryParse(map['created_at'] as String? ?? '') ?? DateTime.now(),
+      isSynced: (map['is_synced'] as int?) == 1,
     );
   }
 
