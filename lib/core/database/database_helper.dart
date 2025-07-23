@@ -30,7 +30,7 @@ class DatabaseHelper {
     return await dbFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 5,
+        version: 6,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       ),
@@ -43,6 +43,25 @@ class DatabaseHelper {
       await db.execute('''
         ALTER TABLE products ADD COLUMN is_synced INTEGER DEFAULT 0
       ''');
+    }
+    
+    if (oldVersion < 6) {
+      // Add is_synced column to sales and sale_items tables if they don't exist
+      try {
+        await db.execute('''
+          ALTER TABLE sales ADD COLUMN is_synced INTEGER DEFAULT 0
+        ''');
+      } catch (e) {
+        print('Error adding is_synced to sales: $e');
+      }
+      
+      try {
+        await db.execute('''
+          ALTER TABLE sale_items ADD COLUMN is_synced INTEGER DEFAULT 0
+        ''');
+      } catch (e) {
+        print('Error adding is_synced to sale_items: $e');
+      }
     }
 
     if (oldVersion < 3) {
@@ -211,6 +230,7 @@ class DatabaseHelper {
         is_paid INTEGER DEFAULT 0,
         created_at TEXT,
         updated_at TEXT,
+        is_synced INTEGER DEFAULT 0,
         FOREIGN KEY (outlet_id) REFERENCES outlets (id),
         FOREIGN KEY (customer_id) REFERENCES customers (id),
         FOREIGN KEY (rep_id) REFERENCES profiles (id)
@@ -227,6 +247,7 @@ class DatabaseHelper {
         unit_price REAL NOT NULL,
         total REAL NOT NULL,
         created_at TEXT,
+        is_synced INTEGER DEFAULT 0,
         FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
         FOREIGN KEY (product_id) REFERENCES products (id)
       )

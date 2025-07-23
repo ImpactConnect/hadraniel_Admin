@@ -43,46 +43,29 @@ class SyncService {
   }) async {
     final db = await _dbHelper.database;
 
-    // First check if we have any sales and sale_items
-    final salesCount = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM sales'),
-    );
-    final saleItemsCount = Sqflite.firstIntValue(
-      await db.rawQuery('SELECT COUNT(*) FROM sale_items'),
-    );
-    print('Total sales in DB: $salesCount');
-    print('Total sale items in DB: $saleItemsCount');
-
-    if (productId != null) {
-      final productSaleItemsCount = Sqflite.firstIntValue(
-        await db.rawQuery(
-          'SELECT COUNT(*) FROM sale_items WHERE product_id = ?',
-          [productId],
-        ),
-      );
-      print('Sale items for product $productId: $productSaleItemsCount');
-    }
-
+    // Build the main query to get sales with aggregated data
     String query = '''
       SELECT 
-        s.id as sale_id,
+        s.id,
         s.created_at,
         s.outlet_id,
         s.customer_id,
-        si.quantity,
-        si.unit_price,
-        si.total as total_amount,
-        si.product_id
+        s.rep_id,
+        s.total_amount,
+        s.amount_paid,
+        s.outstanding_amount,
+        s.is_paid,
+        COUNT(si.id) as item_count
       FROM sales s
-      INNER JOIN sale_items si ON si.sale_id = s.id
+      LEFT JOIN sale_items si ON si.sale_id = s.id
       WHERE 1=1
     ''';
 
     List<dynamic> args = [];
 
-    // Add product filter if provided
+    // Add product filter if provided (filter by sales that contain the product)
     if (productId != null) {
-      query += ' AND si.product_id = ?';
+      query += ' AND s.id IN (SELECT DISTINCT sale_id FROM sale_items WHERE product_id = ?)';
       args.add(productId);
     }
 
@@ -109,7 +92,7 @@ class SyncService {
       args.add(repId);
     }
 
-    query += ' ORDER BY s.created_at DESC';
+    query += ' GROUP BY s.id ORDER BY s.created_at DESC';
 
     print('Executing query: $query');
     print('Query args: $args');
@@ -122,6 +105,7 @@ class SyncService {
     for (var sale in sales) {
       final saleOutletId = sale['outlet_id'] as String;
       final customerId = sale['customer_id'] as String?;
+      final repId = sale['rep_id'] as String?;
 
       // Get outlet name
       String outletName = await getOutletName(saleOutletId);
@@ -132,10 +116,17 @@ class SyncService {
         customerName = await getCustomerName(customerId);
       }
 
+      // Get rep name if rep_id is not null
+      String repName = 'N/A';
+      if (repId != null) {
+        repName = await getRepName(repId);
+      }
+
       salesWithDetails.add({
         ...sale,
         'outlet_name': outletName,
         'customer_name': customerName,
+        'rep_name': repName,
       });
     }
 

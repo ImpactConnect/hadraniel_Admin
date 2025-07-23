@@ -335,19 +335,19 @@ class _SalesScreenState extends State<SalesScreen> {
           ),
           _buildMetricCard(
             title: 'Total Revenue',
-            value: currencyFormat.format(_metrics['total_amount']),
+            value: currencyFormat.format(_metrics['total_amount'] ?? 0),
             icon: Icons.attach_money,
             color: Colors.green,
           ),
           _buildMetricCard(
             title: 'Amount Paid',
-            value: currencyFormat.format(_metrics['total_paid']),
+            value: currencyFormat.format(_metrics['total_paid'] ?? 0),
             icon: Icons.payments,
             color: Colors.purple,
           ),
           _buildMetricCard(
             title: 'Outstanding',
-            value: currencyFormat.format(_metrics['total_outstanding']),
+            value: currencyFormat.format(_metrics['total_outstanding'] ?? 0),
             icon: Icons.account_balance_wallet,
             color: Colors.orange,
           ),
@@ -438,16 +438,15 @@ class _SalesScreenState extends State<SalesScreen> {
                             padding: const EdgeInsets.symmetric(vertical: 12),
                             child: Row(
                               children: [
-                                _buildHeaderCell('Date', 150),
-                                _buildHeaderCell('Outlet', 150),
-                                _buildHeaderCell('Customer', 150),
-                                _buildHeaderCell('Rep', 150),
-                                _buildHeaderCell('Items', 80),
-                                _buildHeaderCell('Total Amount', 120),
-                                _buildHeaderCell('Amount Paid', 120),
-                                _buildHeaderCell('Outstanding', 120),
-                                _buildHeaderCell('Status', 100),
-                                _buildHeaderCell('Actions', 100),
+                                Expanded(flex: 2, child: _buildFlexHeaderCell('Date')),
+                                Expanded(flex: 2, child: _buildFlexHeaderCell('Outlet')),
+                                Expanded(flex: 2, child: _buildFlexHeaderCell('Customer')),
+                                Expanded(flex: 2, child: _buildFlexHeaderCell('Rep')),
+                                Expanded(flex: 1, child: _buildFlexHeaderCell('Items')),
+                                Expanded(flex: 2, child: _buildFlexHeaderCell('Total Amount')),
+                                Expanded(flex: 2, child: _buildFlexHeaderCell('Amount Paid')),
+                                Expanded(flex: 2, child: _buildFlexHeaderCell('Outstanding')),
+                                Expanded(flex: 1, child: _buildFlexHeaderCell('Status')),
                               ],
                             ),
                           ),
@@ -469,68 +468,78 @@ class _SalesScreenState extends State<SalesScreen> {
                                       : Colors.white,
                                   child: Row(
                                     children: [
-                                      _buildCell(
-                                        sale['created_at'] != null
-                                            ? dateFormat.format(
-                                                DateTime.parse(
-                                                  sale['created_at'],
-                                                ),
-                                              )
-                                            : 'N/A',
-                                        150,
-                                      ),
-                                      _buildCell(
-                                        sale['outlet_name'] ?? 'Unknown',
-                                        150,
-                                      ),
-                                      _buildCell(
-                                        sale['customer_name'] ?? 'Walk-in',
-                                        150,
-                                      ),
-                                      _buildCell(
-                                        sale['rep_name'] ?? 'N/A',
-                                        150,
-                                      ),
-                                      _buildCell(
-                                        sale['item_count'].toString(),
-                                        80,
-                                      ),
-                                      _buildCell(
-                                        currencyFormat.format(
-                                          sale['total_amount'],
+                                      Expanded(
+                                        flex: 2,
+                                        child: _buildFlexCell(
+                                          sale['created_at'] != null
+                                              ? dateFormat.format(
+                                                  DateTime.parse(
+                                                    sale['created_at'],
+                                                  ),
+                                                )
+                                              : 'N/A',
                                         ),
-                                        120,
                                       ),
-                                      _buildCell(
-                                        currencyFormat.format(
-                                          sale['amount_paid'],
+                                      Expanded(
+                                        flex: 2,
+                                        child: _buildFlexCell(
+                                          sale['outlet_name'] ?? 'Unknown',
                                         ),
-                                        120,
                                       ),
-                                      _buildCell(
-                                        currencyFormat.format(
-                                          sale['outstanding_amount'],
+                                      Expanded(
+                                        flex: 2,
+                                        child: _buildFlexCell(
+                                          sale['customer_name'] ?? 'Walk-in',
                                         ),
-                                        120,
                                       ),
-                                      _buildCell(
-                                        sale['is_paid'] == 1
-                                            ? 'Paid'
-                                            : 'Unpaid',
-                                        100,
-                                        textColor: sale['is_paid'] == 1
-                                            ? Colors.green
-                                            : Colors.orange,
+                                      Expanded(
+                                        flex: 2,
+                                        child: _buildFlexCell(
+                                          sale['rep_name'] ?? 'N/A',
+                                        ),
                                       ),
-                                      _buildCell(
-                                        '',
-                                        100,
-                                        widget: IconButton(
-                                          icon: const Icon(Icons.visibility),
-                                          onPressed: () =>
-                                              _showSaleDetails(sale),
-                                          tooltip: 'View Details',
-                                          color: Theme.of(context).primaryColor,
+                                      Expanded(
+                                        flex: 1,
+                                        child: _buildFlexCell(
+                                          sale['item_count'].toString(),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 2,
+                                        child: _buildFlexCell(
+                                          currencyFormat.format(
+                                            sale['total_amount'] ?? 0,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 2,
+                                        child: _buildFlexCell(
+                                          currencyFormat.format(
+                                            sale['amount_paid'] ?? 0,
+                                          ),
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 2,
+                                        child: _buildFlexCell(
+                                          currencyFormat.format(
+                                            sale['outstanding_amount'] ?? 0,
+                                          ),
+                                          textColor: sale['is_paid'] == 1
+                                              ? Colors.green
+                                              : Colors.orange,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        flex: 1,
+                                        child: _buildFlexCell(
+                                          sale['is_paid'] == 1
+                                              ? 'Paid'
+                                              : 'Unpaid',
+                                          textColor: sale['is_paid'] == 1
+                                              ? Colors.green
+                                              : Colors.orange,
                                         ),
                                       ),
                                     ],
@@ -563,6 +572,20 @@ class _SalesScreenState extends State<SalesScreen> {
     );
   }
 
+  Widget _buildFlexHeaderCell(String text) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0),
+      child: Text(
+        text,
+        style: const TextStyle(
+          fontWeight: FontWeight.bold,
+          color: Colors.white,
+        ),
+        overflow: TextOverflow.ellipsis,
+      ),
+    );
+  }
+
   Widget _buildCell(
     String text,
     double width, {
@@ -572,6 +595,23 @@ class _SalesScreenState extends State<SalesScreen> {
     return Container(
       width: width,
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child:
+          widget ??
+          Text(
+            text,
+            style: TextStyle(color: textColor),
+            overflow: TextOverflow.ellipsis,
+          ),
+    );
+  }
+
+  Widget _buildFlexCell(
+    String text, {
+    Color? textColor,
+    Widget? widget,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
       child:
           widget ??
           Text(
@@ -701,12 +741,12 @@ class _SalesScreenState extends State<SalesScreen> {
                                   ),
                                   Expanded(
                                     child: _buildDetailCell(
-                                      currencyFormat.format(item['unit_price']),
+                                      currencyFormat.format(item['unit_price'] ?? 0),
                                     ),
                                   ),
                                   Expanded(
                                     child: _buildDetailCell(
-                                      currencyFormat.format(item['total']),
+                                      currencyFormat.format(item['total'] ?? 0),
                                     ),
                                   ),
                                 ],
@@ -730,17 +770,17 @@ class _SalesScreenState extends State<SalesScreen> {
                     crossAxisAlignment: CrossAxisAlignment.end,
                     children: [
                       Text(
-                        'Total Amount: ${currencyFormat.format(sale['total_amount'])}',
+                        'Total Amount: ${currencyFormat.format(sale['total_amount'] ?? 0)}',
                         style: const TextStyle(fontSize: 16),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Amount Paid: ${currencyFormat.format(sale['amount_paid'])}',
+                        'Amount Paid: ${currencyFormat.format(sale['amount_paid'] ?? 0)}',
                         style: const TextStyle(fontSize: 16),
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Outstanding: ${currencyFormat.format(sale['outstanding_amount'])}',
+                        'Outstanding: ${currencyFormat.format(sale['outstanding_amount'] ?? 0)}',
                         style: const TextStyle(
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
