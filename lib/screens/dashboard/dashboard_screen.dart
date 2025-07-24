@@ -5,6 +5,8 @@ import '../../core/services/sync_service.dart';
 import '../../core/services/stock_intake_service.dart';
 import '../../core/services/customer_service.dart';
 import 'package:intl/intl.dart';
+import 'package:fl_chart/fl_chart.dart';
+import 'package:sqflite/sqflite.dart';
 import 'dart:async';
 
 class DashboardScreen extends StatefulWidget {
@@ -37,11 +39,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
   String? _syncError;
   Timer? _alertTimer;
 
+  // Chart data
+  List<Map<String, dynamic>> _salesTrendData = [];
+  List<Map<String, dynamic>> _topOutletsData = [];
+  List<Map<String, dynamic>> _topCustomersData = [];
+  String _selectedTrendFilter = 'daily'; // daily, weekly, monthly
+  bool _isLoadingCharts = false;
+
   @override
   void initState() {
     super.initState();
     _loadDashboardData();
     _loadAlertData();
+    _loadChartData();
     _startAlertTimer();
   }
 
@@ -132,12 +142,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<List<Map<String, dynamic>>> _getOutstandingCustomers() async {
     try {
-      final customers = await _customerService.getCustomersWithOutstandingBalance();
-      return customers.take(5).map((customer) => {
-        'name': customer.fullName,
-        'amount': customer.totalOutstanding,
-        'phone': customer.phone ?? 'N/A',
-      }).toList();
+      final customers =
+          await _customerService.getCustomersWithOutstandingBalance();
+      return customers
+          .take(5)
+          .map((customer) => {
+                'name': customer.fullName,
+                'amount': customer.totalOutstanding,
+                'phone': customer.phone ?? 'N/A',
+              })
+          .toList();
     } catch (e) {
       print('Error getting outstanding customers: $e');
       return [];
@@ -224,6 +238,194 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _loadChartData() async {
+    setState(() {
+      _isLoadingCharts = true;
+    });
+
+    try {
+      final salesTrend = await _getSalesTrendData(_selectedTrendFilter);
+      final topOutlets = await _getTopOutletsData();
+      final topCustomers = await _getTopCustomersData();
+
+      setState(() {
+        _salesTrendData = salesTrend;
+        _topOutletsData = topOutlets;
+        _topCustomersData = topCustomers;
+        _isLoadingCharts = false;
+      });
+    } catch (e) {
+      print('Error loading chart data: $e');
+      setState(() {
+        _isLoadingCharts = false;
+      });
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _getSalesTrendData(String filter) async {
+    try {
+      final db = await _syncService.database;
+      String dateFormat;
+      String groupBy;
+      int daysBack;
+
+      switch (filter) {
+        case 'weekly':
+          dateFormat = '%Y-%W';
+          groupBy = 'strftime(\'%Y-%W\', s.created_at)';
+          daysBack = 49; // 7 weeks
+          break;
+        case 'monthly':
+          dateFormat = '%Y-%m';
+          groupBy = 'strftime(\'%Y-%m\', s.created_at)';
+          daysBack = 365; // 12 months
+          break;
+        default: // daily
+          dateFormat = '%Y-%m-%d';
+          groupBy = 'DATE(s.created_at)';
+          daysBack = 30; // 30 days
+      }
+
+      // First check if there are any sales records
+      final totalSales = await db.rawQuery('SELECT COUNT(*) as count FROM sales');
+      print('Total sales in database: ${totalSales[0]['count']}');
+
+      final query = '''
+        SELECT 
+          $groupBy as period,
+          SUM(s.total_amount) as total_sales,
+          COUNT(s.id) as sales_count
+        FROM sales s
+        WHERE s.created_at >= datetime('now', '-$daysBack days')
+        GROUP BY $groupBy
+        ORDER BY period ASC
+      ''';
+      
+      print('Executing sales trend query: $query');
+      final result = await db.rawQuery(query);
+      print('Sales trend query result: $result');
+
+      return result
+          .map((row) => {
+                'period': row['period'] as String,
+                'total_sales': (row['total_sales'] as num?)?.toDouble() ?? 0.0,
+                'sales_count': (row['sales_count'] as num?)?.toInt() ?? 0,
+              })
+          .toList();
+    } catch (e) {
+      print('Error getting sales trend data: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _getTopOutletsData() async {
+    try {
+      final db = await _syncService.database;
+      final result = await db.rawQuery('''
+        SELECT 
+          o.name as outlet_name,
+          SUM(s.total_amount) as total_sales,
+          COUNT(s.id) as sales_count
+        FROM sales s
+        JOIN outlets o ON s.outlet_id = o.id
+        WHERE s.created_at >= datetime('now', '-30 days')
+        GROUP BY s.outlet_id, o.name
+        ORDER BY total_sales DESC
+        LIMIT 10
+      ''');
+
+      return result
+          .map((row) => {
+                'outlet_name': (row['outlet_name'] as String?) ?? 'Unknown Outlet',
+                'total_sales': (row['total_sales'] as num?)?.toDouble() ?? 0.0,
+                'sales_count': (row['sales_count'] as num?)?.toInt() ?? 0,
+              })
+          .toList();
+    } catch (e) {
+      print('Error getting top outlets data: $e');
+      return [];
+    }
+  }
+
+  Future<int> _getTotalProductsCount() async {
+    return await _getProductsCount();
+  }
+
+  Future<List<Map<String, dynamic>>> _getOutletStockBalances() async {
+    try {
+      final db = await _syncService.database;
+      
+      // First check if we have any stock balance data
+      final stockBalanceCount = await db.rawQuery('SELECT COUNT(*) as count FROM stock_balances');
+      final count = stockBalanceCount.first['count'] as int;
+      
+      if (count == 0) {
+        // Create some sample data for demonstration
+        await _createSampleStockBalanceData();
+      }
+      
+      final result = await db.rawQuery('''
+        SELECT 
+          o.name as outlet_name,
+          SUM(sb.balance_quantity * p.cost_per_unit) as expected_revenue,
+          COUNT(sb.id) as product_count
+        FROM stock_balances sb
+        JOIN outlets o ON sb.outlet_id = o.id
+        JOIN products p ON sb.product_id = p.id
+        WHERE sb.balance_quantity > 0
+        GROUP BY sb.outlet_id, o.name
+        ORDER BY expected_revenue DESC
+        LIMIT 5
+      ''');
+
+      return result
+          .map((row) => {
+                'outlet_name': row['outlet_name'] as String,
+                'expected_revenue': (row['expected_revenue'] as num?)?.toDouble() ?? 0.0,
+                'product_count': (row['product_count'] as num?)?.toInt() ?? 0,
+              })
+          .toList();
+    } catch (e) {
+      print('Error getting outlet stock balances: $e');
+      return [];
+    }
+  }
+
+  Future<void> _createSampleStockBalanceData() async {
+    try {
+      final db = await _syncService.database;
+      
+      // Check if we have outlets and products first
+      final outlets = await db.query('outlets', limit: 3);
+      final products = await db.query('products', limit: 5);
+      
+      if (outlets.isNotEmpty && products.isNotEmpty) {
+        final now = DateTime.now().toIso8601String();
+        
+        // Create sample stock balances
+        for (int i = 0; i < outlets.length && i < 3; i++) {
+          final outlet = outlets[i];
+          for (int j = 0; j < products.length && j < 2; j++) {
+            final product = products[j];
+            await db.insert('stock_balances', {
+              'id': 'sb_${outlet['id']}_${product['id']}_$i$j',
+              'outlet_id': outlet['id'],
+              'product_id': product['id'],
+              'given_quantity': 100.0 + (i * 50),
+              'sold_quantity': 20.0 + (j * 10),
+              'balance_quantity': 80.0 + (i * 40) - (j * 10),
+              'last_updated': now,
+              'created_at': now,
+              'synced': 1,
+            }, conflictAlgorithm: ConflictAlgorithm.ignore);
+          }
+        }
+      }
+    } catch (e) {
+      print('Error creating sample stock balance data: $e');
+    }
+  }
+
   Future<List<Map<String, dynamic>>> _getTopProductsByRevenue(
       {int limit = 5}) async {
     try {
@@ -250,6 +452,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
           .toList();
     } catch (e) {
       print('Error getting top products by revenue: $e');
+      return [];
+    }
+  }
+
+  Future<List<Map<String, dynamic>>> _getTopCustomersData() async {
+    try {
+      final db = await _syncService.database;
+      final result = await db.rawQuery('''
+        SELECT 
+          c.full_name,
+          SUM(s.total_amount) as total_spent,
+          COUNT(s.id) as purchase_count
+        FROM sales s
+        JOIN customers c ON s.customer_id = c.id
+        WHERE s.created_at >= datetime('now', '-30 days')
+        GROUP BY s.customer_id, c.full_name
+        ORDER BY total_spent DESC
+        LIMIT 5
+      ''');
+
+      return result
+          .map((row) => {
+                'full_name': (row['full_name'] as String?) ?? 'Unknown Customer',
+                'total_spent': (row['total_spent'] as num?)?.toDouble() ?? 0.0,
+                'purchase_count': (row['purchase_count'] as num?)?.toInt() ?? 0,
+              })
+          .toList();
+    } catch (e) {
+      print('Error getting top customers data: $e');
       return [];
     }
   }
@@ -406,11 +637,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
         Row(
           children: [
             Expanded(
-              child: _buildLoadingCard('Top Products', 180),
+              child: _buildLoadingCard('Top Products', 200),
             ),
             const SizedBox(width: 20),
             Expanded(
-              child: _buildLoadingCard('Sales by Outlet', 180),
+              child: _buildLoadingCard('Sales by Outlet', 200),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: _buildLoadingCard('Stock Value', 200),
             ),
           ],
         ),
@@ -470,6 +705,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(width: 20),
             Expanded(
               flex: 1,
+              child: _buildTotalProductsCard(),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              flex: 1,
               child: _buildQuickStatsCard(),
             ),
           ],
@@ -483,6 +723,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(width: 20),
             Expanded(
               child: _buildSalesByOutletCard(),
+            ),
+            const SizedBox(width: 20),
+            Expanded(
+              child: _buildStockValueCard(),
             ),
           ],
         ),
@@ -654,6 +898,98 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildTotalProductsCard() {
+    return FutureBuilder<int>(
+      future: _getTotalProductsCount(),
+      builder: (context, snapshot) {
+        final totalProducts = snapshot.data ?? 0;
+        
+        return Container(
+          height: 180,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(12),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.grey.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 4,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.inventory, color: Colors.blue.shade600, size: 20),
+                  const SizedBox(width: 6),
+                  const Text(
+                    'Total Products',
+                    style: TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.black87,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [Colors.blue.shade50, Colors.blue.shade100],
+                    ),
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.inventory_2,
+                        size: 24,
+                        color: Colors.blue.shade600,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '$totalProducts',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade700,
+                        ),
+                      ),
+                      const SizedBox(height: 1),
+                      Flexible(
+                        child: Text(
+                          'Products Available',
+                          style: TextStyle(
+                            fontSize: 10,
+                            color: Colors.blue.shade600,
+                          ),
+                          textAlign: TextAlign.center,
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
   Widget _buildTopProductsCard() {
     return FutureBuilder<List<Map<String, dynamic>>>(
       future: _getTopProductsByRevenue(),
@@ -699,7 +1035,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             height: 1.4,
           ),
           child: Container(
-            height: 180,
+            height: 200,
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: Colors.white,
@@ -803,7 +1139,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildSalesByOutletCard() {
     return Container(
-      height: 180,
+      height: 200,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: Colors.white,
@@ -892,6 +1228,728 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Widget _buildStockValueCard() {
+    return Container(
+      height: 200,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.account_balance_wallet, color: Colors.teal.shade600, size: 24),
+              const SizedBox(width: 8),
+              const Text(
+                'Stock Value',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: Container(
+              width: double.infinity,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [Colors.teal.shade50, Colors.teal.shade100],
+                ),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Text(
+                      _formatCurrency(_dashboardData['stockValue'] ?? 0),
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.teal.shade700,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Total Inventory Value',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.teal.shade600,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionsPanel() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.flash_on, color: Colors.blue.shade600, size: 24),
+              const SizedBox(width: 8),
+              const Text(
+                'Quick Actions',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              Expanded(
+                child: _buildActionButton(
+                  'Add Stock',
+                  Icons.add_box,
+                  Colors.green,
+                  () => Navigator.pushNamed(context, '/stock_intake'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildActionButton(
+                  'Assign Product',
+                  Icons.assignment,
+                  Colors.blue,
+                  () => Navigator.pushNamed(context, '/products'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildActionButton(
+                  'New Customer',
+                  Icons.person_add,
+                  Colors.purple,
+                  () => Navigator.pushNamed(context, '/customers'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: _buildActionButton(
+                  'Sync Now',
+                  Icons.sync,
+                  Colors.orange,
+                  () => Navigator.pushNamed(context, '/sync'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionButton(
+    String label,
+    IconData icon,
+    Color color,
+    VoidCallback onPressed,
+  ) {
+    return ElevatedButton(
+      onPressed: onPressed,
+      style: ElevatedButton.styleFrom(
+        backgroundColor: color,
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 8),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(8),
+        ),
+        elevation: 2,
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 20),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+            ),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSalesTrendChart() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.trending_up, color: Colors.blue.shade600, size: 24),
+              const SizedBox(width: 8),
+              const Text(
+                'Sales Performance',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const Spacer(),
+              _buildTrendFilterButtons(),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 300,
+            child: _isLoadingCharts
+                ? const Center(child: CircularProgressIndicator())
+                : _salesTrendData.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No sales data available',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : LineChart(
+                        LineChartData(
+                          gridData: FlGridData(
+                            show: true,
+                            drawVerticalLine: true,
+                            horizontalInterval: 1,
+                            verticalInterval: 1,
+                            getDrawingHorizontalLine: (value) {
+                              return FlLine(
+                                color: Colors.grey.shade300,
+                                strokeWidth: 1,
+                              );
+                            },
+                            getDrawingVerticalLine: (value) {
+                              return FlLine(
+                                color: Colors.grey.shade300,
+                                strokeWidth: 1,
+                              );
+                            },
+                          ),
+                          titlesData: FlTitlesData(
+                            show: true,
+                            rightTitles: AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            topTitles: AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 30,
+                                interval: 1,
+                                getTitlesWidget:
+                                    (double value, TitleMeta meta) {
+                                  final index = value.toInt();
+                                  if (index >= 0 &&
+                                      index < _salesTrendData.length) {
+                                    final period = (_salesTrendData[index]
+                                        ['period'] as String?) ?? 'Unknown';
+                                    return SideTitleWidget(
+                                      axisSide: meta.axisSide,
+                                      child: Text(
+                                        _formatPeriodLabel(period),
+                                        style: const TextStyle(fontSize: 10),
+                                      ),
+                                    );
+                                  }
+                                  return const Text('');
+                                },
+                              ),
+                            ),
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                interval: null,
+                                reservedSize: 60,
+                                getTitlesWidget:
+                                    (double value, TitleMeta meta) {
+                                  return SideTitleWidget(
+                                    axisSide: meta.axisSide,
+                                    child: Text(
+                                      _formatCurrency(value),
+                                      style: const TextStyle(fontSize: 10),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                          borderData: FlBorderData(
+                            show: true,
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          minX: 0,
+                          maxX: (_salesTrendData.length - 1).toDouble(),
+                          minY: 0,
+                          maxY: _salesTrendData.isEmpty
+                              ? 100
+                              : _salesTrendData
+                                      .map((e) => (e['total_sales'] as num?)?.toDouble() ?? 0.0)
+                                      .reduce((a, b) => a > b ? a : b) *
+                                  1.1,
+                          lineBarsData: [
+                            LineChartBarData(
+                              spots:
+                                  _salesTrendData.asMap().entries.map((entry) {
+                                return FlSpot(
+                                  entry.key.toDouble(),
+                                  (entry.value['total_sales'] as num?)?.toDouble() ?? 0.0,
+                                );
+                              }).toList(),
+                              isCurved: true,
+                              gradient: LinearGradient(
+                                colors: [
+                                  Colors.blue.shade400,
+                                  Colors.blue.shade600,
+                                ],
+                              ),
+                              barWidth: 3,
+                              isStrokeCapRound: true,
+                              dotData: FlDotData(
+                                show: true,
+                                getDotPainter: (spot, percent, barData, index) {
+                                  return FlDotCirclePainter(
+                                    radius: 4,
+                                    color: Colors.blue.shade600,
+                                    strokeWidth: 2,
+                                    strokeColor: Colors.white,
+                                  );
+                                },
+                              ),
+                              belowBarData: BarAreaData(
+                                show: true,
+                                gradient: LinearGradient(
+                                  colors: [
+                                    Colors.blue.shade100.withOpacity(0.3),
+                                    Colors.blue.shade50.withOpacity(0.1),
+                                  ],
+                                  begin: Alignment.topCenter,
+                                  end: Alignment.bottomCenter,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTrendFilterButtons() {
+    return Row(
+      children: [
+        _buildFilterButton('Daily', 'daily'),
+        const SizedBox(width: 8),
+        _buildFilterButton('Weekly', 'weekly'),
+        const SizedBox(width: 8),
+        _buildFilterButton('Monthly', 'monthly'),
+      ],
+    );
+  }
+
+  Widget _buildFilterButton(String label, String value) {
+    final isSelected = _selectedTrendFilter == value;
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedTrendFilter = value;
+        });
+        _loadChartData();
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: isSelected ? Colors.blue.shade600 : Colors.grey.shade200,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: isSelected ? Colors.white : Colors.grey.shade700,
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _formatPeriodLabel(String period) {
+    switch (_selectedTrendFilter) {
+      case 'weekly':
+        return period.split('-').last;
+      case 'monthly':
+        final parts = period.split('-');
+        if (parts.length >= 2) {
+          final month = int.tryParse(parts[1]) ?? 1;
+          return DateFormat('MMM').format(DateTime(2024, month));
+        }
+        return period;
+      default: // daily
+        final date = DateTime.tryParse(period);
+        return date != null ? DateFormat('M/d').format(date) : period;
+    }
+  }
+
+  Widget _buildTopOutletsChart() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.store, color: Colors.green.shade600, size: 24),
+              const SizedBox(width: 8),
+              const Text(
+                'Top Performing Outlets',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 300,
+            child: _isLoadingCharts
+                ? const Center(child: CircularProgressIndicator())
+                : _topOutletsData.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No outlet data available',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : BarChart(
+                        BarChartData(
+                          alignment: BarChartAlignment.spaceAround,
+                          maxY: _topOutletsData.isEmpty
+                              ? 100
+                              : _topOutletsData
+                                      .map((e) => e['total_sales'] as double)
+                                      .reduce((a, b) => a > b ? a : b) *
+                                  1.1,
+                          barTouchData: BarTouchData(
+                            touchTooltipData: BarTouchTooltipData(
+                              tooltipBgColor: Colors.grey.shade800,
+                              getTooltipItem:
+                                  (group, groupIndex, rod, rodIndex) {
+                                final outlet = _topOutletsData[group.x.toInt()];
+                                return BarTooltipItem(
+                                  '${outlet['outlet_name']}\n${_formatCurrency(outlet['total_sales'])}',
+                                  const TextStyle(
+                                      color: Colors.white, fontSize: 12),
+                                );
+                              },
+                            ),
+                          ),
+                          titlesData: FlTitlesData(
+                            show: true,
+                            rightTitles: AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            topTitles: AxisTitles(
+                              sideTitles: SideTitles(showTitles: false),
+                            ),
+                            bottomTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 40,
+                                getTitlesWidget:
+                                    (double value, TitleMeta meta) {
+                                  final index = value.toInt();
+                                  if (index >= 0 &&
+                                      index < _topOutletsData.length) {
+                                    final outletName = (_topOutletsData[index]
+                                        ['outlet_name'] as String?) ?? 'Unknown Outlet';
+                                    return SideTitleWidget(
+                                      axisSide: meta.axisSide,
+                                      child: Text(
+                                        outletName.length > 8
+                                            ? '${outletName.substring(0, 8)}...'
+                                            : outletName,
+                                        style: const TextStyle(fontSize: 10),
+                                      ),
+                                    );
+                                  }
+                                  return const Text('');
+                                },
+                              ),
+                            ),
+                            leftTitles: AxisTitles(
+                              sideTitles: SideTitles(
+                                showTitles: true,
+                                reservedSize: 60,
+                                getTitlesWidget:
+                                    (double value, TitleMeta meta) {
+                                  return SideTitleWidget(
+                                    axisSide: meta.axisSide,
+                                    child: Text(
+                                      _formatCurrency(value),
+                                      style: const TextStyle(fontSize: 10),
+                                    ),
+                                  );
+                                },
+                              ),
+                            ),
+                          ),
+                          borderData: FlBorderData(
+                            show: true,
+                            border: Border.all(color: Colors.grey.shade300),
+                          ),
+                          barGroups:
+                              _topOutletsData.asMap().entries.map((entry) {
+                            return BarChartGroupData(
+                              x: entry.key,
+                              barRods: [
+                                BarChartRodData(
+                                  toY: (entry.value['total_sales'] as num?)?.toDouble() ?? 0.0,
+                                  gradient: LinearGradient(
+                                    colors: [
+                                      Colors.green.shade400,
+                                      Colors.green.shade600,
+                                    ],
+                                    begin: Alignment.bottomCenter,
+                                    end: Alignment.topCenter,
+                                  ),
+                                  width: 20,
+                                  borderRadius: const BorderRadius.only(
+                                    topLeft: Radius.circular(4),
+                                    topRight: Radius.circular(4),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }).toList(),
+                        ),
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTopCustomersChart() {
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 4,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.people, color: Colors.blue.shade600, size: 24),
+              const SizedBox(width: 8),
+              const Text(
+                'Top Performing Customers',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 20),
+          SizedBox(
+            height: 300,
+            child: _isLoadingCharts
+                ? const Center(child: CircularProgressIndicator())
+                : _topCustomersData.isEmpty
+                    ? const Center(
+                        child: Text(
+                          'No customer data available',
+                          style: TextStyle(color: Colors.grey),
+                        ),
+                      )
+                    : Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: PieChart(
+                              PieChartData(
+                                sections: _topCustomersData.asMap().entries.map((entry) {
+                                  final index = entry.key;
+                                  final customer = entry.value;
+                                  final colors = [
+                                    Colors.blue.shade400,
+                                    Colors.green.shade400,
+                                    Colors.orange.shade400,
+                                    Colors.purple.shade400,
+                                    Colors.red.shade400,
+                                  ];
+                                  return PieChartSectionData(
+                                    color: colors[index % colors.length],
+                                    value: (customer['total_spent'] as num?)?.toDouble() ?? 0.0,
+                                    title: '${(((customer['total_spent'] as num?)?.toDouble() ?? 0.0) / _topCustomersData.fold<double>(0, (sum, c) => sum + ((c['total_spent'] as num?)?.toDouble() ?? 0.0)) * 100).toStringAsFixed(1)}%',
+                                    radius: 60,
+                                    titleStyle: const TextStyle(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.bold,
+                                      color: Colors.white,
+                                    ),
+                                  );
+                                }).toList(),
+                                centerSpaceRadius: 40,
+                                sectionsSpace: 2,
+                                pieTouchData: PieTouchData(
+                                  touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                                    // Handle touch events if needed
+                                  },
+                                ),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 20),
+                          Expanded(
+                            flex: 1,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: _topCustomersData.asMap().entries.map((entry) {
+                                final index = entry.key;
+                                final customer = entry.value;
+                                final colors = [
+                                  Colors.blue.shade400,
+                                  Colors.green.shade400,
+                                  Colors.orange.shade400,
+                                  Colors.purple.shade400,
+                                  Colors.red.shade400,
+                                ];
+                                return Padding(
+                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  child: Row(
+                                    children: [
+                                      Container(
+                                        width: 12,
+                                        height: 12,
+                                        decoration: BoxDecoration(
+                                          color: colors[index % colors.length],
+                                          shape: BoxShape.circle,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              (customer['full_name'] as String?) ?? 'Unknown Customer',
+                                              style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                            Text(
+                                              _formatCurrency((customer['total_spent'] as num?)?.toDouble() ?? 0.0),
+                                              style: TextStyle(
+                                                fontSize: 10,
+                                                color: Colors.grey.shade600,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                );
+                              }).toList(),
+                            ),
+                          ),
+                        ],
+                      ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildAlertsSection() {
     return Column(
       children: [
@@ -907,7 +1965,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           children: [
             Expanded(child: _buildSyncStatusAlert()),
             const SizedBox(width: 20),
-            Expanded(child: _buildRecentSalesAlert()),
+            Expanded(child: _buildOutletStockBalanceAlert()),
           ],
         ),
       ],
@@ -999,7 +2057,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     )
                   : ListView.builder(
-                      itemCount: _lowStockItems.length > 3 ? 3 : _lowStockItems.length,
+                      itemCount:
+                          _lowStockItems.length > 3 ? 3 : _lowStockItems.length,
                       itemBuilder: (context, index) {
                         final item = _lowStockItems[index];
                         return Padding(
@@ -1130,7 +2189,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     )
                   : ListView.builder(
-                      itemCount: _outstandingCustomers.length > 3 ? 3 : _outstandingCustomers.length,
+                      itemCount: _outstandingCustomers.length > 3
+                          ? 3
+                          : _outstandingCustomers.length,
                       itemBuilder: (context, index) {
                         final customer = _outstandingCustomers[index];
                         return Padding(
@@ -1167,7 +2228,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget _buildSyncStatusAlert() {
     final hasError = _syncError != null;
     final color = hasError ? Colors.red : Colors.green;
-    
+
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1275,7 +2336,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  Widget _buildRecentSalesAlert() {
+  Widget _buildOutletStockBalanceAlert() {
     return Card(
       elevation: 4,
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
@@ -1286,7 +2347,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [Colors.blue.shade50, Colors.blue.shade100],
+            colors: [Colors.green.shade50, Colors.green.shade100],
           ),
         ),
         child: Column(
@@ -1297,22 +2358,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 Container(
                   padding: const EdgeInsets.all(8),
                   decoration: BoxDecoration(
-                    color: Colors.blue.shade400,
+                    color: Colors.green.shade400,
                     borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Icon(
-                    Icons.receipt,
+                    Icons.account_balance_wallet,
                     color: Colors.white,
                     size: 24,
                   ),
                 ),
                 const SizedBox(width: 12),
                 const Text(
-                  'Recent Sales',
+                  'Outlet Stock Balance',
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue,
+                    color: Colors.green,
                   ),
                 ),
               ],
@@ -1333,45 +2394,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ],
               ),
-              child: _recentSales.isEmpty
-                  ? const Center(
+              child: FutureBuilder<List<Map<String, dynamic>>>(
+                future: _getOutletStockBalances(),
+                builder: (context, snapshot) {
+                  final stockBalances = snapshot.data ?? [];
+                  
+                  if (stockBalances.isEmpty) {
+                    return const Center(
                       child: Text(
-                        'No recent sales',
+                        'No stock balance data',
                         style: TextStyle(
                           fontSize: 14,
                           fontStyle: FontStyle.italic,
                           color: Colors.grey,
                         ),
                       ),
-                    )
-                  : ListView.builder(
-                      itemCount: _recentSales.length,
-                      itemBuilder: (context, index) {
-                        final sale = _recentSales[index];
-                        return Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 2),
-                          child: Row(
-                            children: [
-                              Expanded(
-                                child: Text(
-                                  'Sale #${sale['id'] ?? index + 1}',
-                                  style: const TextStyle(fontSize: 12),
-                                  overflow: TextOverflow.ellipsis,
-                                ),
+                    );
+                  }
+                  
+                  return ListView.builder(
+                    itemCount: stockBalances.length,
+                    itemBuilder: (context, index) {
+                      final balance = stockBalances[index];
+                      return Padding(
+                        padding: const EdgeInsets.symmetric(vertical: 2),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                '${balance['outlet_name']}',
+                                style: const TextStyle(fontSize: 12),
+                                overflow: TextOverflow.ellipsis,
                               ),
-                              Text(
-                                _formatCurrency(sale['total_amount'] ?? 0),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.blue.shade600,
-                                ),
+                            ),
+                            Text(
+                              _formatCurrency(balance['expected_revenue'] ?? 0),
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.green.shade600,
                               ),
-                            ],
-                          ),
-                        );
-                      },
-                    ),
+                            ),
+                          ],
+                        ),
+                      );
+                    },
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -1412,93 +2482,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ],
                 ),
                 const SizedBox(height: 24),
-                LayoutBuilder(
-                  builder: (context, constraints) {
-                    int crossAxisCount = 4;
-                    if (constraints.maxWidth < 1200) crossAxisCount = 3;
-                    if (constraints.maxWidth < 900) crossAxisCount = 2;
-                    if (constraints.maxWidth < 600) crossAxisCount = 1;
-
-                    return GridView.count(
-                      crossAxisCount: crossAxisCount,
-                      crossAxisSpacing: 20,
-                      mainAxisSpacing: 20,
-                      shrinkWrap: true,
-                      physics: const NeverScrollableScrollPhysics(),
-                      childAspectRatio: 1.2,
-                      children: _isLoading
-                          ? [
-                              _buildLoadingSummaryCard(
-                                  'Sales Reps', Icons.people,
-                                  gradientStart: Colors.indigo.shade600,
-                                  gradientEnd: Colors.indigo.shade800),
-                              _buildLoadingSummaryCard('Outlets', Icons.store,
-                                  gradientStart: Colors.green.shade600,
-                                  gradientEnd: Colors.green.shade800),
-                              _buildLoadingSummaryCard(
-                                  'Products', Icons.inventory,
-                                  gradientStart: Colors.orange.shade600,
-                                  gradientEnd: Colors.orange.shade800),
-                              _buildLoadingSummaryCard(
-                                  'Total Sales', Icons.point_of_sale,
-                                  gradientStart: Colors.purple.shade600,
-                                  gradientEnd: Colors.purple.shade800),
-                              if (crossAxisCount >= 3) ...[
-                                _buildLoadingSummaryCard(
-                                    'Stock Value', Icons.account_balance_wallet,
-                                    gradientStart: Colors.teal.shade600,
-                                    gradientEnd: Colors.teal.shade800),
-                                _buildLoadingSummaryCard(
-                                    'Outstanding', Icons.payment,
-                                    gradientStart: Colors.red.shade600,
-                                    gradientEnd: Colors.red.shade800),
-                              ],
-                            ]
-                          : [
-                              _buildSummaryCard(
-                                  'Sales Reps',
-                                  '${_dashboardData['salesRepsCount']}',
-                                  Icons.people,
-                                  gradientStart: Colors.indigo.shade600,
-                                  gradientEnd: Colors.indigo.shade800),
-                              _buildSummaryCard(
-                                  'Outlets',
-                                  '${_dashboardData['outletsCount']}',
-                                  Icons.store,
-                                  gradientStart: Colors.green.shade600,
-                                  gradientEnd: Colors.green.shade800),
-                              _buildSummaryCard(
-                                  'Products',
-                                  '${_dashboardData['productsCount']}',
-                                  Icons.inventory,
-                                  gradientStart: Colors.orange.shade600,
-                                  gradientEnd: Colors.orange.shade800),
-                              _buildSummaryCard(
-                                  'Total Sales',
-                                  _formatCurrency(_dashboardData['totalSales']),
-                                  Icons.point_of_sale,
-                                  gradientStart: Colors.purple.shade600,
-                                  gradientEnd: Colors.purple.shade800),
-                              if (crossAxisCount >= 3) ...[
-                                _buildSummaryCard(
-                                    'Stock Value',
-                                    _formatCurrency(
-                                        _dashboardData['stockValue']),
-                                    Icons.account_balance_wallet,
-                                    gradientStart: Colors.teal.shade600,
-                                    gradientEnd: Colors.teal.shade800),
-                                _buildSummaryCard(
-                                    'Outstanding',
-                                    _formatCurrency(
-                                        _dashboardData['outstandingPayments']),
-                                    Icons.payment,
-                                    gradientStart: Colors.red.shade600,
-                                    gradientEnd: Colors.red.shade800),
-                              ],
-                            ],
-                    );
-                  },
-                ),
+                _buildQuickActionsPanel(),
                 const SizedBox(height: 40),
                 _buildSalesAnalyticsSection(),
                 const SizedBox(height: 40),
@@ -1512,6 +2496,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 ),
                 const SizedBox(height: 24),
                 _buildAlertsSection(),
+                const SizedBox(height: 40),
+                _buildSalesTrendChart(),
+                const SizedBox(height: 40),
+                Row(
+                  children: [
+                    Expanded(
+                      flex: 1,
+                      child: _buildTopOutletsChart(),
+                    ),
+                    const SizedBox(width: 20),
+                    Expanded(
+                      flex: 1,
+                      child: _buildTopCustomersChart(),
+                    ),
+                  ],
+                ),
               ],
             ),
           ),
