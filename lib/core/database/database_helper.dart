@@ -30,7 +30,7 @@ class DatabaseHelper {
     return await dbFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 6,
+        version: 8,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       ),
@@ -115,6 +115,77 @@ class DatabaseHelper {
           FOREIGN KEY (outlet_id) REFERENCES outlets (id)
         )
       ''');
+    }
+
+    if (oldVersion < 7) {
+      // Add expenditure tables
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS expenditures (
+          id TEXT PRIMARY KEY,
+          outlet_id TEXT NOT NULL,
+          outlet_name TEXT NOT NULL,
+          category TEXT NOT NULL,
+          description TEXT NOT NULL,
+          amount REAL NOT NULL,
+          payment_method TEXT DEFAULT 'cash',
+          receipt_number TEXT,
+          vendor_name TEXT,
+          date_incurred TEXT NOT NULL,
+          created_at TEXT NOT NULL,
+          updated_at TEXT,
+          is_recurring INTEGER DEFAULT 0,
+          recurring_frequency TEXT,
+          notes TEXT,
+          status TEXT DEFAULT 'pending',
+          approved_by TEXT,
+          rejected_by TEXT,
+          rejection_reason TEXT,
+          is_synced INTEGER DEFAULT 0,
+          FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS expenditure_categories (
+          id TEXT PRIMARY KEY,
+          name TEXT NOT NULL,
+          description TEXT NOT NULL,
+          color TEXT NOT NULL DEFAULT '#2196F3',
+          is_active INTEGER DEFAULT 1,
+          created_at TEXT NOT NULL
+        )
+      ''');
+    }
+
+    if (oldVersion < 8) {
+      // Add approval workflow columns to expenditures table if they don't exist
+      try {
+        await db.execute(
+            'ALTER TABLE expenditures ADD COLUMN status TEXT DEFAULT "pending"');
+      } catch (e) {
+        // Column might already exist, ignore error
+      }
+
+      try {
+        await db
+            .execute('ALTER TABLE expenditures ADD COLUMN approved_by TEXT');
+      } catch (e) {
+        // Column might already exist, ignore error
+      }
+
+      try {
+        await db
+            .execute('ALTER TABLE expenditures ADD COLUMN rejected_by TEXT');
+      } catch (e) {
+        // Column might already exist, ignore error
+      }
+
+      try {
+        await db.execute(
+            'ALTER TABLE expenditures ADD COLUMN rejection_reason TEXT');
+      } catch (e) {
+        // Column might already exist, ignore error
+      }
     }
   }
 
@@ -285,6 +356,46 @@ class DatabaseHelper {
         FOREIGN KEY (product_id) REFERENCES products (id)
       )
     ''');
+
+    // Expenditures table
+    await db.execute('''
+      CREATE TABLE expenditures (
+        id TEXT PRIMARY KEY,
+        outlet_id TEXT NOT NULL,
+        outlet_name TEXT NOT NULL,
+        category TEXT NOT NULL,
+        description TEXT NOT NULL,
+        amount REAL NOT NULL,
+        payment_method TEXT NOT NULL,
+        receipt_number TEXT,
+        vendor_name TEXT,
+        date_incurred TEXT NOT NULL,
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        is_recurring INTEGER DEFAULT 0,
+        recurring_frequency TEXT,
+        next_due_date TEXT,
+        status TEXT DEFAULT 'pending',
+        approved_by TEXT,
+        rejected_by TEXT,
+        rejection_reason TEXT,
+        notes TEXT,
+        is_synced INTEGER DEFAULT 0,
+        FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+      )
+    ''');
+
+    // Expenditure Categories table
+    await db.execute('''
+      CREATE TABLE expenditure_categories (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL,
+        description TEXT NOT NULL,
+        color TEXT NOT NULL DEFAULT '#2196F3',
+        is_active INTEGER DEFAULT 1,
+        created_at TEXT NOT NULL
+      )
+    ''');
   }
 
   Future<void> clearAllTables() async {
@@ -300,6 +411,8 @@ class DatabaseHelper {
       await txn.delete('sync_queue');
       await txn.delete('stock_balances');
       await txn.delete('product_distributions');
+      await txn.delete('expenditures');
+      await txn.delete('expenditure_categories');
     });
   }
 

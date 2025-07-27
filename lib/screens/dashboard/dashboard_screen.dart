@@ -287,7 +287,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
       // First check if there are any sales records
-      final totalSales = await db.rawQuery('SELECT COUNT(*) as count FROM sales');
+      final totalSales =
+          await db.rawQuery('SELECT COUNT(*) as count FROM sales');
       print('Total sales in database: ${totalSales[0]['count']}');
 
       final query = '''
@@ -300,7 +301,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         GROUP BY $groupBy
         ORDER BY period ASC
       ''';
-      
+
       print('Executing sales trend query: $query');
       final result = await db.rawQuery(query);
       print('Sales trend query result: $result');
@@ -336,7 +337,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       return result
           .map((row) => {
-                'outlet_name': (row['outlet_name'] as String?) ?? 'Unknown Outlet',
+                'outlet_name':
+                    (row['outlet_name'] as String?) ?? 'Unknown Outlet',
                 'total_sales': (row['total_sales'] as num?)?.toDouble() ?? 0.0,
                 'sales_count': (row['sales_count'] as num?)?.toInt() ?? 0,
               })
@@ -354,16 +356,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<List<Map<String, dynamic>>> _getOutletStockBalances() async {
     try {
       final db = await _syncService.database;
-      
+
       // First check if we have any stock balance data
-      final stockBalanceCount = await db.rawQuery('SELECT COUNT(*) as count FROM stock_balances');
+      final stockBalanceCount =
+          await db.rawQuery('SELECT COUNT(*) as count FROM stock_balances');
       final count = stockBalanceCount.first['count'] as int;
-      
+
       if (count == 0) {
         // Create some sample data for demonstration
         await _createSampleStockBalanceData();
       }
-      
+
       final result = await db.rawQuery('''
         SELECT 
           o.name as outlet_name,
@@ -381,7 +384,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return result
           .map((row) => {
                 'outlet_name': row['outlet_name'] as String,
-                'expected_revenue': (row['expected_revenue'] as num?)?.toDouble() ?? 0.0,
+                'expected_revenue':
+                    (row['expected_revenue'] as num?)?.toDouble() ?? 0.0,
                 'product_count': (row['product_count'] as num?)?.toInt() ?? 0,
               })
           .toList();
@@ -394,30 +398,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _createSampleStockBalanceData() async {
     try {
       final db = await _syncService.database;
-      
+
       // Check if we have outlets and products first
       final outlets = await db.query('outlets', limit: 3);
       final products = await db.query('products', limit: 5);
-      
+
       if (outlets.isNotEmpty && products.isNotEmpty) {
         final now = DateTime.now().toIso8601String();
-        
+
         // Create sample stock balances
         for (int i = 0; i < outlets.length && i < 3; i++) {
           final outlet = outlets[i];
           for (int j = 0; j < products.length && j < 2; j++) {
             final product = products[j];
-            await db.insert('stock_balances', {
-              'id': 'sb_${outlet['id']}_${product['id']}_$i$j',
-              'outlet_id': outlet['id'],
-              'product_id': product['id'],
-              'given_quantity': 100.0 + (i * 50),
-              'sold_quantity': 20.0 + (j * 10),
-              'balance_quantity': 80.0 + (i * 40) - (j * 10),
-              'last_updated': now,
-              'created_at': now,
-              'synced': 1,
-            }, conflictAlgorithm: ConflictAlgorithm.ignore);
+            await db.insert(
+                'stock_balances',
+                {
+                  'id': 'sb_${outlet['id']}_${product['id']}_$i$j',
+                  'outlet_id': outlet['id'],
+                  'product_id': product['id'],
+                  'given_quantity': 100.0 + (i * 50),
+                  'sold_quantity': 20.0 + (j * 10),
+                  'balance_quantity': 80.0 + (i * 40) - (j * 10),
+                  'last_updated': now,
+                  'created_at': now,
+                  'synced': 1,
+                },
+                conflictAlgorithm: ConflictAlgorithm.ignore);
           }
         }
       }
@@ -474,7 +481,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
       return result
           .map((row) => {
-                'full_name': (row['full_name'] as String?) ?? 'Unknown Customer',
+                'full_name':
+                    (row['full_name'] as String?) ?? 'Unknown Customer',
                 'total_spent': (row['total_spent'] as num?)?.toDouble() ?? 0.0,
                 'purchase_count': (row['purchase_count'] as num?)?.toInt() ?? 0,
               })
@@ -903,7 +911,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       future: _getTotalProductsCount(),
       builder: (context, snapshot) {
         final totalProducts = snapshot.data ?? 0;
-        
+
         return Container(
           height: 180,
           padding: const EdgeInsets.all(16),
@@ -1249,7 +1257,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
         children: [
           Row(
             children: [
-              Icon(Icons.account_balance_wallet, color: Colors.teal.shade600, size: 24),
+              Icon(Icons.account_balance_wallet,
+                  color: Colors.teal.shade600, size: 24),
               const SizedBox(width: 8),
               const Text(
                 'Stock Value',
@@ -1500,7 +1509,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   if (index >= 0 &&
                                       index < _salesTrendData.length) {
                                     final period = (_salesTrendData[index]
-                                        ['period'] as String?) ?? 'Unknown';
+                                            ['period'] as String?) ??
+                                        'Unknown';
                                     return SideTitleWidget(
                                       axisSide: meta.axisSide,
                                       child: Text(
@@ -1541,7 +1551,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           maxY: _salesTrendData.isEmpty
                               ? 100
                               : _salesTrendData
-                                      .map((e) => (e['total_sales'] as num?)?.toDouble() ?? 0.0)
+                                      .map((e) =>
+                                          (e['total_sales'] as num?)
+                                              ?.toDouble() ??
+                                          0.0)
                                       .reduce((a, b) => a > b ? a : b) *
                                   1.1,
                           lineBarsData: [
@@ -1550,7 +1563,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   _salesTrendData.asMap().entries.map((entry) {
                                 return FlSpot(
                                   entry.key.toDouble(),
-                                  (entry.value['total_sales'] as num?)?.toDouble() ?? 0.0,
+                                  (entry.value['total_sales'] as num?)
+                                          ?.toDouble() ??
+                                      0.0,
                                 );
                               }).toList(),
                               isCurved: true,
@@ -1735,7 +1750,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   if (index >= 0 &&
                                       index < _topOutletsData.length) {
                                     final outletName = (_topOutletsData[index]
-                                        ['outlet_name'] as String?) ?? 'Unknown Outlet';
+                                            ['outlet_name'] as String?) ??
+                                        'Unknown Outlet';
                                     return SideTitleWidget(
                                       axisSide: meta.axisSide,
                                       child: Text(
@@ -1777,7 +1793,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               x: entry.key,
                               barRods: [
                                 BarChartRodData(
-                                  toY: (entry.value['total_sales'] as num?)?.toDouble() ?? 0.0,
+                                  toY: (entry.value['total_sales'] as num?)
+                                          ?.toDouble() ??
+                                      0.0,
                                   gradient: LinearGradient(
                                     colors: [
                                       Colors.green.shade400,
@@ -1853,7 +1871,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             flex: 2,
                             child: PieChart(
                               PieChartData(
-                                sections: _topCustomersData.asMap().entries.map((entry) {
+                                sections: _topCustomersData
+                                    .asMap()
+                                    .entries
+                                    .map((entry) {
                                   final index = entry.key;
                                   final customer = entry.value;
                                   final colors = [
@@ -1865,8 +1886,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ];
                                   return PieChartSectionData(
                                     color: colors[index % colors.length],
-                                    value: (customer['total_spent'] as num?)?.toDouble() ?? 0.0,
-                                    title: '${(((customer['total_spent'] as num?)?.toDouble() ?? 0.0) / _topCustomersData.fold<double>(0, (sum, c) => sum + ((c['total_spent'] as num?)?.toDouble() ?? 0.0)) * 100).toStringAsFixed(1)}%',
+                                    value: (customer['total_spent'] as num?)
+                                            ?.toDouble() ??
+                                        0.0,
+                                    title:
+                                        '${(((customer['total_spent'] as num?)?.toDouble() ?? 0.0) / _topCustomersData.fold<double>(0, (sum, c) => sum + ((c['total_spent'] as num?)?.toDouble() ?? 0.0)) * 100).toStringAsFixed(1)}%',
                                     radius: 60,
                                     titleStyle: const TextStyle(
                                       fontSize: 12,
@@ -1878,7 +1902,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 centerSpaceRadius: 40,
                                 sectionsSpace: 2,
                                 pieTouchData: PieTouchData(
-                                  touchCallback: (FlTouchEvent event, pieTouchResponse) {
+                                  touchCallback:
+                                      (FlTouchEvent event, pieTouchResponse) {
                                     // Handle touch events if needed
                                   },
                                 ),
@@ -1891,7 +1916,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               mainAxisAlignment: MainAxisAlignment.center,
-                              children: _topCustomersData.asMap().entries.map((entry) {
+                              children: _topCustomersData
+                                  .asMap()
+                                  .entries
+                                  .map((entry) {
                                 final index = entry.key;
                                 final customer = entry.value;
                                 final colors = [
@@ -1902,7 +1930,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   Colors.red.shade400,
                                 ];
                                 return Padding(
-                                  padding: const EdgeInsets.symmetric(vertical: 4),
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 4),
                                   child: Row(
                                     children: [
                                       Container(
@@ -1916,10 +1945,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       const SizedBox(width: 8),
                                       Expanded(
                                         child: Column(
-                                          crossAxisAlignment: CrossAxisAlignment.start,
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
                                           children: [
                                             Text(
-                                              (customer['full_name'] as String?) ?? 'Unknown Customer',
+                                              (customer['full_name']
+                                                      as String?) ??
+                                                  'Unknown Customer',
                                               style: const TextStyle(
                                                 fontSize: 12,
                                                 fontWeight: FontWeight.w500,
@@ -1927,7 +1959,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               overflow: TextOverflow.ellipsis,
                                             ),
                                             Text(
-                                              _formatCurrency((customer['total_spent'] as num?)?.toDouble() ?? 0.0),
+                                              _formatCurrency(
+                                                  (customer['total_spent']
+                                                              as num?)
+                                                          ?.toDouble() ??
+                                                      0.0),
                                               style: TextStyle(
                                                 fontSize: 10,
                                                 color: Colors.grey.shade600,
@@ -2398,7 +2434,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 future: _getOutletStockBalances(),
                 builder: (context, snapshot) {
                   final stockBalances = snapshot.data ?? [];
-                  
+
                   if (stockBalances.isEmpty) {
                     return const Center(
                       child: Text(
@@ -2411,7 +2447,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       ),
                     );
                   }
-                  
+
                   return ListView.builder(
                     itemCount: stockBalances.length,
                     itemBuilder: (context, index) {
@@ -2466,7 +2502,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Overview',
+                      'Hadraniel Frozen Food - Management App',
                       style: TextStyle(
                         fontSize: 28,
                         fontWeight: FontWeight.bold,

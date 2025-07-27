@@ -1104,11 +1104,27 @@ class SyncService {
 
       // Sync stock-related data
       await syncStockBalancesToLocalDb();
-      await syncProductDistributionsFromServer();
-      await syncProductDistributionsToServer();
+      
+      // Sync product distributions with error handling for missing table
+      try {
+        await syncProductDistributionsFromServer();
+        await syncProductDistributionsToServer();
+      } catch (e) {
+        if (e.toString().contains('relation "public.product_distributions" does not exist')) {
+          print('Warning: product_distributions table does not exist in cloud database. Skipping sync.');
+          print('Please run the migration: supabase/migrations/20240101000000_create_product_distributions_table.sql');
+        } else {
+          print('Error syncing product distributions: $e');
+          // Re-throw other errors
+          rethrow;
+        }
+      }
 
       // Sync stock intake data
       await syncStockIntakesToLocalDb();
+
+      // Sync expenditures data
+      await syncExpendituresToLocalDb();
     } catch (e) {
       print('Error in syncAll: $e');
       throw e;
@@ -1418,6 +1434,146 @@ class SyncService {
         print('Error syncing intake balances to Supabase: $e');
       }
       // Don't throw the error, just log it to prevent app crashes
+    }
+  }
+
+  // Expenditures Sync
+  Future<void> syncExpendituresToLocalDb() async {
+    try {
+      final db = await _dbHelper.database;
+
+      // Get a valid outlet ID as fallback
+      String? fallbackOutletId;
+      try {
+        final outlets = await getAllLocalOutlets();
+        if (outlets.isNotEmpty) {
+          fallbackOutletId = outlets.first.id;
+        }
+      } catch (e) {
+        print('Warning: Could not get fallback outlet ID: $e');
+      }
+
+      // First sync local changes to cloud in a transaction
+      await db.transaction((txn) async {
+        final unsyncedExpenditures = await txn.query(
+          'expenditures',
+          where: 'is_synced = ?',
+          whereArgs: [0],
+        );
+
+        // Push unsynced expenditures to Supabase
+        for (var expenditureMap in unsyncedExpenditures) {
+          // Helper function to validate UUID
+          String? validateUuid(dynamic value) {
+            if (value == null) return null;
+            final str = value.toString();
+            // Check if it's a valid UUID format
+            final uuidRegex = RegExp(
+                r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$',
+                caseSensitive: false);
+            return uuidRegex.hasMatch(str) ? str : null;
+          }
+
+          // Validate outlet_id and use fallback if invalid
+          String? validatedOutletId = validateUuid(expenditureMap['outlet_id']);
+          if (validatedOutletId == null && fallbackOutletId != null) {
+            validatedOutletId = fallbackOutletId;
+            print(
+                'Warning: Invalid outlet_id "${expenditureMap['outlet_id']}" replaced with fallback: $fallbackOutletId');
+          }
+
+          // Skip this expenditure if we still don't have a valid outlet_id
+          if (validatedOutletId == null) {
+            print(
+                'Error: Skipping expenditure ${expenditureMap['id']} - no valid outlet_id available');
+            continue;
+          }
+
+          await supabase.from('expenditures').upsert({
+            'id': expenditureMap['id'],
+            'description': expenditureMap['description'],
+            'amount': expenditureMap['amount'],
+            'category': expenditureMap['category'],
+            'outlet_id': validatedOutletId,
+            'outlet_name': expenditureMap['outlet_name'], // Include outlet_name
+            'payment_method': expenditureMap['payment_method'] ?? 'cash',
+            'receipt_number': expenditureMap['receipt_number'],
+            'vendor_name': expenditureMap['vendor_name'],
+            'date_incurred': expenditureMap['date_incurred'],
+            'status': expenditureMap['status'],
+            'approved_by': validateUuid(expenditureMap['approved_by']),
+            'rejected_by': validateUuid(expenditureMap['rejected_by']),
+            'rejection_reason': expenditureMap['rejection_reason'],
+            'notes': expenditureMap['notes'],
+            'is_recurring': (expenditureMap['is_recurring'] == true || expenditureMap['is_recurring'] == 1) ? 1 : 0,
+            'recurring_frequency': expenditureMap['recurring_frequency'],
+            'next_due_date': expenditureMap['next_due_date'],
+            'created_at': expenditureMap['created_at'],
+            'updated_at': expenditureMap['updated_at'],
+          });
+
+          // Mark as synced locally
+          await txn.update(
+            'expenditures',
+            {'is_synced': 1},
+            where: 'id = ?',
+            whereArgs: [expenditureMap['id']],
+          );
+        }
+      });
+
+      // Pull latest expenditures from Supabase
+      final response = await supabase.from('expenditures').select();
+      final expenditures = response as List<dynamic>;
+
+      // Update local database
+      await db.transaction((txn) async {
+        for (var expenditureData in expenditures) {
+          // Get outlet_name if missing from cloud data
+          String? outletName = expenditureData['outlet_name'];
+          if (outletName == null && expenditureData['outlet_id'] != null) {
+            outletName = await getOutletName(expenditureData['outlet_id']);
+          }
+          
+          await txn.insert(
+            'expenditures',
+            {
+              'id': expenditureData['id'],
+              'description': expenditureData['description'],
+              'amount': expenditureData['amount'],
+              'category': expenditureData['category'],
+              'outlet_id': expenditureData['outlet_id'],
+              'outlet_name': outletName ?? 'Unknown Outlet', // Provide fallback
+              'payment_method': expenditureData['payment_method'] ?? 'cash', // Provide default
+              'receipt_number': expenditureData['receipt_number'],
+              'vendor_name': expenditureData['vendor_name'],
+              'date_incurred': expenditureData['date_incurred'],
+              'status': expenditureData['status'],
+              'approved_by': expenditureData['approved_by'],
+              'rejected_by': expenditureData['rejected_by'],
+              'rejection_reason': expenditureData['rejection_reason'],
+              'notes': expenditureData['notes'],
+              'is_recurring': (expenditureData['is_recurring'] == true || expenditureData['is_recurring'] == 1) ? 1 : 0,
+              'recurring_frequency': expenditureData['recurring_frequency'],
+              'next_due_date': expenditureData['next_due_date'],
+              'created_at': expenditureData['created_at'],
+              'updated_at': expenditureData['updated_at'],
+              'is_synced': 1,
+            },
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+      });
+    } catch (e) {
+      if (e.toString().contains('null value in column "outlet_name"') ||
+          e.toString().contains('column "outlet_name" of relation "expenditures" does not exist')) {
+        print('Warning: expenditures table is missing outlet_name column in cloud database.');
+        print('Please run the migration: fix_missing_tables.sql to add the missing column.');
+        print('Skipping expenditures sync for now.');
+      } else {
+        print('Error syncing expenditures: $e');
+        throw e;
+      }
     }
   }
 

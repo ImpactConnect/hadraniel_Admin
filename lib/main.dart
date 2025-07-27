@@ -16,6 +16,7 @@ import 'screens/dashboard/sales_screen.dart';
 import 'screens/dashboard/customers_screen.dart';
 import 'screens/dashboard/stock_screen.dart';
 import 'screens/dashboard/settings_screen.dart';
+import 'screens/dashboard/expenditures_screen.dart';
 import 'screens/stock_intake_screen.dart';
 
 void main() async {
@@ -102,6 +103,7 @@ class _MyAppState extends State<MyApp> {
         '/sales': (context) => const SalesScreen(),
         '/stock': (context) => const StockScreen(),
         '/stock-intake': (context) => const StockIntakeScreen(),
+        '/expenditures': (context) => const ExpendituresScreen(),
         '/customers': (context) => const CustomersScreen(),
         '/settings': (context) => const SettingsScreen(),
       },

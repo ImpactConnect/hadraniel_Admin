@@ -218,34 +218,65 @@ class _CustomersScreenState extends State<CustomersScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          _buildSectionTitle('Overview', Icons.dashboard),
-          Padding(
+          // Quick stats in header
+          Container(
             padding: const EdgeInsets.all(16.0),
+            decoration: BoxDecoration(
+              color: colorScheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
+            margin: const EdgeInsets.all(16.0),
             child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                Expanded(
-                  child: _buildMetricCard(
-                    'Total Outstanding',
-                    '₦${NumberFormat('#,##0.00').format(_totalOutstanding)}',
-                    Icons.account_balance_wallet,
-                    Colors.purple.shade400,
-                    Colors.purple.shade700,
-                  ),
+                Column(
+                  children: [
+                    Text(
+                      _customers.length.toString(),
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                    Text(
+                      'Total Customers',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: _buildMetricCard(
-                    'Total Customers',
-                    _customers.length.toString(),
-                    Icons.people,
-                    Colors.blue.shade400,
-                    Colors.blue.shade700,
-                  ),
+                Container(
+                  height: 40,
+                  width: 1,
+                  color: colorScheme.primary.withOpacity(0.3),
+                ),
+                Column(
+                  children: [
+                    Text(
+                      '₦${NumberFormat('#,##0').format(_totalOutstanding)}',
+                      style: TextStyle(
+                        fontSize: 24,
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                    Text(
+                      'Outstanding',
+                      style: TextStyle(
+                        fontSize: 14,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ],
                 ),
               ],
             ),
           ),
-          _buildSectionTitle('Filters & Search', Icons.filter_list),
+          // Search and filters
+          _buildSectionTitle('Search & Filter', Icons.filter_list),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16.0),
             child: Card(

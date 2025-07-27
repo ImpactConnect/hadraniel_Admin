@@ -229,8 +229,8 @@ class _StockScreenState extends State<StockScreen> {
         );
 
         return product.productName.toLowerCase().contains(
-              _searchQuery.toLowerCase(),
-            ) ||
+                  _searchQuery.toLowerCase(),
+                ) ||
             outlet.name.toLowerCase().contains(_searchQuery.toLowerCase());
       })) {
         final product = _products.firstWhere(
@@ -336,78 +336,75 @@ class _StockScreenState extends State<StockScreen> {
                 'Balance Value',
                 'Last Updated',
               ],
-              data: _stockBalances
-                  .where((stock) {
-                    final product = _products.firstWhere(
-                      (p) => p.id == stock.productId,
-                      orElse: () => Product(
-                        id: stock.productId,
-                        productName: 'Unknown',
-                        quantity: 0,
-                        unit: 'N/A',
-                        costPerUnit: 0,
-                        totalCost: 0,
-                        dateAdded: DateTime.now(),
-                        outletId: '',
-                        createdAt: DateTime.now(),
-                        isSynced: false,
-                      ),
-                    );
-                    final outlet = _outlets.firstWhere(
-                      (o) => o.id == stock.outletId,
-                      orElse: () => Outlet(
-                        id: stock.outletId,
-                        name: 'Unknown',
-                        createdAt: null,
-                      ),
-                    );
+              data: _stockBalances.where((stock) {
+                final product = _products.firstWhere(
+                  (p) => p.id == stock.productId,
+                  orElse: () => Product(
+                    id: stock.productId,
+                    productName: 'Unknown',
+                    quantity: 0,
+                    unit: 'N/A',
+                    costPerUnit: 0,
+                    totalCost: 0,
+                    dateAdded: DateTime.now(),
+                    outletId: '',
+                    createdAt: DateTime.now(),
+                    isSynced: false,
+                  ),
+                );
+                final outlet = _outlets.firstWhere(
+                  (o) => o.id == stock.outletId,
+                  orElse: () => Outlet(
+                    id: stock.outletId,
+                    name: 'Unknown',
+                    createdAt: null,
+                  ),
+                );
 
-                    return product.productName.toLowerCase().contains(
+                return product.productName.toLowerCase().contains(
                           _searchQuery.toLowerCase(),
                         ) ||
-                        outlet.name.toLowerCase().contains(
+                    outlet.name.toLowerCase().contains(
                           _searchQuery.toLowerCase(),
                         );
-                  })
-                  .map((stock) {
-                    final product = _products.firstWhere(
-                      (p) => p.id == stock.productId,
-                      orElse: () => Product(
-                        id: stock.productId,
-                        productName: 'Unknown',
-                        quantity: 0,
-                        unit: 'N/A',
-                        costPerUnit: 0,
-                        totalCost: 0,
-                        dateAdded: DateTime.now(),
-                        outletId: '',
-                        createdAt: DateTime.now(),
-                        isSynced: false,
-                      ),
-                    );
-                    final outlet = _outlets.firstWhere(
-                      (o) => o.id == stock.outletId,
-                      orElse: () => Outlet(
-                        id: stock.outletId,
-                        name: 'Unknown',
-                        createdAt: null,
-                      ),
-                    );
+              }).map((stock) {
+                final product = _products.firstWhere(
+                  (p) => p.id == stock.productId,
+                  orElse: () => Product(
+                    id: stock.productId,
+                    productName: 'Unknown',
+                    quantity: 0,
+                    unit: 'N/A',
+                    costPerUnit: 0,
+                    totalCost: 0,
+                    dateAdded: DateTime.now(),
+                    outletId: '',
+                    createdAt: DateTime.now(),
+                    isSynced: false,
+                  ),
+                );
+                final outlet = _outlets.firstWhere(
+                  (o) => o.id == stock.outletId,
+                  orElse: () => Outlet(
+                    id: stock.outletId,
+                    name: 'Unknown',
+                    createdAt: null,
+                  ),
+                );
 
-                    return [
-                      product.productName,
-                      outlet.name,
-                      stock.givenQuantity.toString(),
-                      stock.soldQuantity.toString(),
-                      stock.balanceQuantity.toString(),
-                      stock.totalGivenValue?.toStringAsFixed(2) ?? '0.00',
-                      stock.balanceValue?.toStringAsFixed(2) ?? '0.00',
-                      stock.lastUpdated != null
-                          ? DateFormat('yyyy-MM-dd').format(stock.lastUpdated!)
-                          : 'N/A',
-                    ];
-                  })
-                  .toList(),
+                return [
+                  product.productName,
+                  outlet.name,
+                  stock.givenQuantity.toString(),
+                  stock.soldQuantity.toString(),
+                  stock.balanceQuantity.toString(),
+                  stock.totalGivenValue?.toStringAsFixed(2) ?? '0.00',
+                  stock.balanceValue?.toStringAsFixed(2) ?? '0.00',
+                  stock.lastUpdated != null
+                      ? DateFormat('yyyy-MM-dd').format(stock.lastUpdated!)
+                      : 'N/A',
+                ];
+              }).toList(),
             ),
           ],
         ),
@@ -480,53 +477,60 @@ class _StockScreenState extends State<StockScreen> {
         DateTime? endDate = _endDate;
 
         return Dialog(
-          child: Container(
-            width: 300, // Reduced width for the calendar popup
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                CalendarDatePicker2(
-                  config: CalendarDatePicker2Config(
-                    calendarType: CalendarDatePicker2Type.range,
-                    firstDate: DateTime(2020),
-                    lastDate: DateTime.now(),
-                  ),
-                  value: startDate != null && endDate != null
-                      ? [startDate, endDate]
-                      : [],
-                  onValueChanged: (dates) {
-                    if (dates.length == 2 &&
-                        dates[0] != null &&
-                        dates[1] != null) {
-                      startDate = dates[0]!;
-                      endDate = dates[1]!;
-                    }
-                  },
-                ),
-                const SizedBox(height: 16),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    TextButton(
-                      onPressed: () => Navigator.pop(context),
-                      child: const Text('Cancel'),
-                    ),
-                    const SizedBox(width: 8),
-                    ElevatedButton(
-                      onPressed: () {
-                        if (startDate != null && endDate != null) {
-                          Navigator.pop(
-                            context,
-                            DateTimeRange(start: startDate!, end: endDate!),
-                          );
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.5,
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Flexible(
+                    child: CalendarDatePicker2(
+                      config: CalendarDatePicker2Config(
+                        calendarType: CalendarDatePicker2Type.range,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now(),
+                      ),
+                      value: startDate != null && endDate != null
+                          ? [startDate, endDate]
+                          : [],
+                      onValueChanged: (dates) {
+                        if (dates.length == 2 &&
+                            dates[0] != null &&
+                            dates[1] != null) {
+                          startDate = dates[0]!;
+                          endDate = dates[1]!;
                         }
                       },
-                      child: const Text('Apply'),
                     ),
-                  ],
-                ),
-              ],
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () {
+                          if (startDate != null && endDate != null) {
+                            Navigator.pop(
+                              context,
+                              DateTimeRange(start: startDate!, end: endDate!),
+                            );
+                          }
+                        },
+                        child: const Text('Apply'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
         );
@@ -537,8 +541,7 @@ class _StockScreenState extends State<StockScreen> {
       setState(() {
         _startDate = picked.start;
         _endDate = picked.end;
-        _activeDateFilter =
-            '${picked.start.toString().split(' ')[0]} to '
+        _activeDateFilter = '${picked.start.toString().split(' ')[0]} to '
             '${picked.end.toString().split(' ')[0]}';
         _loadData();
       });
@@ -570,8 +573,8 @@ class _StockScreenState extends State<StockScreen> {
       );
 
       return product.productName.toLowerCase().contains(
-            _searchQuery.toLowerCase(),
-          ) ||
+                _searchQuery.toLowerCase(),
+              ) ||
           outlet.name.toLowerCase().contains(_searchQuery.toLowerCase());
     }).toList();
 
@@ -694,7 +697,9 @@ class _StockScreenState extends State<StockScreen> {
                               children: [
                                 Text(
                                   'Filters',
-                                  style: Theme.of(context).textTheme.titleMedium
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .titleMedium
                                       ?.copyWith(
                                         fontWeight: FontWeight.bold,
                                         color: Theme.of(
@@ -796,9 +801,9 @@ class _StockScreenState extends State<StockScreen> {
                                       ),
                                       contentPadding:
                                           const EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 12,
-                                          ),
+                                        vertical: 10,
+                                        horizontal: 12,
+                                      ),
                                     ),
                                     onChanged: (value) =>
                                         setState(() => _searchQuery = value),
@@ -816,9 +821,9 @@ class _StockScreenState extends State<StockScreen> {
                                       ),
                                       contentPadding:
                                           const EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 12,
-                                          ),
+                                        vertical: 10,
+                                        horizontal: 12,
+                                      ),
                                     ),
                                     items: [
                                       const DropdownMenuItem(
@@ -852,9 +857,9 @@ class _StockScreenState extends State<StockScreen> {
                                       ),
                                       contentPadding:
                                           const EdgeInsets.symmetric(
-                                            vertical: 10,
-                                            horizontal: 12,
-                                          ),
+                                        vertical: 10,
+                                        horizontal: 12,
+                                      ),
                                     ),
                                     items: [
                                       const DropdownMenuItem(
@@ -954,10 +959,10 @@ class _StockScreenState extends State<StockScreen> {
                                             context: context,
                                             builder: (context) =>
                                                 StockDetailDialog(
-                                                  stock: stock,
-                                                  product: product,
-                                                  outlet: outlet,
-                                                ),
+                                              stock: stock,
+                                              product: product,
+                                              outlet: outlet,
+                                            ),
                                           );
                                         },
                                         child: Container(
@@ -980,58 +985,85 @@ class _StockScreenState extends State<StockScreen> {
                                                 150,
                                               ),
                                               Container(
-                                                 width: 120,
-                                                 height: 52,
-                                                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                                 alignment: Alignment.centerLeft,
-                                                 child: Column(
-                                                   mainAxisAlignment: MainAxisAlignment.center,
-                                                   crossAxisAlignment: CrossAxisAlignment.start,
-                                                   children: [
-                                                     Text(
-                                                       stock.givenQuantity.toString(),
-                                                       style: TextStyle(color: Colors.grey.shade800, fontSize: 14),
-                                                       overflow: TextOverflow.ellipsis,
-                                                     ),
-                                                     if (stock.givenQuantity > 0 && (stock.balanceQuantity / stock.givenQuantity) < 0.75)
-                                                       Text(
-                                                         '${((stock.balanceQuantity / stock.givenQuantity) * 100).toStringAsFixed(1)}%',
-                                                         style: const TextStyle(
-                                                           color: Colors.red,
-                                                           fontSize: 10,
-                                                           fontWeight: FontWeight.bold,
-                                                         ),
-                                                       ),
-                                                   ],
-                                                 ),
-                                               ),
+                                                width: 120,
+                                                height: 52,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8.0),
+                                                alignment: Alignment.centerLeft,
+                                                child: Column(
+                                                  mainAxisAlignment:
+                                                      MainAxisAlignment.center,
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      stock.givenQuantity
+                                                          .toString(),
+                                                      style: TextStyle(
+                                                          color: Colors
+                                                              .grey.shade800,
+                                                          fontSize: 14),
+                                                      overflow:
+                                                          TextOverflow.ellipsis,
+                                                    ),
+                                                    if (stock.givenQuantity >
+                                                            0 &&
+                                                        (stock.balanceQuantity /
+                                                                stock
+                                                                    .givenQuantity) <
+                                                            0.75)
+                                                      Text(
+                                                        '${((stock.balanceQuantity / stock.givenQuantity) * 100).toStringAsFixed(1)}%',
+                                                        style: const TextStyle(
+                                                          color: Colors.red,
+                                                          fontSize: 10,
+                                                          fontWeight:
+                                                              FontWeight.bold,
+                                                        ),
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
                                               _buildContentCell(
                                                 stock.soldQuantity.toString(),
                                                 100,
                                               ),
                                               Container(
-                                                 width: 120,
-                                                 height: 52,
-                                                 padding: const EdgeInsets.symmetric(horizontal: 8.0),
-                                                 alignment: Alignment.centerLeft,
-                                                 child: Row(
-                                                   children: [
-                                                     Expanded(
-                                                       child: Text(
-                                                         stock.balanceQuantity.toString(),
-                                                         style: TextStyle(color: Colors.grey.shade800, fontSize: 14),
-                                                         overflow: TextOverflow.ellipsis,
-                                                       ),
-                                                     ),
-                                                     if (stock.givenQuantity > 0 && (stock.balanceQuantity / stock.givenQuantity) < 0.75)
-                                                       const Icon(
-                                                         Icons.warning,
-                                                         color: Colors.red,
-                                                         size: 14,
-                                                       ),
-                                                   ],
-                                                 ),
-                                               ),
+                                                width: 120,
+                                                height: 52,
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 8.0),
+                                                alignment: Alignment.centerLeft,
+                                                child: Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: Text(
+                                                        stock.balanceQuantity
+                                                            .toString(),
+                                                        style: TextStyle(
+                                                            color: Colors
+                                                                .grey.shade800,
+                                                            fontSize: 14),
+                                                        overflow: TextOverflow
+                                                            .ellipsis,
+                                                      ),
+                                                    ),
+                                                    if (stock.givenQuantity >
+                                                            0 &&
+                                                        (stock.balanceQuantity /
+                                                                stock
+                                                                    .givenQuantity) <
+                                                            0.75)
+                                                      const Icon(
+                                                        Icons.warning,
+                                                        color: Colors.red,
+                                                        size: 14,
+                                                      ),
+                                                  ],
+                                                ),
+                                              ),
                                               _buildContentCell(
                                                 '₦${product.costPerUnit}',
                                                 120,

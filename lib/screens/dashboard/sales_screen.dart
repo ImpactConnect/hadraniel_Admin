@@ -6,6 +6,7 @@ import 'package:csv/csv.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
+import 'package:calendar_date_picker2/calendar_date_picker2.dart';
 import '../../widgets/dashboard_layout.dart';
 import '../../core/services/sync_service.dart';
 import '../../core/models/outlet_model.dart';
@@ -725,16 +726,92 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Future<void> _showDateRangePicker() async {
-    final DateTimeRange? picked = await showDateRangePicker(
+    final picked = await showDialog(
       context: context,
-      firstDate: DateTime(2020),
-      lastDate: DateTime.now(),
-      initialDateRange: _customStartDate != null && _customEndDate != null
-          ? DateTimeRange(
-              start: _customStartDate!,
-              end: _customEndDate!,
-            )
-          : null,
+      builder: (BuildContext context) {
+        DateTime? startDate = _customStartDate;
+        DateTime? endDate = _customEndDate;
+
+        return Dialog(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              maxWidth: MediaQuery.of(context).size.width * 0.4,
+              maxHeight: MediaQuery.of(context).size.height * 0.7,
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    'Select Date Range',
+                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.bold,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Flexible(
+                    child: CalendarDatePicker2(
+                      config: CalendarDatePicker2Config(
+                        calendarType: CalendarDatePicker2Type.range,
+                        firstDate: DateTime(2020),
+                        lastDate: DateTime.now(),
+                        selectedDayHighlightColor: Theme.of(context).colorScheme.primary,
+                        weekdayLabelTextStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                        controlsTextStyle: TextStyle(
+                          color: Theme.of(context).colorScheme.primary,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      value: startDate != null && endDate != null
+                          ? [startDate, endDate]
+                          : [],
+                      onValueChanged: (dates) {
+                        if (dates.length == 2 &&
+                            dates[0] != null &&
+                            dates[1] != null) {
+                          startDate = dates[0]!;
+                          endDate = dates[1]!;
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(context),
+                        child: const Text('Cancel'),
+                      ),
+                      const SizedBox(width: 8),
+                      ElevatedButton(
+                        onPressed: () {
+                          if (startDate != null && endDate != null) {
+                            Navigator.pop(
+                              context,
+                              DateTimeRange(start: startDate!, end: endDate!),
+                            );
+                          }
+                        },
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                        ),
+                        child: const Text('Apply'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
 
     if (picked != null) {

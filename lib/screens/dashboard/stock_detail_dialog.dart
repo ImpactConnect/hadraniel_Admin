@@ -51,9 +51,15 @@ class _StockDetailDialogState extends State<StockDetailDialog> {
     }
   }
 
-  Widget _buildDetailRow(String label, String value) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
+  Widget _buildDetailRow(String label, String value, {Color? valueColor}) {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+      margin: const EdgeInsets.only(bottom: 8.0),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
@@ -61,13 +67,17 @@ class _StockDetailDialogState extends State<StockDetailDialog> {
             label,
             style: TextStyle(
               fontWeight: FontWeight.w600,
-              fontSize: 15,
-              color: Colors.grey.shade800,
+              fontSize: 14,
+              color: Colors.grey.shade700,
             ),
           ),
           Text(
             value,
-            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w500),
+            style: TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: valueColor ?? Theme.of(context).colorScheme.primary,
+            ),
           ),
         ],
       ),
@@ -75,12 +85,34 @@ class _StockDetailDialogState extends State<StockDetailDialog> {
   }
 
   Widget _buildSectionTitle(BuildContext context, String title, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 12.0, top: 8.0),
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+      margin: const EdgeInsets.only(bottom: 16.0, top: 8.0),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Theme.of(context).colorScheme.primary.withOpacity(0.1),
+            Theme.of(context).colorScheme.primary.withOpacity(0.05),
+          ],
+          begin: Alignment.centerLeft,
+          end: Alignment.centerRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(
+          color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+        ),
+      ),
       child: Row(
         children: [
-          Icon(icon, color: Theme.of(context).colorScheme.primary, size: 22),
-          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary,
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, color: Colors.white, size: 20),
+          ),
+          const SizedBox(width: 12),
           Text(
             title,
             style: TextStyle(
@@ -109,35 +141,85 @@ class _StockDetailDialogState extends State<StockDetailDialog> {
     }
 
     return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: DataTable(
-          headingRowColor: MaterialStateProperty.all(
-            Theme.of(context).colorScheme.primary.withOpacity(0.1),
+      elevation: 4,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(16),
+          gradient: LinearGradient(
+            colors: [Colors.white, Colors.grey.shade50],
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
           ),
-          columns: const [
-            DataColumn(label: Text('Date')),
-            DataColumn(label: Text('Outlet')),
-            DataColumn(label: Text('Customer')),
-            DataColumn(label: Text('Quantity')),
-            DataColumn(label: Text('Total Cost')),
-          ],
-          rows: _salesHistory.map((sale) {
-            final saleDate = DateTime.parse(sale['created_at']);
-            return DataRow(
-              cells: [
-                DataCell(Text(DateFormat('yyyy-MM-dd').format(saleDate))),
-                DataCell(Text(sale['outlet_name'] ?? 'N/A')),
-                DataCell(Text(sale['customer_name'] ?? 'N/A')),
-                DataCell(Text(sale['quantity']?.toString() ?? '0')),
-                DataCell(
-                  Text('₦${(sale['total_amount'] ?? 0.0).toStringAsFixed(2)}'),
-                ),
-              ],
-            );
-          }).toList(),
+        ),
+        child: SingleChildScrollView(
+          scrollDirection: Axis.horizontal,
+          child: DataTable(
+            headingRowColor: MaterialStateProperty.all(
+              Theme.of(context).colorScheme.primary,
+            ),
+            headingTextStyle: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+              fontSize: 14,
+            ),
+            dataRowColor: MaterialStateProperty.resolveWith<Color?>(
+              (Set<MaterialState> states) {
+                if (states.contains(MaterialState.hovered)) {
+                  return Theme.of(context).colorScheme.primary.withOpacity(0.1);
+                }
+                return null;
+              },
+            ),
+            columns: const [
+              DataColumn(label: Text('Date')),
+              DataColumn(label: Text('Outlet')),
+              DataColumn(label: Text('Customer')),
+              DataColumn(label: Text('Quantity')),
+              DataColumn(label: Text('Total Cost')),
+            ],
+            rows: _salesHistory.map((sale) {
+              final saleDate = DateTime.parse(sale['created_at']);
+              return DataRow(
+                cells: [
+                  DataCell(Text(
+                    DateFormat('MMM d, yyyy').format(saleDate),
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  )),
+                  DataCell(Text(
+                    sale['outlet_name'] ?? 'N/A',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  )),
+                  DataCell(Text(
+                    sale['customer_name'] ?? 'Walk-in',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  )),
+                  DataCell(Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.shade100,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      sale['quantity']?.toString() ?? '0',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Colors.blue.shade800,
+                      ),
+                    ),
+                  )),
+                  DataCell(Text(
+                    '₦${(sale['total_amount'] ?? 0.0).toStringAsFixed(2)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.bold,
+                      color: Colors.green.shade700,
+                    ),
+                  )),
+                ],
+              );
+            }).toList(),
+          ),
         ),
       ),
     );
@@ -146,197 +228,205 @@ class _StockDetailDialogState extends State<StockDetailDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-      elevation: 5,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      elevation: 10,
       child: Container(
-        width: MediaQuery.of(context).size.width * 0.8,
-        padding: const EdgeInsets.all(24.0),
-        child: SingleChildScrollView(
+          width: MediaQuery.of(context).size.width * 0.85,
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.9,
+          ),
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(20),
+            gradient: LinearGradient(
+              colors: [Colors.white, Colors.grey.shade50],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+          ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Stock Details',
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).colorScheme.primary,
-                        ),
+              // Header with gradient background
+              Container(
+                padding: const EdgeInsets.all(24.0),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      Theme.of(context).colorScheme.primary,
+                      Theme.of(context).colorScheme.primary.withOpacity(0.8),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                  IconButton(
-                    icon: Icon(
-                      Icons.close,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
-                    onPressed: () => Navigator.of(context).pop(),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
                   ),
-                ],
-              ),
-              Divider(
-                color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
-                thickness: 1,
-              ),
-              const SizedBox(height: 16),
-
-              // Top row with Product Information and Stock Quantities side by side
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Product Information Section
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSectionTitle(
-                          context,
-                          'Product Information',
-                          Icons.inventory,
-                        ),
-                        Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              children: [
-                                _buildDetailRow(
-                                  'Product Name',
-                                  widget.product.productName,
-                                ),
-                                _buildDetailRow('Outlet', widget.outlet.name),
-                                _buildDetailRow(
-                                  'Cost Price',
-                                  '₦${widget.product.costPerUnit}',
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  // Stock Quantities Section
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        _buildSectionTitle(
-                          context,
-                          'Stock Quantities',
-                          Icons.assessment,
-                        ),
-                        Card(
-                          elevation: 2,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Padding(
-                            padding: const EdgeInsets.all(16.0),
-                            child: Column(
-                              children: [
-                                _buildDetailRow(
-                                  'Given Quantity',
-                                  '${widget.stock.givenQuantity}',
-                                ),
-                                _buildDetailRow(
-                                  'Sold Quantity',
-                                  '${widget.stock.soldQuantity}',
-                                ),
-                                _buildDetailRow(
-                                  'Balance',
-                                  '${widget.stock.balanceQuantity}',
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-
-              const SizedBox(height: 16),
-
-              // Financial Values Section
-              _buildSectionTitle(
-                context,
-                'Financial Values',
-                Icons.account_balance_wallet,
-              ),
-              Card(
-                elevation: 2,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
                 ),
-                child: Padding(
-                  padding: const EdgeInsets.all(16.0),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.inventory_2,
+                            color: Colors.white,
+                            size: 24,
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Text(
+                          'Stock Details',
+                          style: Theme.of(context)
+                              .textTheme
+                              .headlineSmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                        ),
+                      ],
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.close,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              // Content
+              Flexible(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              right: BorderSide(
-                                color: Colors.grey.shade200,
-                                width: 1,
-                              ),
+                      // Top row with Product Information and Stock Quantities side by side
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          // Product Information Section
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionTitle(
+                                  context,
+                                  'Product Information',
+                                  Icons.inventory,
+                                ),
+                                Column(
+                                  children: [
+                                    _buildDetailRow(
+                                      'Product Name',
+                                      widget.product.productName,
+                                    ),
+                                    _buildDetailRow(
+                                        'Outlet', widget.outlet.name),
+                                    _buildDetailRow(
+                                      'Cost Price',
+                                      '₦${widget.product.costPerUnit}',
+                                      valueColor: Colors.green.shade700,
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                          child: _buildDetailRow(
-                            'Total Value',
-                            '₦${widget.stock.totalGivenValue?.toStringAsFixed(2) ?? '0.00'}',
-                          ),
-                        ),
-                      ),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                          decoration: BoxDecoration(
-                            border: Border(
-                              right: BorderSide(
-                                color: Colors.grey.shade200,
-                                width: 1,
-                              ),
+                          const SizedBox(width: 16),
+                          // Stock Quantities Section
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _buildSectionTitle(
+                                  context,
+                                  'Stock Quantities',
+                                  Icons.assessment,
+                                ),
+                                Column(
+                                  children: [
+                                    _buildDetailRow(
+                                      'Given Quantity',
+                                      '${widget.stock.givenQuantity}',
+                                      valueColor: Colors.blue.shade700,
+                                    ),
+                                    _buildDetailRow(
+                                      'Sold Quantity',
+                                      '${widget.stock.soldQuantity}',
+                                      valueColor: Colors.orange.shade700,
+                                    ),
+                                    _buildDetailRow(
+                                      'Balance',
+                                      '${widget.stock.balanceQuantity}',
+                                      valueColor: Colors.purple.shade700,
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ),
                           ),
-                          child: _buildDetailRow(
-                            'Sold Value',
-                            '₦${widget.stock.totalSoldValue?.toStringAsFixed(2) ?? '0.00'}',
-                          ),
-                        ),
+                        ],
                       ),
-                      Expanded(
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 12.0),
-                          child: _buildDetailRow(
-                            'Balance Value',
-                            '₦${widget.stock.balanceValue?.toStringAsFixed(2) ?? '0.00'}',
-                          ),
-                        ),
+
+                      const SizedBox(height: 24),
+
+                      // Financial Values Section
+                      _buildSectionTitle(
+                        context,
+                        'Financial Values',
+                        Icons.account_balance_wallet,
                       ),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildDetailRow(
+                              'Total Value',
+                              '₦${widget.stock.totalGivenValue?.toStringAsFixed(2) ?? '0.00'}',
+                              valueColor: Colors.green.shade700,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildDetailRow(
+                              'Sold Value',
+                              '₦${widget.stock.totalSoldValue?.toStringAsFixed(2) ?? '0.00'}',
+                              valueColor: Colors.blue.shade700,
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _buildDetailRow(
+                              'Balance Value',
+                              '₦${widget.stock.balanceValue?.toStringAsFixed(2) ?? '0.00'}',
+                              valueColor: Colors.purple.shade700,
+                            ),
+                          ),
+                        ],
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Sale History Section
+                      _buildSectionTitle(
+                          context, 'Sale History', Icons.history),
+                      _buildSalesHistoryTable(),
                     ],
                   ),
                 ),
               ),
-
-              const SizedBox(height: 16),
-
-              // Sale History Section
-              _buildSectionTitle(context, 'Sale History', Icons.history),
-              _buildSalesHistoryTable(),
             ],
-          ),
-        ),
-      ),
+          )),
     );
   }
 }

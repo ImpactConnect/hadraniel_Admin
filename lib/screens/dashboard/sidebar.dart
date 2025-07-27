@@ -132,6 +132,13 @@ class Sidebar extends StatelessWidget {
                   ),
                   _buildNavItem(
                     context: context,
+                    icon: Icons.receipt_long,
+                    title: 'Expenditures',
+                    route: '/expenditures',
+                    colorScheme: colorScheme,
+                  ),
+                  _buildNavItem(
+                    context: context,
                     icon: Icons.group,
                     title: 'Customers',
                     route: '/customers',
