@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, Directory;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
@@ -23,9 +23,28 @@ class DatabaseHelper {
     final dbFactory = Platform.isWindows || Platform.isLinux
         ? databaseFactoryFfi
         : databaseFactory;
-    final databasePath = await dbFactory.getDatabasesPath();
+    
+    // Use user-writable directory instead of default path
+    String databasePath;
+    if (Platform.isWindows) {
+      // Use AppData/Local for Windows to avoid permission issues
+      final appDataPath = Platform.environment['LOCALAPPDATA'] ?? 
+                         Platform.environment['APPDATA'] ?? 
+                         Directory.current.path;
+      databasePath = join(appDataPath, 'HadranielAdmin');
+    } else {
+      databasePath = await dbFactory.getDatabasesPath();
+    }
+    
     final path = join(databasePath, 'admin_app.db');
     print('Database path: $path'); // Debug log
+
+    // Ensure the database directory exists
+    final directory = Directory(databasePath);
+    if (!await directory.exists()) {
+      await directory.create(recursive: true);
+      print('Created database directory: $databasePath');
+    }
 
     return await dbFactory.openDatabase(
       path,

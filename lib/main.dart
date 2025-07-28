@@ -1,4 +1,4 @@
-import 'dart:io' show Platform;
+import 'dart:io' show Platform, File;
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
@@ -19,31 +19,119 @@ import 'screens/dashboard/settings_screen.dart';
 import 'screens/dashboard/expenditures_screen.dart';
 import 'screens/stock_intake_screen.dart';
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
-
-  // Initialize SQLite for Windows
-  if (Platform.isWindows || Platform.isLinux) {
-    // Initialize FFI
-    sqfliteFfiInit();
-    // Change the default factory for windows
-    databaseFactory = databaseFactoryFfi;
+Future<void> _initializeSupabaseWithRetry({
+  required String url,
+  required String anonKey,
+  int maxRetries = 3,
+}) async {
+  for (int attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      print('Attempting Supabase initialization (attempt $attempt/$maxRetries)');
+      
+      // Clean up any existing lock files before initialization
+      await _cleanupLockFiles();
+      
+      await Supabase.initialize(
+        url: url,
+        anonKey: anonKey,
+      );
+      
+      print('Supabase initialized successfully');
+      return;
+    } catch (e) {
+      print('Supabase initialization attempt $attempt failed: $e');
+      
+      if (attempt < maxRetries) {
+        // Wait before retrying
+        await Future.delayed(Duration(seconds: attempt * 2));
+        
+        // Clean up lock files before retry
+        await _cleanupLockFiles();
+      } else {
+        print('All Supabase initialization attempts failed');
+        rethrow;
+      }
+    }
   }
+}
 
-  // Initialize DatabaseHelper
-  final dbHelper = DatabaseHelper();
-  await dbHelper.database;
+Future<void> _cleanupLockFiles() async {
+  try {
+    final lockPaths = [
+      'C:\\Users\\HP\\Documents\\auth\\supabase_authentication.lock',
+      'C:\\Users\\HP\\AppData\\Local\\supabase\\auth\\supabase_authentication.lock',
+    ];
+    
+    for (final lockPath in lockPaths) {
+      final lockFile = File(lockPath);
+      if (await lockFile.exists()) {
+        try {
+          await lockFile.delete();
+          print('Removed lock file: $lockPath');
+        } catch (e) {
+          print('Failed to remove lock file $lockPath: $e');
+        }
+      }
+    }
+  } catch (e) {
+    print('Error during lock file cleanup: $e');
+  }
+}
 
-  // Load environment variables
-  await dotenv.load(fileName: '.env');
+void main() async {
+  try {
+    WidgetsFlutterBinding.ensureInitialized();
 
-  // Initialize Supabase
-  await Supabase.initialize(
-    url: dotenv.env['SUPABASE_URL'] ?? '',
-    anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
-  );
+    // Initialize SQLite for Windows
+    if (Platform.isWindows || Platform.isLinux) {
+      // Initialize FFI
+      sqfliteFfiInit();
+      // Change the default factory for windows
+      databaseFactory = databaseFactoryFfi;
+    }
 
-  runApp(const MyApp());
+    // Initialize DatabaseHelper after setting up the database factory
+    final dbHelper = DatabaseHelper();
+    await dbHelper.database;
+
+    // Load environment variables
+    await dotenv.load(fileName: '.env');
+
+    // Debug: Print environment variables
+    print('SUPABASE_URL: ${dotenv.env['SUPABASE_URL']}');
+    print(
+        'SUPABASE_ANON_KEY: ${dotenv.env['SUPABASE_ANON_KEY']?.substring(0, 20)}...');
+
+    // Initialize Supabase with retry mechanism
+    await _initializeSupabaseWithRetry(
+      url: dotenv.env['SUPABASE_URL'] ?? '',
+      anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
+    );
+
+    print('App initialization completed successfully');
+    runApp(const MyApp());
+  } catch (e, stackTrace) {
+    print('Error during app initialization: $e');
+    print('Stack trace: $stackTrace');
+    // Run a minimal app to show the error
+    runApp(MaterialApp(
+      home: Scaffold(
+        body: Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              const Icon(Icons.error, size: 64, color: Colors.red),
+              const SizedBox(height: 16),
+              const Text('App Initialization Error',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 8),
+              Text('Error: $e', textAlign: TextAlign.center),
+            ],
+          ),
+        ),
+      ),
+    ));
+  }
 }
 
 class MyApp extends StatefulWidget {
@@ -65,18 +153,27 @@ class _MyAppState extends State<MyApp> {
   }
 
   Future<void> _checkSession() async {
-    final currentUser = await _authService.getCurrentUser();
-    if (currentUser != null) {
-      final profile = await _authService.getUserProfile(currentUser.id);
-      if (profile != null && profile.role == 'admin') {
-        setState(() {
-          _isAuthenticated = true;
-        });
+    try {
+      print('Checking user session...');
+      final currentUser = await _authService.getCurrentUser();
+      print('Current user: ${currentUser?.id}');
+
+      if (currentUser != null) {
+        final profile = await _authService.getUserProfile(currentUser.id);
+        print('User profile: ${profile?.role}');
+        if (profile != null && profile.role == 'admin') {
+          setState(() {
+            _isAuthenticated = true;
+          });
+        }
       }
+    } catch (e) {
+      print('Error checking session: $e');
+    } finally {
+      setState(() {
+        _isLoading = false;
+      });
     }
-    setState(() {
-      _isLoading = false;
-    });
   }
 
   @override

@@ -27,7 +27,11 @@ bool FlutterWindow::OnCreate() {
   RegisterPlugins(flutter_controller_->engine());
   SetChildContent(flutter_controller_->view()->GetNativeWindow());
 
+  // Show the window immediately to prevent invisible window issues
+  this->Show();
+  
   flutter_controller_->engine()->SetNextFrameCallback([&]() {
+    // Ensure window is visible after first frame
     this->Show();
   });
 
