@@ -1104,15 +1104,18 @@ class SyncService {
 
       // Sync stock-related data
       await syncStockBalancesToLocalDb();
-      
+
       // Sync product distributions with error handling for missing table
       try {
         await syncProductDistributionsFromServer();
         await syncProductDistributionsToServer();
       } catch (e) {
-        if (e.toString().contains('relation "public.product_distributions" does not exist')) {
-          print('Warning: product_distributions table does not exist in cloud database. Skipping sync.');
-          print('Please run the migration: supabase/migrations/20240101000000_create_product_distributions_table.sql');
+        if (e.toString().contains(
+            'relation "public.product_distributions" does not exist')) {
+          print(
+              'Warning: product_distributions table does not exist in cloud database. Skipping sync.');
+          print(
+              'Please run the migration: supabase/migrations/20240101000000_create_product_distributions_table.sql');
         } else {
           print('Error syncing product distributions: $e');
           // Re-throw other errors
@@ -1382,7 +1385,8 @@ class SyncService {
   // Stock Intake Sync
   Future<bool> syncStockIntakeToSupabase(dynamic stockIntake) async {
     try {
-      await supabase.from('stock_intake').insert({
+      // Use upsert instead of insert to handle duplicates gracefully
+      await supabase.from('stock_intake').upsert({
         'id': stockIntake.id,
         'product_name': stockIntake.productName,
         'quantity_received': stockIntake.quantityReceived,
@@ -1434,6 +1438,78 @@ class SyncService {
         print('Error syncing intake balances to Supabase: $e');
       }
       // Don't throw the error, just log it to prevent app crashes
+    }
+  }
+
+  Future<void> syncIntakeBalancesToLocalDb() async {
+    try {
+      final db = await _dbHelper.database;
+
+      // First sync local changes to cloud
+      await db.transaction((txn) async {
+        final unsyncedBalances = await txn.query(
+          'intake_balances',
+          where: 'is_synced = ?',
+          whereArgs: [0],
+        );
+
+        // Push unsynced balances to Supabase
+        for (var balanceMap in unsyncedBalances) {
+          final balance = IntakeBalance.fromMap(balanceMap);
+          try {
+            await supabase.from('intake_balances').upsert({
+              'id': balance.id,
+              'product_name': balance.productName,
+              'total_received': balance.totalReceived,
+              'total_assigned': balance.totalAssigned,
+              'balance_quantity': balance.balanceQuantity,
+              'last_updated': balance.lastUpdated.toIso8601String(),
+            });
+            // Mark as synced locally
+            await txn.update(
+              'intake_balances',
+              {'is_synced': 1},
+              where: 'id = ?',
+              whereArgs: [balance.id],
+            );
+          } catch (uploadError) {
+            print('Error uploading balance ${balance.id}: $uploadError');
+            // Continue with other balances even if one fails
+          }
+        }
+      });
+
+      // Pull latest balances from Supabase
+      try {
+        final response = await supabase.from('intake_balances').select();
+        final balances = (response as List)
+            .map((data) => IntakeBalance.fromMap(data))
+            .toList();
+
+        // Update local database - MERGE instead of CLEAR
+        await db.transaction((txn) async {
+          // Insert or update balances from cloud
+          for (var balance in balances) {
+            await txn.insert(
+              'intake_balances',
+              {
+                ...balance.toMap(),
+                'is_synced': 1,
+              },
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+          }
+        });
+
+        print(
+            'Successfully synced ${balances.length} intake balances from Supabase');
+      } catch (downloadError) {
+        print('Error downloading intake balances from Supabase: $downloadError');
+        // Don't throw error to allow local operations to continue
+      }
+    } catch (e) {
+      print('Error syncing intake balances: $e');
+      throw e;
     }
   }
 
@@ -1505,7 +1581,10 @@ class SyncService {
             'rejected_by': validateUuid(expenditureMap['rejected_by']),
             'rejection_reason': expenditureMap['rejection_reason'],
             'notes': expenditureMap['notes'],
-            'is_recurring': (expenditureMap['is_recurring'] == true || expenditureMap['is_recurring'] == 1) ? 1 : 0,
+            'is_recurring': (expenditureMap['is_recurring'] == true ||
+                    expenditureMap['is_recurring'] == 1)
+                ? 1
+                : 0,
             'recurring_frequency': expenditureMap['recurring_frequency'],
             'next_due_date': expenditureMap['next_due_date'],
             'created_at': expenditureMap['created_at'],
@@ -1534,7 +1613,7 @@ class SyncService {
           if (outletName == null && expenditureData['outlet_id'] != null) {
             outletName = await getOutletName(expenditureData['outlet_id']);
           }
-          
+
           await txn.insert(
             'expenditures',
             {
@@ -1544,7 +1623,8 @@ class SyncService {
               'category': expenditureData['category'],
               'outlet_id': expenditureData['outlet_id'],
               'outlet_name': outletName ?? 'Unknown Outlet', // Provide fallback
-              'payment_method': expenditureData['payment_method'] ?? 'cash', // Provide default
+              'payment_method': expenditureData['payment_method'] ??
+                  'cash', // Provide default
               'receipt_number': expenditureData['receipt_number'],
               'vendor_name': expenditureData['vendor_name'],
               'date_incurred': expenditureData['date_incurred'],
@@ -1553,7 +1633,10 @@ class SyncService {
               'rejected_by': expenditureData['rejected_by'],
               'rejection_reason': expenditureData['rejection_reason'],
               'notes': expenditureData['notes'],
-              'is_recurring': (expenditureData['is_recurring'] == true || expenditureData['is_recurring'] == 1) ? 1 : 0,
+              'is_recurring': (expenditureData['is_recurring'] == true ||
+                      expenditureData['is_recurring'] == 1)
+                  ? 1
+                  : 0,
               'recurring_frequency': expenditureData['recurring_frequency'],
               'next_due_date': expenditureData['next_due_date'],
               'created_at': expenditureData['created_at'],
@@ -1566,9 +1649,12 @@ class SyncService {
       });
     } catch (e) {
       if (e.toString().contains('null value in column "outlet_name"') ||
-          e.toString().contains('column "outlet_name" of relation "expenditures" does not exist')) {
-        print('Warning: expenditures table is missing outlet_name column in cloud database.');
-        print('Please run the migration: fix_missing_tables.sql to add the missing column.');
+          e.toString().contains(
+              'column "outlet_name" of relation "expenditures" does not exist')) {
+        print(
+            'Warning: expenditures table is missing outlet_name column in cloud database.');
+        print(
+            'Please run the migration: fix_missing_tables.sql to add the missing column.');
         print('Skipping expenditures sync for now.');
       } else {
         print('Error syncing expenditures: $e');
@@ -1593,7 +1679,19 @@ class SyncService {
         for (var intakeMap in unsyncedIntakes) {
           final intake = StockIntake.fromMap(intakeMap);
           try {
-            await supabase.from('stock_intake').upsert(intake.toMap());
+            // Create a map without the is_synced field for Supabase
+            final cloudMap = {
+              'id': intake.id,
+              'product_name': intake.productName,
+              'quantity_received': intake.quantityReceived,
+              'unit': intake.unit,
+              'cost_per_unit': intake.costPerUnit,
+              'total_cost': intake.totalCost,
+              'description': intake.description,
+              'date_received': intake.dateReceived.toIso8601String(),
+              'created_at': intake.createdAt.toIso8601String(),
+            };
+            await supabase.from('stock_intake').upsert(cloudMap);
             // Mark as synced locally
             await txn.update(
               'stock_intake',
@@ -1615,12 +1713,9 @@ class SyncService {
             .map((data) => StockIntake.fromMap(data))
             .toList();
 
-        // Update local database in a transaction
+        // Update local database in a transaction - MERGE instead of CLEAR
         await db.transaction((txn) async {
-          // Clear existing intakes
-          await txn.delete('stock_intake');
-
-          // Insert new intakes
+          // Insert or update intakes from cloud
           for (var intake in intakes) {
             await txn.insert(
               'stock_intake',
@@ -1628,6 +1723,7 @@ class SyncService {
                 ...intake.toMap(),
                 'is_synced': 1,
               },
+              conflictAlgorithm: ConflictAlgorithm.replace,
             );
           }
         });

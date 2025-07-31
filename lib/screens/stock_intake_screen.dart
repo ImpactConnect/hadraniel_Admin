@@ -6,6 +6,7 @@ import 'package:csv/csv.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:path_provider/path_provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../core/models/stock_intake_model.dart';
 import '../core/models/intake_balance_model.dart';
 import '../core/models/product_distribution_model.dart';
@@ -61,7 +62,12 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   // List of predefined product names
 
   // List of predefined product names
-  final List<String> _predefinedProducts = [
+  List<String> _predefinedProducts = [
+    // Custom products added by user will be inserted at the top
+  ];
+  
+  // Base predefined products list
+  final List<String> _basePredefinedProducts = [
     'Sardine 2-4',
     'Sardine 3-5',
     'Sardine 2SLT',
@@ -234,7 +240,43 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       // which will update the FloatingActionButton visibility
       setState(() {});
     });
+    _initializeProductsList();
     _loadData();
+  }
+  
+  Future<void> _initializeProductsList() async {
+    await _loadCustomProducts();
+    // Combine custom products with base predefined products
+    _predefinedProducts = [...await _getCustomProducts(), ..._basePredefinedProducts];
+  }
+  
+  Future<List<String>> _getCustomProducts() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getStringList('custom_products') ?? [];
+  }
+  
+  Future<void> _loadCustomProducts() async {
+    final customProducts = await _getCustomProducts();
+    setState(() {
+      _predefinedProducts = [...customProducts, ..._basePredefinedProducts];
+    });
+  }
+  
+  Future<void> _saveCustomProduct(String productName) async {
+    final prefs = await SharedPreferences.getInstance();
+    final customProducts = await _getCustomProducts();
+    
+    // Add the new product if it doesn't already exist
+    if (!customProducts.contains(productName) && 
+        !_basePredefinedProducts.contains(productName)) {
+      customProducts.insert(0, productName); // Add to the beginning
+      await prefs.setStringList('custom_products', customProducts);
+      
+      // Update the predefined products list
+      setState(() {
+        _predefinedProducts = [...customProducts, ..._basePredefinedProducts];
+      });
+    }
   }
 
   @override
@@ -267,6 +309,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       if (stockIntakes.isEmpty && intakeBalances.isEmpty) {
         try {
           await _syncService.syncStockIntakesToLocalDb();
+          await _syncService.syncIntakeBalancesToLocalDb();
           // Reload data after syncing
           final syncedStockIntakes = await _stockIntakeService.getAllIntakes();
           final syncedIntakeBalances = await _stockIntakeService.getAllIntakeBalances();
@@ -325,6 +368,9 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
 
       // Then sync from Supabase to local database
       await _syncService.syncStockIntakesToLocalDb();
+      
+      // Also sync intake balances from Supabase to local database
+      await _syncService.syncIntakeBalancesToLocalDb();
 
       // Refresh data
       await _loadData();
@@ -333,9 +379,16 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
         const SnackBar(content: Text('Sync completed successfully')),
       );
     } catch (e) {
+      String errorMessage;
+      if (e.toString().contains('HandshakeException') || 
+          e.toString().contains('Connection terminated during handshake')) {
+        errorMessage = 'Network connection problem. Please check your internet connection and try again.';
+      } else {
+        errorMessage = 'Error syncing data: $e';
+      }
       ScaffoldMessenger.of(
         context,
-      ).showSnackBar(SnackBar(content: Text('Error syncing data: $e')));
+      ).showSnackBar(SnackBar(content: Text(errorMessage)));
     } finally {
       setState(() {
         _isSyncing = false;
@@ -360,14 +413,33 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                     if (textEditingValue.text == '') {
                       return _predefinedProducts;
                     }
-                    return _predefinedProducts.where((String option) {
+                    
+                    // Filter predefined products based on input
+                    final filteredProducts = _predefinedProducts.where((String option) {
                       return option.toLowerCase().contains(
                         textEditingValue.text.toLowerCase(),
                       );
-                    });
+                    }).toList();
+                    
+                    // If the current text doesn't match any predefined product exactly,
+                    // add it as a custom option at the top
+                    final currentText = textEditingValue.text.trim();
+                    if (currentText.isNotEmpty && 
+                        !_predefinedProducts.any((product) => 
+                            product.toLowerCase() == currentText.toLowerCase())) {
+                      filteredProducts.insert(0, '+ Add "$currentText" as new product');
+                    }
+                    
+                    return filteredProducts;
                   },
                   onSelected: (String selection) {
-                    _productNameController.text = selection;
+                    if (selection.startsWith('+ Add "')) {
+                      // Extract the custom product name from the selection
+                      final customProduct = selection.substring(7, selection.length - 17);
+                      _productNameController.text = customProduct;
+                    } else {
+                      _productNameController.text = selection;
+                    }
                   },
                   fieldViewBuilder:
                       (
@@ -391,7 +463,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                           decoration: const InputDecoration(
                             labelText: 'Product Name',
                             border: OutlineInputBorder(),
-                            hintText: 'Start typing or click to see options',
+                            hintText: 'Select from list or type new product name',
+                            helperText: 'You can add custom products not in the predefined list',
                           ),
                           onChanged: (value) {
                             _productNameController.text = value;
@@ -432,8 +505,25 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                                   final String option = options.elementAt(
                                     index,
                                   );
+                                  
+                                  // Check if this is a custom product option
+                                  final isCustomProduct = option.startsWith('+ Add "');
+                                  
                                   return ListTile(
-                                    title: Text(option),
+                                    leading: isCustomProduct 
+                                        ? const Icon(Icons.add_circle, color: Colors.green)
+                                        : const Icon(Icons.inventory, color: Colors.blue),
+                                    title: Text(
+                                      option,
+                                      style: TextStyle(
+                                        fontWeight: isCustomProduct 
+                                            ? FontWeight.bold 
+                                            : FontWeight.normal,
+                                        color: isCustomProduct 
+                                            ? Colors.green[700] 
+                                            : null,
+                                      ),
+                                    ),
                                     onTap: () {
                                       onSelected(option);
                                     },
@@ -530,6 +620,11 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       final costPerUnit = double.parse(_costPerUnitController.text.trim());
       final description = _descriptionController.text.trim();
       final totalCost = quantity * costPerUnit;
+
+      // Save custom product if it's not in the predefined lists
+      if (!_basePredefinedProducts.contains(productName)) {
+        await _saveCustomProduct(productName);
+      }
 
       final stockIntake = StockIntake(
         id: const Uuid().v4(),
@@ -2266,6 +2361,10 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
             flex: 1,
             child: _buildHeaderCell('Sync', color: colorScheme.primary),
           ),
+          Expanded(
+            flex: 1,
+            child: _buildHeaderCell('Actions', color: colorScheme.primary),
+          ),
         ],
       ),
     );
@@ -2545,7 +2644,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                   flex: 1,
                   child: intake.isSynced
                       ? Container(
-                          padding: const EdgeInsets.all(4),
+                          padding: const EdgeInsets.all(3),
                           decoration: BoxDecoration(
                             color: Colors.green[50],
                             borderRadius: BorderRadius.circular(4),
@@ -2556,21 +2655,24 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                               Icon(
                                 Icons.check_circle,
                                 color: Colors.green[700],
-                                size: 16,
+                                size: 14,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Synced',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.green[700],
+                              const SizedBox(width: 2),
+                              Flexible(
+                                child: Text(
+                                  'Synced',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.green[700],
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
                           ),
                         )
                       : Container(
-                          padding: const EdgeInsets.all(4),
+                          padding: const EdgeInsets.all(3),
                           decoration: BoxDecoration(
                             color: Colors.orange[50],
                             borderRadius: BorderRadius.circular(4),
@@ -2581,19 +2683,67 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                               Icon(
                                 Icons.sync,
                                 color: Colors.orange[700],
-                                size: 16,
+                                size: 14,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                'Pending',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.orange[700],
+                              const SizedBox(width: 2),
+                              Flexible(
+                                child: Text(
+                                  'Pending',
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: Colors.orange[700],
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
                                 ),
                               ),
                             ],
                           ),
                         ),
+                ),
+                Expanded(
+                  flex: 1,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Flexible(
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.edit,
+                            color: Colors.orange[700],
+                            size: 16,
+                          ),
+                          onPressed: () => _editStockIntake(intake),
+                          tooltip: 'Edit',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.orange.withOpacity(0.1),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            minimumSize: const Size(28, 28),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.delete,
+                            color: Colors.red[700],
+                            size: 16,
+                          ),
+                          onPressed: () => _deleteStockIntake(intake),
+                          tooltip: 'Delete',
+                          style: IconButton.styleFrom(
+                            backgroundColor: Colors.red.withOpacity(0.1),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            minimumSize: const Size(28, 28),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
               ],
             ),
@@ -2802,5 +2952,345 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
         );
       },
     );
+  }
+
+  Future<void> _editStockIntake(StockIntake intake) async {
+    final result = await showDialog<StockIntake>(
+      context: context,
+      builder: (context) => _EditStockIntakeDialog(intake: intake),
+    );
+
+    if (result != null) {
+      try {
+        await _stockIntakeService.updateStockIntake(result);
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Stock intake updated successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error updating stock intake: $e')),
+          );
+        }
+      }
+    }
+  }
+
+  Future<void> _deleteStockIntake(StockIntake intake) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(
+          'Delete Stock Intake',
+          style: TextStyle(color: Theme.of(context).colorScheme.error),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('Are you sure you want to delete this stock intake record?'),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Product: ${intake.productName}',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  Text('Quantity: ${intake.quantityReceived} ${intake.unit}'),
+                  Text('Total Cost: ₦${NumberFormat('#,##0.00').format(intake.totalCost)}'),
+                  Text('Date: ${DateFormat('MMM dd, yyyy').format(intake.dateReceived)}'),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'This action cannot be undone.',
+              style: TextStyle(color: Colors.red, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed ?? false) {
+      try {
+        await _stockIntakeService.deleteStockIntake(intake.id);
+        await _loadData();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Stock intake deleted successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error deleting stock intake: $e')),
+          );
+        }
+      }
+    }
+  }
+}
+
+class _EditStockIntakeDialog extends StatefulWidget {
+  final StockIntake intake;
+
+  const _EditStockIntakeDialog({required this.intake});
+
+  @override
+  State<_EditStockIntakeDialog> createState() => _EditStockIntakeDialogState();
+}
+
+class _EditStockIntakeDialogState extends State<_EditStockIntakeDialog> {
+  final _formKey = GlobalKey<FormState>();
+  late TextEditingController _productNameController;
+  late TextEditingController _quantityController;
+  late TextEditingController _unitController;
+  late TextEditingController _costPerUnitController;
+  late TextEditingController _descriptionController;
+  late DateTime _selectedDate;
+  bool _isLoading = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _productNameController = TextEditingController(text: widget.intake.productName);
+    _quantityController = TextEditingController(text: widget.intake.quantityReceived.toString());
+    _unitController = TextEditingController(text: widget.intake.unit);
+    _costPerUnitController = TextEditingController(text: widget.intake.costPerUnit.toString());
+    _descriptionController = TextEditingController(text: widget.intake.description ?? '');
+    _selectedDate = widget.intake.dateReceived;
+  }
+
+  @override
+  void dispose() {
+    _productNameController.dispose();
+    _quantityController.dispose();
+    _unitController.dispose();
+    _costPerUnitController.dispose();
+    _descriptionController.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      title: Text(
+        'Edit Stock Intake',
+        style: TextStyle(color: colorScheme.primary),
+      ),
+      content: SizedBox(
+        width: 400,
+        child: Form(
+          key: _formKey,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextFormField(
+                controller: _productNameController,
+                decoration: const InputDecoration(
+                  labelText: 'Product Name',
+                  border: OutlineInputBorder(),
+                ),
+                validator: (value) {
+                  if (value?.isEmpty ?? true) return 'Product name is required';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 2,
+                    child: TextFormField(
+                      controller: _quantityController,
+                      decoration: const InputDecoration(
+                        labelText: 'Quantity',
+                        border: OutlineInputBorder(),
+                      ),
+                      keyboardType: TextInputType.number,
+                      validator: (value) {
+                        if (value?.isEmpty ?? true) return 'Required';
+                        if (double.tryParse(value!) == null) return 'Invalid number';
+                        if (double.parse(value) <= 0) return 'Must be positive';
+                        return null;
+                      },
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextFormField(
+                      controller: _unitController,
+                      decoration: const InputDecoration(
+                        labelText: 'Unit',
+                        border: OutlineInputBorder(),
+                      ),
+                      validator: (value) {
+                        if (value?.isEmpty ?? true) return 'Required';
+                        return null;
+                      },
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _costPerUnitController,
+                decoration: const InputDecoration(
+                  labelText: 'Cost per Unit (₦)',
+                  border: OutlineInputBorder(),
+                ),
+                keyboardType: TextInputType.number,
+                validator: (value) {
+                  if (value?.isEmpty ?? true) return 'Cost per unit is required';
+                  if (double.tryParse(value!) == null) return 'Invalid number';
+                  if (double.parse(value) <= 0) return 'Must be positive';
+                  return null;
+                },
+              ),
+              const SizedBox(height: 16),
+              InkWell(
+                onTap: () async {
+                  final date = await showDatePicker(
+                    context: context,
+                    initialDate: _selectedDate,
+                    firstDate: DateTime(2020),
+                    lastDate: DateTime.now(),
+                  );
+                  if (date != null) {
+                    setState(() {
+                      _selectedDate = date;
+                    });
+                  }
+                },
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    border: Border.all(color: Colors.grey),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.calendar_today, color: colorScheme.primary),
+                      const SizedBox(width: 12),
+                      Text(
+                        'Date: ${DateFormat('MMM dd, yyyy').format(_selectedDate)}',
+                        style: const TextStyle(fontSize: 16),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              TextFormField(
+                controller: _descriptionController,
+                decoration: const InputDecoration(
+                  labelText: 'Description (Optional)',
+                  border: OutlineInputBorder(),
+                ),
+                maxLines: 3,
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.calculate, color: colorScheme.primary),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Total Cost: ₦${NumberFormat('#,##0.00').format(
+                        (double.tryParse(_quantityController.text) ?? 0) *
+                        (double.tryParse(_costPerUnitController.text) ?? 0)
+                      )}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: colorScheme.primary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isLoading ? null : _saveChanges,
+          child: _isLoading
+              ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
+              : const Text('Save Changes'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _saveChanges() async {
+    if (!_formKey.currentState!.validate()) return;
+
+    setState(() => _isLoading = true);
+
+    try {
+      final quantity = double.parse(_quantityController.text);
+      final costPerUnit = double.parse(_costPerUnitController.text);
+      
+      final updatedIntake = widget.intake.copyWith(
+        productName: _productNameController.text.trim(),
+        quantityReceived: quantity,
+        unit: _unitController.text.trim(),
+        costPerUnit: costPerUnit,
+        totalCost: quantity * costPerUnit,
+        description: _descriptionController.text.trim().isEmpty 
+            ? null 
+            : _descriptionController.text.trim(),
+        dateReceived: _selectedDate,
+        isSynced: false, // Mark as unsynced since it was modified
+      );
+
+      Navigator.of(context).pop(updatedIntake);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Error: $e')),
+      );
+    } finally {
+      setState(() => _isLoading = false);
+    }
   }
 }

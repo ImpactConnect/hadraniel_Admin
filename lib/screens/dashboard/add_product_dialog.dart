@@ -48,21 +48,25 @@ class _AddProductDialogState extends State<AddProductDialog> {
     }
 
     try {
-      // Import the StockIntakeService to get products with balance
+      // Import the StockIntakeService to get products with balance and units
       final stockIntakeService = StockIntakeService();
 
-      // Get products with balance > 0 along with their balances
-      final productsWithBalance = await stockIntakeService
-          .getAvailableProductsWithBalance();
+      // Get products with balance > 0 along with their balances and units
+      final productsWithBalanceAndUnit = await stockIntakeService
+          .getAvailableProductsWithBalanceAndUnit();
 
-      // Cache the balances
-      _cachedProductBalances = productsWithBalance;
+      // Cache the balances for backward compatibility
+      _cachedProductBalances = {};
+      for (var entry in productsWithBalanceAndUnit.entries) {
+        _cachedProductBalances![entry.key] = entry.value['balance'] as double;
+      }
 
-      // Cache the product names with balance information
-      _cachedProductNames = productsWithBalance.keys.map((name) {
-        final balance = productsWithBalance[name]!;
-        final unit = widget.product?.unit ?? 'Kg'; // Default unit
-        return '$name (${balance.toStringAsFixed(2)}$unit left)';
+      // Cache the product names with balance and unit information
+      _cachedProductNames = productsWithBalanceAndUnit.keys.map((name) {
+        final productData = productsWithBalanceAndUnit[name]!;
+        final balance = productData['balance'] as double;
+        final unit = productData['unit'] as String;
+        return '$name (${balance.toStringAsFixed(2)} $unit left)';
       }).toList();
 
       return _cachedProductNames!;
@@ -238,40 +242,23 @@ class _AddProductDialogState extends State<AddProductDialog> {
                       ),
                       items: const [
                         DropdownMenuItem(value: 'Kg', child: Text('Kg')),
-                        DropdownMenuItem(value: 'PCS', child: Text('PCS')),
-                        DropdownMenuItem(
-                          value: 'Carton',
-                          child: Text('Carton'),
-                        ),
+                        DropdownMenuItem(value: 'Pcs', child: Text('Pcs')),
+                        DropdownMenuItem(value: 'Carton', child: Text('Carton')),
                         DropdownMenuItem(value: 'Paint', child: Text('Paint')),
                         DropdownMenuItem(value: 'Cup', child: Text('Cup')),
-                        DropdownMenuItem(
-                          value: 'other',
-                          child: Text('Add New Unit'),
-                        ),
+                        DropdownMenuItem(value: 'Ltr', child: Text('Ltr')),
+                        DropdownMenuItem(value: 'Box', child: Text('Box')),
+                        DropdownMenuItem(value: 'Roll', child: Text('Roll')),
+                        DropdownMenuItem(value: 'Bag', child: Text('Bag')),
+                        DropdownMenuItem(value: 'Gallon', child: Text('Gallon')),
+                        DropdownMenuItem(value: 'Mudu', child: Text('Mudu')),
+                        DropdownMenuItem(value: 'Tin', child: Text('Tin')),
+                        DropdownMenuItem(value: 'Sachet', child: Text('Sachet')),
+                        DropdownMenuItem(value: 'Bowl', child: Text('Bowl')),
+                        DropdownMenuItem(value: 'Bundle', child: Text('Bundle')),
                       ],
                       onChanged: (value) {
-                        if (value == 'other') {
-                          showDialog(
-                            context: context,
-                            builder: (context) => AlertDialog(
-                              title: const Text('New Unit'),
-                              content: TextFormField(
-                                autofocus: true,
-                                onChanged: (value) =>
-                                    setState(() => unit = value),
-                              ),
-                              actions: [
-                                TextButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('OK'),
-                                ),
-                              ],
-                            ),
-                          );
-                        } else {
-                          setState(() => unit = value ?? 'Kg');
-                        }
+                        setState(() => unit = value ?? 'Kg');
                       },
                       validator: (value) =>
                           value?.isEmpty ?? true ? 'Required field' : null,

@@ -79,9 +79,16 @@ class _RepsScreenState extends State<RepsScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String errorMessage;
+        if (e.toString().contains('HandshakeException') || 
+            e.toString().contains('Connection terminated during handshake')) {
+          errorMessage = 'Network connection problem. Please check your internet connection and try again.';
+        } else {
+          errorMessage = 'Error syncing data: $e';
+        }
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error syncing data: $e')));
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     } finally {
       setState(() => _isSyncing = false);

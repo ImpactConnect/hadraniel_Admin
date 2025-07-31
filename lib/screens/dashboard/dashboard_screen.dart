@@ -1352,7 +1352,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   'Add Stock',
                   Icons.add_box,
                   Colors.green,
-                  () => Navigator.pushNamed(context, '/stock_intake'),
+                  () => Navigator.pushNamed(context, '/stock-intake'),
                 ),
               ),
               const SizedBox(width: 12),

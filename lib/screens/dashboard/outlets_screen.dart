@@ -58,9 +58,16 @@ class _OutletsScreenState extends State<OutletsScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String errorMessage;
+        if (e.toString().contains('HandshakeException') || 
+            e.toString().contains('Connection terminated during handshake')) {
+          errorMessage = 'Network connection problem. Please check your internet connection and try again.';
+        } else {
+          errorMessage = 'Error syncing outlets: $e';
+        }
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error syncing outlets: $e')));
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     } finally {
       setState(() => _isLoading = false);

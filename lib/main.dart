@@ -24,27 +24,46 @@ Future<void> _initializeSupabaseWithRetry({
   required String anonKey,
   int maxRetries = 3,
 }) async {
+  // Check if Supabase is already initialized
+  try {
+    final client = Supabase.instance.client;
+    if (client.auth.currentUser != null || client.supabaseUrl.isNotEmpty) {
+      print('Supabase is already initialized, skipping initialization');
+      return;
+    }
+  } catch (e) {
+    // Supabase not initialized yet, proceed with initialization
+    print('Supabase not yet initialized, proceeding with initialization');
+  }
+
   for (int attempt = 1; attempt <= maxRetries; attempt++) {
     try {
-      print('Attempting Supabase initialization (attempt $attempt/$maxRetries)');
-      
+      print(
+          'Attempting Supabase initialization (attempt $attempt/$maxRetries)');
+
       // Clean up any existing lock files before initialization
       await _cleanupLockFiles();
-      
+
       await Supabase.initialize(
         url: url,
         anonKey: anonKey,
       );
-      
+
       print('Supabase initialized successfully');
       return;
     } catch (e) {
-      print('Supabase initialization attempt $attempt failed: $e');
+      // Check if the error is due to already being initialized
+      if (e.toString().contains('This instance is already initialized')) {
+        print('Supabase is already initialized by another instance, continuing...');
+        return;
+      }
       
+      print('Supabase initialization attempt $attempt failed: $e');
+
       if (attempt < maxRetries) {
         // Wait before retrying
         await Future.delayed(Duration(seconds: attempt * 2));
-        
+
         // Clean up lock files before retry
         await _cleanupLockFiles();
       } else {
@@ -61,7 +80,7 @@ Future<void> _cleanupLockFiles() async {
       'C:\\Users\\HP\\Documents\\auth\\supabase_authentication.lock',
       'C:\\Users\\HP\\AppData\\Local\\supabase\\auth\\supabase_authentication.lock',
     ];
-    
+
     for (final lockPath in lockPaths) {
       final lockFile = File(lockPath);
       if (await lockFile.exists()) {
@@ -113,6 +132,13 @@ void main() async {
   } catch (e, stackTrace) {
     print('Error during app initialization: $e');
     print('Stack trace: $stackTrace');
+    
+    // Provide user-friendly error message for Supabase initialization conflicts
+    String errorMessage = 'Error: $e';
+    if (e.toString().contains('This instance is already initialized')) {
+      errorMessage = 'Another instance of the app is already running. Please close other instances and try again.';
+    }
+    
     // Run a minimal app to show the error
     runApp(MaterialApp(
       home: Scaffold(
@@ -125,7 +151,18 @@ void main() async {
               const Text('App Initialization Error',
                   style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
               const SizedBox(height: 8),
-              Text('Error: $e', textAlign: TextAlign.center),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 32.0),
+                child: Text(errorMessage, textAlign: TextAlign.center),
+              ),
+              const SizedBox(height: 16),
+              ElevatedButton(
+                onPressed: () {
+                  // Restart the app
+                  main();
+                },
+                child: const Text('Retry'),
+              ),
             ],
           ),
         ),

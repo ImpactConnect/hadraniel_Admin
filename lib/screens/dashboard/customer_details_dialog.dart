@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import '../../core/models/customer_model.dart';
 import '../../core/services/customer_service.dart';
 import '../../core/services/sync_service.dart';
+import 'edit_customer_dialog.dart';
 
 class CustomerDetailsDialog extends StatefulWidget {
   final Customer customer;
@@ -146,7 +147,19 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
                   children: [
                     ElevatedButton.icon(
                       onPressed: () {
-                        // TODO: Implement edit functionality
+                        showDialog(
+                          context: context,
+                          builder: (context) => EditCustomerDialog(
+                            customer: widget.customer,
+                            onCustomerUpdated: (updatedCustomer) {
+                        setState(() {
+                          // Note: Since Customer fields are final, we would need to
+                          // update the parent widget or reload from database
+                        });
+                        _loadCustomerDetails(); // Reload customer details if changed
+                      },
+                          ),
+                        );
                       },
                       icon: const Icon(Icons.edit),
                       label: const Text('Edit'),

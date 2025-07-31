@@ -111,7 +111,7 @@ class Product {
       'quantity': quantity,
       'unit': unit,
       'cost_per_unit': costPerUnit,
-      'total_cost': quantity * costPerUnit,
+      // Note: total_cost is not included as it doesn't exist in the cloud products table
       'date_added': dateAdded.toIso8601String(),
       'last_updated': lastUpdated?.toIso8601String(),
       'description': description,

@@ -746,9 +746,9 @@ class _SalesScreenState extends State<SalesScreen> {
                   Text(
                     'Select Date Range',
                     style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
                   ),
                   const SizedBox(height: 16),
                   Flexible(
@@ -757,7 +757,8 @@ class _SalesScreenState extends State<SalesScreen> {
                         calendarType: CalendarDatePicker2Type.range,
                         firstDate: DateTime(2020),
                         lastDate: DateTime.now(),
-                        selectedDayHighlightColor: Theme.of(context).colorScheme.primary,
+                        selectedDayHighlightColor:
+                            Theme.of(context).colorScheme.primary,
                         weekdayLabelTextStyle: TextStyle(
                           color: Theme.of(context).colorScheme.primary,
                           fontWeight: FontWeight.bold,
@@ -799,7 +800,8 @@ class _SalesScreenState extends State<SalesScreen> {
                           }
                         },
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primary,
                           foregroundColor: Colors.white,
                         ),
                         child: const Text('Apply'),

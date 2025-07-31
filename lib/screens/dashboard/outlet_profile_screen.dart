@@ -94,47 +94,47 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
     Color color,
   ) {
     return Card(
-      elevation: 4,
-      shadowColor: color.withOpacity(0.3),
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      elevation: 2,
+      shadowColor: color.withOpacity(0.2),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       child: Container(
         decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [color.withOpacity(0.8), color.withOpacity(0.6)],
+            colors: [color.withOpacity(0.7), color.withOpacity(0.5)],
           ),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(8),
         ),
         child: Padding(
-          padding: const EdgeInsets.all(12.0),
+          padding: const EdgeInsets.all(8.0),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(6),
                 decoration: BoxDecoration(
                   color: Colors.white.withOpacity(0.3),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: BorderRadius.circular(6),
                 ),
-                child: Icon(icon, size: 24, color: Colors.white),
+                child: Icon(icon, size: 18, color: Colors.white),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 6),
               Text(
                 value,
                 style: const TextStyle(
                   color: Colors.white,
-                  fontSize: 20,
+                  fontSize: 16,
                   fontWeight: FontWeight.bold,
                 ),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 2),
               Text(
                 title,
                 style: TextStyle(
                   color: Colors.white.withOpacity(0.9),
                   fontWeight: FontWeight.w500,
-                  fontSize: 12,
+                  fontSize: 10,
                 ),
               ),
             ],
@@ -343,10 +343,10 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
 
                   // Metrics Grid
                   GridView.count(
-                    crossAxisCount: 4,
-                    crossAxisSpacing: 12,
-                    mainAxisSpacing: 12,
-                    childAspectRatio: 1.2,
+                    crossAxisCount: 5,
+                    crossAxisSpacing: 8,
+                    mainAxisSpacing: 8,
+                    childAspectRatio: 1.1,
                     shrinkWrap: true,
                     physics: const NeverScrollableScrollPhysics(),
                     children: [
@@ -591,16 +591,6 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                                         ),
                                       ),
                                     ),
-                                    Expanded(
-                                      flex: 1,
-                                      child: Text(
-                                        'Status',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                    ),
                                   ],
                                 ),
                               ),
@@ -648,35 +638,6 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                                               color: (sale.totalAmount ?? 0) > 0
                                                   ? Colors.green[700]
                                                   : Colors.grey[600],
-                                            ),
-                                          ),
-                                        ),
-                                        Expanded(
-                                          flex: 1,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 8,
-                                              vertical: 4,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: (sale.isPaid ?? false)
-                                                  ? Colors.green[100]
-                                                  : Colors.red[100],
-                                              borderRadius:
-                                                  BorderRadius.circular(12),
-                                            ),
-                                            child: Text(
-                                              (sale.isPaid ?? false)
-                                                  ? 'Paid'
-                                                  : 'Unpaid',
-                                              style: TextStyle(
-                                                color: (sale.isPaid ?? false)
-                                                    ? Colors.green[900]
-                                                    : Colors.red[900],
-                                                fontWeight: FontWeight.w500,
-                                                fontSize: 12,
-                                              ),
-                                              textAlign: TextAlign.center,
                                             ),
                                           ),
                                         ),

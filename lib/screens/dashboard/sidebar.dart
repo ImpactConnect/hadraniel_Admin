@@ -150,14 +150,7 @@ class Sidebar extends StatelessWidget {
                     title: 'Sync',
                     route: '/sync',
                     colorScheme: colorScheme,
-                  ),
-                  _buildNavItem(
-                    context: context,
-                    icon: Icons.settings,
-                    title: 'Settings',
-                    route: '/settings',
-                    colorScheme: colorScheme,
-                  ),
+                  )
                 ],
               ),
             ),

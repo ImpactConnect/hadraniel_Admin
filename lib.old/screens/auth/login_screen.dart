@@ -58,9 +58,18 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String errorMessage;
+        if (e.toString().contains('ClientException') ||
+            e.toString().contains('SocketException') ||
+            e.toString().contains('Failed host lookup') ||
+            e.toString().contains('No such host is known')) {
+          errorMessage = 'Network Connection Failed. Check your internet connection.';
+        } else {
+          errorMessage = 'Error: $e';
+        }
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error: $e')));
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     } finally {
       setState(() => _isLoading = false);

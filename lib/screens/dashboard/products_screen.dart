@@ -50,9 +50,16 @@ class _ProductsScreenState extends State<ProductsScreen> {
       }
     } catch (e) {
       if (mounted) {
+        String errorMessage;
+        if (e.toString().contains('HandshakeException') || 
+            e.toString().contains('Connection terminated during handshake')) {
+          errorMessage = 'Network connection problem. Please check your internet connection and try again.';
+        } else {
+          errorMessage = 'Error syncing products: $e';
+        }
         ScaffoldMessenger.of(
           context,
-        ).showSnackBar(SnackBar(content: Text('Error syncing products: $e')));
+        ).showSnackBar(SnackBar(content: Text(errorMessage)));
       }
     } finally {
       if (mounted) {
@@ -606,11 +613,22 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                       child: Text('All Units'),
                                     ),
                                     ...[
-                                      'KG',
-                                      'PCS',
+                                      'Kg',
+                                      'Pcs',
                                       'Carton',
                                       'Paint',
                                       'Cup',
+                                      'Ltr',
+                                      'Cup',
+                                      'Box',
+                                      'Roll',
+                                      'Bag',
+                                      'Gallon',
+                                      'Mudu',
+                                      'Tin',
+                                      'Sachet',
+                                      'Bowl',
+                                      'Bundle',
                                     ].map(
                                       (unit) => DropdownMenuItem(
                                         value: unit,
@@ -873,7 +891,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                     ),
                                     Expanded(
                                       child: Text(
-                                        '\$${product.costPerUnit.toStringAsFixed(2)}',
+                                        '₦${product.costPerUnit.toStringAsFixed(2)}',
                                       ),
                                     ),
                                     Expanded(
@@ -892,7 +910,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                     ),
                                     Expanded(
                                       child: Text(
-                                        '\$${totalCost.toStringAsFixed(2)}',
+                                        '₦${totalCost.toStringAsFixed(2)}',
                                       ),
                                     ),
                                     Expanded(

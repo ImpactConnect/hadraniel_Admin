@@ -138,7 +138,7 @@ class ProductDetailPopup extends StatelessWidget {
                               _buildDetailRow(
                                 context,
                                 'Cost Per Unit',
-                                '\$${product.costPerUnit.toStringAsFixed(2)}',
+                                '₦${product.costPerUnit.toStringAsFixed(2)}',
                                 Icons.attach_money,
                                 Colors.green[700]!,
                               ),
@@ -146,7 +146,7 @@ class ProductDetailPopup extends StatelessWidget {
                               _buildDetailRow(
                                 context,
                                 'Total Cost',
-                                '\$${(product.quantity * product.costPerUnit).toStringAsFixed(2)}',
+                                '₦${(product.quantity * product.costPerUnit).toStringAsFixed(2)}',
                                 Icons.calculate,
                                 Colors.indigo,
                               ),

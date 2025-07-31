@@ -23,19 +23,19 @@ class DatabaseHelper {
     final dbFactory = Platform.isWindows || Platform.isLinux
         ? databaseFactoryFfi
         : databaseFactory;
-    
+
     // Use user-writable directory instead of default path
     String databasePath;
     if (Platform.isWindows) {
       // Use AppData/Local for Windows to avoid permission issues
-      final appDataPath = Platform.environment['LOCALAPPDATA'] ?? 
-                         Platform.environment['APPDATA'] ?? 
-                         Directory.current.path;
-      databasePath = join(appDataPath, 'HadranielAdmin');
+      final appDataPath = Platform.environment['LOCALAPPDATA'] ??
+          Platform.environment['APPDATA'] ??
+          Directory.current.path;
+      databasePath = join(appDataPath, 'Hadraniel_Admin');
     } else {
       databasePath = await dbFactory.getDatabasesPath();
     }
-    
+
     final path = join(databasePath, 'admin_app.db');
     print('Database path: $path'); // Debug log
 
@@ -49,7 +49,7 @@ class DatabaseHelper {
     return await dbFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 8,
+        version: 9,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       ),
@@ -206,6 +206,17 @@ class DatabaseHelper {
         // Column might already exist, ignore error
       }
     }
+
+    if (oldVersion < 9) {
+      // Add is_synced column to intake_balances table if it doesn't exist
+      try {
+        await db.execute(
+            'ALTER TABLE intake_balances ADD COLUMN is_synced INTEGER DEFAULT 0');
+      } catch (e) {
+        // Column might already exist, ignore error
+        print('Error adding is_synced to intake_balances: $e');
+      }
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -244,7 +255,8 @@ class DatabaseHelper {
         total_received REAL NOT NULL,
         total_assigned REAL DEFAULT 0,
         balance_quantity REAL NOT NULL,
-        last_updated TEXT NOT NULL
+        last_updated TEXT NOT NULL,
+        is_synced INTEGER DEFAULT 0
       )
     ''');
 
