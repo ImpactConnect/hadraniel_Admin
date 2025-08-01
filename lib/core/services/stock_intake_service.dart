@@ -144,47 +144,35 @@ class StockIntakeService {
     final db = await _db.database;
     final now = DateTime.now();
 
-    // Check if product exists in intake_balances
-    final List<Map<String, dynamic>> existingBalances = await db.query(
-      'intake_balances',
-      where: 'product_name = ?',
-      whereArgs: [productName],
-    );
-
-    if (existingBalances.isNotEmpty) {
-      // Update existing balance
-      final existingBalance = IntakeBalance.fromMap(existingBalances.first);
-      final updatedTotalReceived = existingBalance.totalReceived + quantity;
-      final updatedBalanceQuantity =
-          updatedTotalReceived - existingBalance.totalAssigned;
-
-      await db.update(
+    await db.transaction((txn) async {
+      // Check if product exists in intake_balances
+      final List<Map<String, dynamic>> existingBalances = await txn.query(
         'intake_balances',
-        {
-          'total_received': updatedTotalReceived,
-          'balance_quantity': updatedBalanceQuantity,
-          'last_updated': now.toIso8601String(),
-        },
-        where: 'id = ?',
-        whereArgs: [existingBalance.id],
-      );
-    } else {
-      // Create new balance record
-      final newBalance = IntakeBalance(
-        id: _uuid.v4(),
-        productName: productName,
-        totalReceived: quantity,
-        totalAssigned: 0,
-        balanceQuantity: quantity,
-        lastUpdated: now,
+        where: 'product_name = ?',
+        whereArgs: [productName],
       );
 
-      await db.insert(
-        'intake_balances',
-        newBalance.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
-      );
-    }
+      if (existingBalances.isEmpty) {
+        // Create new balance record if it doesn't exist
+        final newBalance = IntakeBalance(
+          id: _uuid.v4(),
+          productName: productName,
+          totalReceived: 0, // Will be recalculated
+          totalAssigned: 0, // Will be recalculated
+          balanceQuantity: 0, // Will be recalculated
+          lastUpdated: now,
+        );
+
+        await txn.insert(
+          'intake_balances',
+          newBalance.toMap(),
+          conflictAlgorithm: ConflictAlgorithm.replace,
+        );
+      }
+
+      // Recalculate balance from actual data to ensure accuracy
+      await _recalculateBalanceForProduct(txn, productName);
+    });
   }
 
   // Update balance when product is assigned to outlet
@@ -218,21 +206,6 @@ class StockIntakeService {
         return false; // Not enough balance
       }
 
-      final updatedTotalAssigned = existingBalance.totalAssigned + quantity;
-      final updatedBalanceQuantity =
-          existingBalance.totalReceived - updatedTotalAssigned;
-
-      await txn.update(
-        'intake_balances',
-        {
-          'total_assigned': updatedTotalAssigned,
-          'balance_quantity': updatedBalanceQuantity,
-          'last_updated': now.toIso8601String(),
-        },
-        where: 'id = ?',
-        whereArgs: [existingBalance.id],
-      );
-
       // Record the distribution within the same transaction
       final distribution = ProductDistribution(
         id: _uuid.v4(),
@@ -252,8 +225,52 @@ class StockIntakeService {
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
 
+      // Recalculate balance from actual data to ensure accuracy
+      await _recalculateBalanceForProduct(txn, productName);
+
       return true;
     });
+  }
+
+  // Helper method to recalculate balance for a product from actual data
+  Future<void> _recalculateBalanceForProduct(
+    Transaction txn,
+    String productName,
+  ) async {
+    final now = DateTime.now();
+
+    // Calculate total received from stock_intake
+    final List<Map<String, dynamic>> intakeResults = await txn.rawQuery(
+      'SELECT SUM(quantity_received) as total FROM stock_intake WHERE product_name = ?',
+      [productName],
+    );
+    final totalReceived = intakeResults.first['total'] == null
+        ? 0.0
+        : (intakeResults.first['total'] as num).toDouble();
+
+    // Calculate total assigned from product_distributions
+    final List<Map<String, dynamic>> distributionResults = await txn.rawQuery(
+      'SELECT SUM(quantity) as total FROM product_distributions WHERE product_name = ?',
+      [productName],
+    );
+    final totalAssigned = distributionResults.first['total'] == null
+        ? 0.0
+        : (distributionResults.first['total'] as num).toDouble();
+
+    final balanceQuantity = totalReceived - totalAssigned;
+
+    // Update the intake_balances record
+    await txn.update(
+      'intake_balances',
+      {
+        'total_received': totalReceived,
+        'total_assigned': totalAssigned,
+        'balance_quantity': balanceQuantity,
+        'last_updated': now.toIso8601String(),
+      },
+      where: 'product_name = ?',
+      whereArgs: [productName],
+    );
   }
 
   // Get all intake balances
@@ -536,56 +553,54 @@ class StockIntakeService {
     final db = await _db.database;
     final now = DateTime.now();
 
-    // Check if product exists in intake_balances
-    final List<Map<String, dynamic>> existingBalances = await db.query(
-      'intake_balances',
-      where: 'product_name = ?',
-      whereArgs: [productName],
-    );
-
-    if (existingBalances.isNotEmpty) {
-      // Update existing balance
-      final existingBalance = IntakeBalance.fromMap(existingBalances.first);
-      final updatedTotalReceived = existingBalance.totalReceived + quantityChange;
-      final updatedBalanceQuantity =
-          updatedTotalReceived - existingBalance.totalAssigned;
-
-      if (updatedTotalReceived <= 0) {
-        // Delete the balance record if total received becomes 0 or negative
-        await db.delete(
-          'intake_balances',
-          where: 'id = ?',
-          whereArgs: [existingBalance.id],
-        );
-      } else {
-        // Update the balance record
-        await db.update(
-          'intake_balances',
-          {
-            'total_received': updatedTotalReceived,
-            'balance_quantity': updatedBalanceQuantity,
-            'last_updated': now.toIso8601String(),
-          },
-          where: 'id = ?',
-          whereArgs: [existingBalance.id],
-        );
-      }
-    } else if (quantityChange > 0) {
-      // Create new balance record only if adding quantity
-      final newBalance = IntakeBalance(
-        id: _uuid.v4(),
-        productName: productName,
-        totalReceived: quantityChange,
-        totalAssigned: 0,
-        balanceQuantity: quantityChange,
-        lastUpdated: now,
-      );
-
-      await db.insert(
+    await db.transaction((txn) async {
+      // Check if product exists in intake_balances
+      final List<Map<String, dynamic>> existingBalances = await txn.query(
         'intake_balances',
-        newBalance.toMap(),
-        conflictAlgorithm: ConflictAlgorithm.replace,
+        where: 'product_name = ?',
+        whereArgs: [productName],
       );
-    }
+
+      // Check if there are any stock intakes for this product after the change
+      final List<Map<String, dynamic>> intakeResults = await txn.rawQuery(
+        'SELECT SUM(quantity_received) as total FROM stock_intake WHERE product_name = ?',
+        [productName],
+      );
+      final totalReceived = intakeResults.first['total'] == null
+          ? 0.0
+          : (intakeResults.first['total'] as num).toDouble();
+
+      if (totalReceived <= 0) {
+        // Delete the balance record if no stock intakes remain
+        if (existingBalances.isNotEmpty) {
+          await txn.delete(
+            'intake_balances',
+            where: 'product_name = ?',
+            whereArgs: [productName],
+          );
+        }
+      } else {
+        // Ensure balance record exists
+        if (existingBalances.isEmpty) {
+          final newBalance = IntakeBalance(
+            id: _uuid.v4(),
+            productName: productName,
+            totalReceived: 0, // Will be recalculated
+            totalAssigned: 0, // Will be recalculated
+            balanceQuantity: 0, // Will be recalculated
+            lastUpdated: now,
+          );
+
+          await txn.insert(
+            'intake_balances',
+            newBalance.toMap(),
+            conflictAlgorithm: ConflictAlgorithm.replace,
+          );
+        }
+
+        // Recalculate balance from actual data
+        await _recalculateBalanceForProduct(txn, productName);
+      }
+    });
   }
 }

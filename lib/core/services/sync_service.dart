@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 import '../models/profile_model.dart';
 import '../models/outlet_model.dart';
 import '../models/product_model.dart';
@@ -1740,49 +1741,13 @@ class SyncService {
         }
       }
 
-      // Also sync intake balances
+      // Recalculate intake balances from local data instead of syncing from cloud
+      // This ensures local assignments are preserved
       try {
-        final balanceResponse = await supabase.from('intake_balances').select();
-        final balances = (balanceResponse as List)
-            .map((data) => IntakeBalance.fromMap(data))
-            .toList();
-
-        // Use a separate transaction for intake balances
-        await db.transaction((txn) async {
-          // Create table if it doesn't exist
-          await txn.execute('''
-            CREATE TABLE IF NOT EXISTS intake_balances (
-              id TEXT PRIMARY KEY,
-              product_name TEXT NOT NULL,
-              total_received REAL NOT NULL,
-              total_assigned REAL DEFAULT 0,
-              balance_quantity REAL NOT NULL,
-              last_updated TEXT NOT NULL
-            )
-          ''');
-
-          // Clear existing balances
-          await txn.delete('intake_balances');
-
-          // Insert new balances
-          for (var balance in balances) {
-            await txn.insert(
-              'intake_balances',
-              balance.toMap(),
-            );
-          }
-        });
-
-        print(
-            'Successfully synced ${balances.length} intake balances from Supabase');
+        await _recalculateIntakeBalancesFromLocalData();
+        print('Successfully recalculated intake balances from local data');
       } catch (balanceError) {
-        print('Error downloading intake balances from Supabase: $balanceError');
-        if (balanceError
-            .toString()
-            .contains('relation "public.intake_balances" does not exist')) {
-          print(
-              'The intake_balances table does not exist in Supabase. Please run the migration file: 20240301000000_create_stock_intake_tables.sql');
-        }
+        print('Error recalculating intake balances: $balanceError');
       }
     } catch (e) {
       print('Error syncing stock intakes: $e');
@@ -1842,6 +1807,77 @@ class SyncService {
       print('Error syncing stock intakes from Supabase: $e');
       throw e;
     }
+  }
+
+  // Recalculate intake balances from local stock_intake and products data
+  Future<void> _recalculateIntakeBalancesFromLocalData() async {
+    final db = await _dbHelper.database;
+    
+    await db.transaction((txn) async {
+      // Create table if it doesn't exist
+      await txn.execute('''
+        CREATE TABLE IF NOT EXISTS intake_balances (
+          id TEXT PRIMARY KEY,
+          product_name TEXT NOT NULL,
+          total_received REAL NOT NULL,
+          total_assigned REAL DEFAULT 0,
+          balance_quantity REAL NOT NULL,
+          last_updated TEXT NOT NULL
+        )
+      ''');
+
+      // Clear existing balances
+      await txn.delete('intake_balances');
+
+      // Calculate total received per product from stock_intake
+      final receivedQuery = await txn.rawQuery('''
+        SELECT 
+          product_name,
+          SUM(quantity_received) as total_received
+        FROM stock_intake
+        GROUP BY product_name
+      ''');
+
+      // Calculate total assigned per product from products table
+      final assignedQuery = await txn.rawQuery('''
+        SELECT 
+          product_name,
+          SUM(quantity) as total_assigned
+        FROM products
+        GROUP BY product_name
+      ''');
+
+      // Create a map of assigned quantities
+      final Map<String, double> assignedQuantities = {};
+      for (var row in assignedQuery) {
+        final productName = row['product_name'] as String;
+        final totalAssigned = (row['total_assigned'] as num?)?.toDouble() ?? 0.0;
+        assignedQuantities[productName] = totalAssigned;
+      }
+
+      // Create intake balance records
+      for (var row in receivedQuery) {
+        final productName = row['product_name'] as String;
+        final totalReceived = (row['total_received'] as num?)?.toDouble() ?? 0.0;
+        final totalAssigned = assignedQuantities[productName] ?? 0.0;
+        final balanceQuantity = totalReceived - totalAssigned;
+
+        final balance = IntakeBalance(
+          id: const Uuid().v4(),
+          productName: productName,
+          totalReceived: totalReceived,
+          totalAssigned: totalAssigned,
+          balanceQuantity: balanceQuantity,
+          lastUpdated: DateTime.now(),
+          isSynced: false,
+        );
+
+        await txn.insert(
+          'intake_balances',
+          balance.toMap(),
+        );
+      }
+    });
   }
 
   @override

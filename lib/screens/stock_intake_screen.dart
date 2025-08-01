@@ -745,6 +745,18 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
     });
   }
 
+  // Helper function to format balance numbers with proper decimal places
+  String _formatBalance(double value) {
+    if (value == value.toInt()) {
+      return value.toInt().toString();
+    }
+    // Round to 2 decimal places and remove trailing zeros
+    String formatted = value.toStringAsFixed(2);
+    formatted = formatted.replaceAll(RegExp(r'0*$'), '');
+    formatted = formatted.replaceAll(RegExp(r'\.$'), '');
+    return formatted;
+  }
+
   void _showBalanceDetails(IntakeBalance balance) async {
     final colorScheme = Theme.of(context).colorScheme;
     final StockIntakeService _stockIntakeService = StockIntakeService();
@@ -805,7 +817,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                     child: _buildMetricsCard(
                       icon: Icons.inventory_2_outlined,
                       label: 'Total Received',
-                      value: '${balance.totalReceived}',
+                      value: _formatBalance(balance.totalReceived),
                       color: Colors.blue,
                     ),
                   ),
@@ -814,7 +826,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                     child: _buildMetricsCard(
                       icon: Icons.assignment_outlined,
                       label: 'Total Assigned',
-                      value: '${balance.totalAssigned}',
+                      value: _formatBalance(balance.totalAssigned),
                       color: Colors.orange,
                     ),
                   ),
@@ -827,7 +839,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                     child: _buildMetricsCard(
                       icon: Icons.account_balance_outlined,
                       label: 'Balance Quantity',
-                      value: '${balance.balanceQuantity}',
+                      value: _formatBalance(balance.balanceQuantity),
                       color: balance.balanceQuantity > 0
                           ? Colors.green
                           : balance.balanceQuantity < 0
@@ -1293,9 +1305,9 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
               data: _filteredBalances.map((balance) {
                 return [
                   balance.productName,
-                  balance.totalReceived.toString(),
-                  balance.totalAssigned.toString(),
-                  balance.balanceQuantity.toString(),
+                  _formatBalance(balance.totalReceived),
+                  _formatBalance(balance.totalAssigned),
+                  _formatBalance(balance.balanceQuantity),
                   DateFormat('yyyy-MM-dd').format(balance.lastUpdated),
                 ];
               }).toList(),
@@ -2872,7 +2884,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                       borderRadius: BorderRadius.circular(12),
                     ),
                     child: Text(
-                      '${balance.totalReceived}',
+                      _formatBalance(balance.totalReceived),
                       textAlign: TextAlign.center,
                       style: TextStyle(color: Colors.blue[700]),
                     ),
@@ -2910,7 +2922,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
-                          '${balance.balanceQuantity}',
+                          _formatBalance(balance.balanceQuantity),
                           style: TextStyle(
                             color: balance.balanceQuantity > 0
                                 ? Colors.green[700]

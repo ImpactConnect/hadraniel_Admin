@@ -96,6 +96,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // Helper function to format balance numbers with proper decimal places
+  String _formatBalance(double value) {
+    if (value == value.toInt()) {
+      return value.toInt().toString();
+    }
+    // Round to 2 decimal places and remove trailing zeros
+    String formatted = value.toStringAsFixed(2);
+    formatted = formatted.replaceAll(RegExp(r'0*$'), '');
+    formatted = formatted.replaceAll(RegExp(r'\.$'), '');
+    return formatted;
+  }
+
   void _startAlertTimer() {
     _alertTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
       _loadAlertData();
@@ -2112,7 +2124,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 crossAxisAlignment: CrossAxisAlignment.end,
                                 children: [
                                   Text(
-                                    '${item['balance_quantity'] ?? 0}/${item['given_quantity'] ?? 0}',
+                                    '${_formatBalance((item['balance_quantity'] ?? 0).toDouble())}/${_formatBalance((item['given_quantity'] ?? 0).toDouble())}',
                                     style: TextStyle(
                                       fontSize: 12,
                                       fontWeight: FontWeight.bold,

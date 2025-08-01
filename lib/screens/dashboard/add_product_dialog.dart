@@ -41,6 +41,18 @@ class _AddProductDialogState extends State<AddProductDialog> {
     return _cachedProductBalances?[productName] ?? 0.0;
   }
 
+  // Helper function to format balance numbers with proper decimal places
+  String _formatBalance(double value) {
+    if (value == value.toInt()) {
+      return value.toInt().toString();
+    }
+    // Round to 2 decimal places and remove trailing zeros
+    String formatted = value.toStringAsFixed(2);
+    formatted = formatted.replaceAll(RegExp(r'0*$'), '');
+    formatted = formatted.replaceAll(RegExp(r'\.$'), '');
+    return formatted;
+  }
+
   Future<List<String>> _getPreloadedProductNames() async {
     // Return cached product names if available
     if (_cachedProductNames != null) {
@@ -277,7 +289,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
                         fillColor: Colors.grey[50],
                         // Show the available balance in the helper text
                         helperText: !_isNewProduct
-                            ? 'Available: ${getAvailableBalance(productName).toStringAsFixed(2)} ${unit}'
+                            ? 'Available: ${_formatBalance(getAvailableBalance(productName))} ${unit}'
                             : null,
                       ),
                       keyboardType: TextInputType.number,
@@ -294,7 +306,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
                           );
 
                           if (requestedQuantity > availableBalance) {
-                            return 'Exceeds available balance of ${availableBalance.toStringAsFixed(2)} ${unit}';
+                            return 'Exceeds available balance of ${_formatBalance(availableBalance)} ${unit}';
                           }
                         }
                         return null;

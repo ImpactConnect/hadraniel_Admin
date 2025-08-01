@@ -162,6 +162,18 @@ class _StockScreenState extends State<StockScreen> {
     }
   }
 
+  // Helper function to format balance numbers with proper decimal places
+  String _formatBalance(double value) {
+    if (value == value.toInt()) {
+      return value.toInt().toString();
+    }
+    // Round to 2 decimal places and remove trailing zeros
+    String formatted = value.toStringAsFixed(2);
+    formatted = formatted.replaceAll(RegExp(r'0*$'), '');
+    formatted = formatted.replaceAll(RegExp(r'\.$'), '');
+    return formatted;
+  }
+
   Future<void> _syncData() async {
     setState(() => _isSyncing = true);
     try {
@@ -264,9 +276,9 @@ class _StockScreenState extends State<StockScreen> {
         rows.add([
           product.productName,
           outlet.name,
-          stock.givenQuantity.toString(),
-          stock.soldQuantity.toString(),
-          stock.balanceQuantity.toString(),
+          _formatBalance(stock.givenQuantity),
+          _formatBalance(stock.soldQuantity),
+          _formatBalance(stock.balanceQuantity),
           stock.totalGivenValue?.toStringAsFixed(2) ?? '0.00',
           stock.balanceValue?.toStringAsFixed(2) ?? '0.00',
           stock.lastUpdated != null
@@ -402,9 +414,9 @@ class _StockScreenState extends State<StockScreen> {
                 return [
                   product.productName,
                   outlet.name,
-                  stock.givenQuantity.toString(),
-                  stock.soldQuantity.toString(),
-                  stock.balanceQuantity.toString(),
+                  _formatBalance(stock.givenQuantity),
+                  _formatBalance(stock.soldQuantity),
+                  _formatBalance(stock.balanceQuantity),
                   stock.totalGivenValue?.toStringAsFixed(2) ?? '0.00',
                   stock.balanceValue?.toStringAsFixed(2) ?? '0.00',
                   stock.lastUpdated != null
