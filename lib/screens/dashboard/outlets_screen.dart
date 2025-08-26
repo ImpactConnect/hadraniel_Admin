@@ -46,33 +46,7 @@ class _OutletsScreenState extends State<OutletsScreen> {
     }
   }
 
-  Future<void> _syncOutlets() async {
-    setState(() => _isLoading = true);
-    try {
-      await _syncService.syncOutletsToLocalDb();
-      await _loadOutlets();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Outlets synced successfully')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        String errorMessage;
-        if (e.toString().contains('HandshakeException') || 
-            e.toString().contains('Connection terminated during handshake')) {
-          errorMessage = 'Network connection problem. Please check your internet connection and try again.';
-        } else {
-          errorMessage = 'Error syncing outlets: $e';
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMessage)));
-      }
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
+
 
   void _showOutletDialog({Outlet? outlet}) {
     final formKey = GlobalKey<FormState>();
@@ -259,8 +233,8 @@ class _OutletsScreenState extends State<OutletsScreen> {
               children: [
                 IconButton(
                   icon: const Icon(Icons.sync),
-                  onPressed: _isLoading ? null : _syncOutlets,
-                  tooltip: 'Sync Outlets',
+                  onPressed: () => Navigator.pushNamed(context, '/sync'),
+                  tooltip: 'Go to Sync Page',
                 ),
               ],
             ),
@@ -465,15 +439,15 @@ class _OutletsScreenState extends State<OutletsScreen> {
                                               MaterialPageRoute(
                                                 builder: (context) =>
                                                     OutletProfileScreen(
-                                                      outlet: outlet,
-                                                    ),
+                                                  outlet: outlet,
+                                                ),
                                               ),
                                             ),
                                             child: Padding(
                                               padding:
                                                   const EdgeInsets.symmetric(
-                                                    vertical: 12.0,
-                                                  ),
+                                                vertical: 12.0,
+                                              ),
                                               child: Row(
                                                 children: [
                                                   Expanded(
@@ -481,8 +455,8 @@ class _OutletsScreenState extends State<OutletsScreen> {
                                                     child: Padding(
                                                       padding:
                                                           const EdgeInsets.only(
-                                                            left: 24.0,
-                                                          ),
+                                                        left: 24.0,
+                                                      ),
                                                       child: Text(
                                                         outlet.name,
                                                         style: TextStyle(
@@ -520,8 +494,8 @@ class _OutletsScreenState extends State<OutletsScreen> {
                                                           ),
                                                           onPressed: () =>
                                                               _showOutletDialog(
-                                                                outlet: outlet,
-                                                              ),
+                                                            outlet: outlet,
+                                                          ),
                                                           tooltip:
                                                               'Edit Outlet',
                                                         ),

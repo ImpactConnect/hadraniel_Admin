@@ -39,7 +39,6 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   List<StockIntake> _stockIntakes = [];
   List<IntakeBalance> _intakeBalances = [];
   bool _isLoading = true;
-  bool _isSyncing = false;
   String _searchQuery = '';
   String _selectedUnit = 'Pcs';
   DateTime? _startDate;
@@ -65,7 +64,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   List<String> _predefinedProducts = [
     // Custom products added by user will be inserted at the top
   ];
-  
+
   // Base predefined products list
   final List<String> _basePredefinedProducts = [
     'Sardine 2-4',
@@ -243,35 +242,38 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
     _initializeProductsList();
     _loadData();
   }
-  
+
   Future<void> _initializeProductsList() async {
     await _loadCustomProducts();
     // Combine custom products with base predefined products
-    _predefinedProducts = [...await _getCustomProducts(), ..._basePredefinedProducts];
+    _predefinedProducts = [
+      ...await _getCustomProducts(),
+      ..._basePredefinedProducts
+    ];
   }
-  
+
   Future<List<String>> _getCustomProducts() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.getStringList('custom_products') ?? [];
   }
-  
+
   Future<void> _loadCustomProducts() async {
     final customProducts = await _getCustomProducts();
     setState(() {
       _predefinedProducts = [...customProducts, ..._basePredefinedProducts];
     });
   }
-  
+
   Future<void> _saveCustomProduct(String productName) async {
     final prefs = await SharedPreferences.getInstance();
     final customProducts = await _getCustomProducts();
-    
+
     // Add the new product if it doesn't already exist
-    if (!customProducts.contains(productName) && 
+    if (!customProducts.contains(productName) &&
         !_basePredefinedProducts.contains(productName)) {
       customProducts.insert(0, productName); // Add to the beginning
       await prefs.setStringList('custom_products', customProducts);
-      
+
       // Update the predefined products list
       setState(() {
         _predefinedProducts = [...customProducts, ..._basePredefinedProducts];
@@ -309,11 +311,12 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       if (stockIntakes.isEmpty && intakeBalances.isEmpty) {
         try {
           await _syncService.syncStockIntakesToLocalDb();
-          await _syncService.syncIntakeBalancesToLocalDb();
+          // Note: syncStockIntakesToLocalDb() already handles intake balance calculation
           // Reload data after syncing
           final syncedStockIntakes = await _stockIntakeService.getAllIntakes();
-          final syncedIntakeBalances = await _stockIntakeService.getAllIntakeBalances();
-          
+          final syncedIntakeBalances =
+              await _stockIntakeService.getAllIntakeBalances();
+
           setState(() {
             _stockIntakes = syncedStockIntakes;
             _intakeBalances = syncedIntakeBalances;
@@ -347,55 +350,6 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
     }
   }
 
-  Future<void> _syncData() async {
-    setState(() {
-      _isSyncing = true;
-    });
-
-    try {
-      // First sync local changes to Supabase
-      for (final intake in _stockIntakes.where((i) => !i.isSynced)) {
-        final success = await _syncService.syncStockIntakeToSupabase(intake);
-        if (success) {
-          await _stockIntakeService.markIntakeAsSynced(intake.id);
-        }
-      }
-
-      // Sync intake balances to Supabase
-      for (final balance in _intakeBalances) {
-        await _syncService.syncIntakeBalancesToSupabase(balance);
-      }
-
-      // Then sync from Supabase to local database
-      await _syncService.syncStockIntakesToLocalDb();
-      
-      // Also sync intake balances from Supabase to local database
-      await _syncService.syncIntakeBalancesToLocalDb();
-
-      // Refresh data
-      await _loadData();
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Sync completed successfully')),
-      );
-    } catch (e) {
-      String errorMessage;
-      if (e.toString().contains('HandshakeException') || 
-          e.toString().contains('Connection terminated during handshake')) {
-        errorMessage = 'Network connection problem. Please check your internet connection and try again.';
-      } else {
-        errorMessage = 'Error syncing data: $e';
-      }
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(SnackBar(content: Text(errorMessage)));
-    } finally {
-      setState(() {
-        _isSyncing = false;
-      });
-    }
-  }
-
   void _showAddIntakeDialog() {
     showDialog(
       context: context,
@@ -413,127 +367,133 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                     if (textEditingValue.text == '') {
                       return _predefinedProducts;
                     }
-                    
+
                     // Filter predefined products based on input
-                    final filteredProducts = _predefinedProducts.where((String option) {
+                    final filteredProducts =
+                        _predefinedProducts.where((String option) {
                       return option.toLowerCase().contains(
-                        textEditingValue.text.toLowerCase(),
-                      );
+                            textEditingValue.text.toLowerCase(),
+                          );
                     }).toList();
-                    
+
                     // If the current text doesn't match any predefined product exactly,
                     // add it as a custom option at the top
                     final currentText = textEditingValue.text.trim();
-                    if (currentText.isNotEmpty && 
-                        !_predefinedProducts.any((product) => 
-                            product.toLowerCase() == currentText.toLowerCase())) {
-                      filteredProducts.insert(0, '+ Add "$currentText" as new product');
+                    if (currentText.isNotEmpty &&
+                        !_predefinedProducts.any((product) =>
+                            product.toLowerCase() ==
+                            currentText.toLowerCase())) {
+                      filteredProducts.insert(
+                          0, '+ Add "$currentText" as new product');
                     }
-                    
+
                     return filteredProducts;
                   },
                   onSelected: (String selection) {
                     if (selection.startsWith('+ Add "')) {
                       // Extract the custom product name from the selection
-                      final customProduct = selection.substring(7, selection.length - 17);
+                      final customProduct =
+                          selection.substring(7, selection.length - 16);
                       _productNameController.text = customProduct;
                     } else {
                       _productNameController.text = selection;
                     }
                   },
-                  fieldViewBuilder:
-                      (
-                        BuildContext context,
-                        TextEditingController controller,
-                        FocusNode focusNode,
-                        VoidCallback onFieldSubmitted,
-                      ) {
-                        // Assign the controller to our class controller
-                        if (controller.text.isEmpty &&
-                            _productNameController.text.isNotEmpty) {
-                          controller.text = _productNameController.text;
-                        } else if (_productNameController.text.isEmpty &&
-                            controller.text.isNotEmpty) {
-                          _productNameController.text = controller.text;
-                        }
+                  fieldViewBuilder: (
+                    BuildContext context,
+                    TextEditingController controller,
+                    FocusNode focusNode,
+                    VoidCallback onFieldSubmitted,
+                  ) {
+                    // Assign the controller to our class controller
+                    if (controller.text.isEmpty &&
+                        _productNameController.text.isNotEmpty) {
+                      controller.text = _productNameController.text;
+                    } else if (_productNameController.text.isEmpty &&
+                        controller.text.isNotEmpty) {
+                      _productNameController.text = controller.text;
+                    }
 
-                        return TextFormField(
-                          controller: controller,
-                          focusNode: focusNode,
-                          decoration: const InputDecoration(
-                            labelText: 'Product Name',
-                            border: OutlineInputBorder(),
-                            hintText: 'Select from list or type new product name',
-                            helperText: 'You can add custom products not in the predefined list',
-                          ),
-                          onChanged: (value) {
-                            _productNameController.text = value;
-                          },
-                          onTap: () {
-                            // This will trigger the optionsBuilder with empty text
-                            // which will now show all options
-                            if (controller.text.isEmpty) {
-                              controller.text = '';
-                              focusNode.requestFocus();
-                            }
-                          },
-                          validator: (value) {
-                            if (value == null || value.isEmpty) {
-                              return 'Please enter product name';
-                            }
-                            return null;
-                          },
-                        );
+                    return TextFormField(
+                      controller: controller,
+                      focusNode: focusNode,
+                      decoration: const InputDecoration(
+                        labelText: 'Product Name',
+                        border: OutlineInputBorder(),
+                        hintText: 'Select from list or type new product name',
+                        helperText:
+                            'You can add custom products not in the predefined list',
+                      ),
+                      onChanged: (value) {
+                        _productNameController.text = value;
                       },
-                  optionsViewBuilder:
-                      (
-                        BuildContext context,
-                        AutocompleteOnSelected<String> onSelected,
-                        Iterable<String> options,
-                      ) {
-                        return Align(
-                          alignment: Alignment.topLeft,
-                          child: Material(
-                            elevation: 4.0,
-                            child: Container(
-                              constraints: const BoxConstraints(maxHeight: 200),
-                              width: 300,
-                              child: ListView.builder(
-                                padding: const EdgeInsets.all(8.0),
-                                itemCount: options.length,
-                                itemBuilder: (BuildContext context, int index) {
-                                  final String option = options.elementAt(
-                                    index,
-                                  );
-                                  
-                                  // Check if this is a custom product option
-                                  final isCustomProduct = option.startsWith('+ Add "');
-                                  
-                                  return ListTile(
-                                    leading: isCustomProduct 
-                                        ? const Icon(Icons.add_circle, color: Colors.green)
-                                        : const Icon(Icons.inventory, color: Colors.blue),
-                                    title: Text(
-                                      option,
-                                      style: TextStyle(
-                                        fontWeight: isCustomProduct 
-                                            ? FontWeight.bold 
-                                            : FontWeight.normal,
-                                        color: isCustomProduct 
-                                            ? Colors.green[700] 
-                                            : null,
-                                      ),
-                                    ),
-                                    onTap: () {
-                                      onSelected(option);
-                                    },
-                                  );
+                      onTap: () {
+                        // This will trigger the optionsBuilder with empty text
+                        // which will now show all options
+                        if (controller.text.isEmpty) {
+                          controller.text = '';
+                          focusNode.requestFocus();
+                        }
+                      },
+                      validator: (value) {
+                        if (value == null || value.isEmpty) {
+                          return 'Please enter product name';
+                        }
+                        return null;
+                      },
+                    );
+                  },
+                  optionsViewBuilder: (
+                    BuildContext context,
+                    AutocompleteOnSelected<String> onSelected,
+                    Iterable<String> options,
+                  ) {
+                    return Align(
+                      alignment: Alignment.topLeft,
+                      child: Material(
+                        elevation: 4.0,
+                        child: Container(
+                          constraints: const BoxConstraints(maxHeight: 200),
+                          width: 300,
+                          child: ListView.builder(
+                            padding: const EdgeInsets.all(8.0),
+                            itemCount: options.length,
+                            itemBuilder: (BuildContext context, int index) {
+                              final String option = options.elementAt(
+                                index,
+                              );
+
+                              // Check if this is a custom product option
+                              final isCustomProduct =
+                                  option.startsWith('+ Add "');
+
+                              return ListTile(
+                                leading: isCustomProduct
+                                    ? const Icon(Icons.add_circle,
+                                        color: Colors.green)
+                                    : const Icon(Icons.inventory,
+                                        color: Colors.blue),
+                                title: Text(
+                                  option,
+                                  style: TextStyle(
+                                    fontWeight: isCustomProduct
+                                        ? FontWeight.bold
+                                        : FontWeight.normal,
+                                    color: isCustomProduct
+                                        ? Colors.green[700]
+                                        : null,
+                                  ),
+                                ),
+                                onTap: () {
+                                  onSelected(option);
                                 },
-                              ),
-                            ),
+                              );
+                            },
                           ),
-                        );
-                      },
+                        ),
+                      ),
+                    );
+                  },
                 ),
                 const SizedBox(height: 16),
                 CustomTextField(
@@ -709,9 +669,9 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                   child: Theme(
                     data: Theme.of(context).copyWith(
                       colorScheme: Theme.of(context).colorScheme.copyWith(
-                        primary: Theme.of(context).colorScheme.primary,
-                        onPrimary: Colors.white,
-                      ),
+                            primary: Theme.of(context).colorScheme.primary,
+                            onPrimary: Colors.white,
+                          ),
                     ),
                     child: DateRangePickerDialog(
                       firstDate: DateTime(2020),
@@ -762,8 +722,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
     final StockIntakeService _stockIntakeService = StockIntakeService();
 
     // Fetch distribution history for this product
-    List<ProductDistribution> distributions = await _stockIntakeService
-        .getProductDistributions(balance.productName);
+    List<ProductDistribution> distributions =
+        await _stockIntakeService.getProductDistributions(balance.productName);
 
     showDialog(
       context: context,
@@ -843,8 +803,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                       color: balance.balanceQuantity > 0
                           ? Colors.green
                           : balance.balanceQuantity < 0
-                          ? Colors.red
-                          : Colors.grey,
+                              ? Colors.red
+                              : Colors.grey,
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1108,8 +1068,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       // Apply search filter
       final searchQuery = _searchQuery.toLowerCase();
       final productNameMatch = intake.productName.toLowerCase().contains(
-        searchQuery,
-      );
+            searchQuery,
+          );
 
       // Safely handle nullable description
       final description = intake.description;
@@ -1140,8 +1100,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
           59,
           59,
         );
-        matchesDate =
-            intakeDate.isAtSameMomentAs(startDate) ||
+        matchesDate = intakeDate.isAtSameMomentAs(startDate) ||
             intakeDate.isAtSameMomentAs(endDate) ||
             (intakeDate.isAfter(startDate) && intakeDate.isBefore(endDate));
       }
@@ -1164,9 +1123,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
           break;
         case 'High Value':
           // Filter for high value products (cost per unit > 100)
-          filtered = filtered
-              .where((intake) => intake.costPerUnit > 100)
-              .toList();
+          filtered =
+              filtered.where((intake) => intake.costPerUnit > 100).toList();
           break;
         case 'Recently Added':
           // Filter for products added in the last 7 days
@@ -1490,11 +1448,6 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
               tooltip: 'Add Stock Intake',
             ),
           ],
-          IconButton(
-            icon: Icon(_isSyncing ? Icons.sync_disabled : Icons.sync),
-            onPressed: _isSyncing ? null : _syncData,
-            tooltip: 'Sync Data',
-          ),
         ],
         // Remove the hamburger menu for desktop view
         automaticallyImplyLeading: !isDesktop,
@@ -1858,8 +1811,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                               margin: const EdgeInsets.symmetric(vertical: 4),
                               child: ListTile(
                                 leading: CircleAvatar(
-                                  backgroundColor: colorScheme.primary
-                                      .withOpacity(0.1),
+                                  backgroundColor:
+                                      colorScheme.primary.withOpacity(0.1),
                                   child: Text(
                                     balance.productName
                                         .substring(0, 1)
@@ -2125,18 +2078,17 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                       color: colorScheme.onSurface,
                       fontSize: 14,
                     ),
-                    items:
-                        <String>[
-                          'All Products',
-                          'Low Stock',
-                          'High Value',
-                          'Recently Added',
-                        ].map<DropdownMenuItem<String>>((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
+                    items: <String>[
+                      'All Products',
+                      'Low Stock',
+                      'High Value',
+                      'Recently Added',
+                    ].map<DropdownMenuItem<String>>((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    }).toList(),
                     onChanged: (String? newValue) {
                       setState(() {
                         _selectedProductFilter = newValue!;
@@ -2172,20 +2124,19 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                       color: colorScheme.onSurface,
                       fontSize: 14,
                     ),
-                    items:
-                        <String>[
-                          'Date (Newest)',
-                          'Date (Oldest)',
-                          'Price (High-Low)',
-                          'Price (Low-High)',
-                          'Name (A-Z)',
-                          'Name (Z-A)',
-                        ].map<DropdownMenuItem<String>>((String value) {
-                          return DropdownMenuItem<String>(
-                            value: value,
-                            child: Text(value),
-                          );
-                        }).toList(),
+                    items: <String>[
+                      'Date (Newest)',
+                      'Date (Oldest)',
+                      'Price (High-Low)',
+                      'Price (Low-High)',
+                      'Name (A-Z)',
+                      'Name (Z-A)',
+                    ].map<DropdownMenuItem<String>>((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child: Text(value),
+                      );
+                    }).toList(),
                     onChanged: (String? newValue) {
                       setState(() {
                         _selectedSortOption = newValue!;
@@ -2314,10 +2265,10 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                       _balanceFilter == 'all'
                           ? 'All Balances'
                           : _balanceFilter == 'positive'
-                          ? 'Positive Balances'
-                          : _balanceFilter == 'zero'
-                          ? 'Zero Balances'
-                          : 'Negative Balances',
+                              ? 'Positive Balances'
+                              : _balanceFilter == 'zero'
+                                  ? 'Zero Balances'
+                                  : 'Negative Balances',
                       style: const TextStyle(color: Colors.white),
                     ),
                   ],
@@ -2769,8 +2720,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
     return _intakeBalances.where((balance) {
       // Apply search filter
       final matchesSearch = balance.productName.toLowerCase().contains(
-        _balanceSearchQuery.toLowerCase(),
-      );
+            _balanceSearchQuery.toLowerCase(),
+          );
 
       // Apply balance quantity filter
       bool matchesBalanceFilter = true;
@@ -2902,8 +2853,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                           color: balance.balanceQuantity > 0
                               ? Colors.green[400]
                               : balance.balanceQuantity < 0
-                              ? Colors.red[400]
-                              : Colors.grey[400],
+                                  ? Colors.red[400]
+                                  : Colors.grey[400],
                           shape: BoxShape.circle,
                         ),
                       ),
@@ -2917,8 +2868,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                           color: balance.balanceQuantity > 0
                               ? Colors.green[50]
                               : balance.balanceQuantity < 0
-                              ? Colors.red[50]
-                              : Colors.grey[50],
+                                  ? Colors.red[50]
+                                  : Colors.grey[50],
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Text(
@@ -2927,8 +2878,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                             color: balance.balanceQuantity > 0
                                 ? Colors.green[700]
                                 : balance.balanceQuantity < 0
-                                ? Colors.red[700]
-                                : Colors.grey[700],
+                                    ? Colors.red[700]
+                                    : Colors.grey[700],
                             fontWeight: FontWeight.bold,
                           ),
                         ),
@@ -2992,6 +2943,94 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   }
 
   Future<void> _deleteStockIntake(StockIntake intake) async {
+    // First check if the product is assigned to any outlet
+    try {
+      final isAssigned = await _stockIntakeService
+          .isProductAssignedToOutlet(intake.productName);
+
+      if (isAssigned) {
+        // Show error dialog if product is already assigned
+        showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            shape:
+                RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+            title: Row(
+              children: [
+                Icon(
+                  Icons.error_outline,
+                  color: Colors.red[700],
+                  size: 28,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Cannot Delete Product',
+                  style: TextStyle(color: Colors.red[700]),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  'This product "${intake.productName}" cannot be deleted because it has already been assigned to one or more outlets.',
+                  style: const TextStyle(fontSize: 16),
+                ),
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.orange[50],
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.orange[200]!),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.orange[700],
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'To delete this stock intake record, you must first remove all product distributions for this product from the outlets.',
+                          style: TextStyle(
+                            color: Colors.orange[800],
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              ElevatedButton(
+                onPressed: () => Navigator.of(context).pop(),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue,
+                  foregroundColor: Colors.white,
+                ),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
+        return;
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error checking product assignment: $e')),
+        );
+      }
+      return;
+    }
+
+    // If product is not assigned, proceed with normal deletion confirmation
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -3004,7 +3043,8 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('Are you sure you want to delete this stock intake record?'),
+            const Text(
+                'Are you sure you want to delete this stock intake record?'),
             const SizedBox(height: 12),
             Container(
               padding: const EdgeInsets.all(12),
@@ -3020,8 +3060,10 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
                     style: const TextStyle(fontWeight: FontWeight.bold),
                   ),
                   Text('Quantity: ${intake.quantityReceived} ${intake.unit}'),
-                  Text('Total Cost: ₦${NumberFormat('#,##0.00').format(intake.totalCost)}'),
-                  Text('Date: ${DateFormat('MMM dd, yyyy').format(intake.dateReceived)}'),
+                  Text(
+                      'Total Cost: ₦${NumberFormat('#,##0.00').format(intake.totalCost)}'),
+                  Text(
+                      'Date: ${DateFormat('MMM dd, yyyy').format(intake.dateReceived)}'),
                 ],
               ),
             ),
@@ -3088,11 +3130,15 @@ class _EditStockIntakeDialogState extends State<_EditStockIntakeDialog> {
   @override
   void initState() {
     super.initState();
-    _productNameController = TextEditingController(text: widget.intake.productName);
-    _quantityController = TextEditingController(text: widget.intake.quantityReceived.toString());
+    _productNameController =
+        TextEditingController(text: widget.intake.productName);
+    _quantityController =
+        TextEditingController(text: widget.intake.quantityReceived.toString());
     _unitController = TextEditingController(text: widget.intake.unit);
-    _costPerUnitController = TextEditingController(text: widget.intake.costPerUnit.toString());
-    _descriptionController = TextEditingController(text: widget.intake.description ?? '');
+    _costPerUnitController =
+        TextEditingController(text: widget.intake.costPerUnit.toString());
+    _descriptionController =
+        TextEditingController(text: widget.intake.description ?? '');
     _selectedDate = widget.intake.dateReceived;
   }
 
@@ -3109,7 +3155,7 @@ class _EditStockIntakeDialogState extends State<_EditStockIntakeDialog> {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return AlertDialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
       title: Text(
@@ -3148,7 +3194,8 @@ class _EditStockIntakeDialogState extends State<_EditStockIntakeDialog> {
                       keyboardType: TextInputType.number,
                       validator: (value) {
                         if (value?.isEmpty ?? true) return 'Required';
-                        if (double.tryParse(value!) == null) return 'Invalid number';
+                        if (double.tryParse(value!) == null)
+                          return 'Invalid number';
                         if (double.parse(value) <= 0) return 'Must be positive';
                         return null;
                       },
@@ -3179,7 +3226,8 @@ class _EditStockIntakeDialogState extends State<_EditStockIntakeDialog> {
                 ),
                 keyboardType: TextInputType.number,
                 validator: (value) {
-                  if (value?.isEmpty ?? true) return 'Cost per unit is required';
+                  if (value?.isEmpty ?? true)
+                    return 'Cost per unit is required';
                   if (double.tryParse(value!) == null) return 'Invalid number';
                   if (double.parse(value) <= 0) return 'Must be positive';
                   return null;
@@ -3239,10 +3287,7 @@ class _EditStockIntakeDialogState extends State<_EditStockIntakeDialog> {
                     Icon(Icons.calculate, color: colorScheme.primary),
                     const SizedBox(width: 8),
                     Text(
-                      'Total Cost: ₦${NumberFormat('#,##0.00').format(
-                        (double.tryParse(_quantityController.text) ?? 0) *
-                        (double.tryParse(_costPerUnitController.text) ?? 0)
-                      )}',
+                      'Total Cost: ₦${NumberFormat('#,##0.00').format((double.tryParse(_quantityController.text) ?? 0) * (double.tryParse(_costPerUnitController.text) ?? 0))}',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: colorScheme.primary,
@@ -3282,15 +3327,15 @@ class _EditStockIntakeDialogState extends State<_EditStockIntakeDialog> {
     try {
       final quantity = double.parse(_quantityController.text);
       final costPerUnit = double.parse(_costPerUnitController.text);
-      
+
       final updatedIntake = widget.intake.copyWith(
         productName: _productNameController.text.trim(),
         quantityReceived: quantity,
         unit: _unitController.text.trim(),
         costPerUnit: costPerUnit,
         totalCost: quantity * costPerUnit,
-        description: _descriptionController.text.trim().isEmpty 
-            ? null 
+        description: _descriptionController.text.trim().isEmpty
+            ? null
             : _descriptionController.text.trim(),
         dateReceived: _selectedDate,
         isSynced: false, // Mark as unsynced since it was modified

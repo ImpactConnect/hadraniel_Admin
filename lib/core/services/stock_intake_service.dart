@@ -309,9 +309,10 @@ class StockIntakeService {
   }
 
   // Get available products with their balance quantities and units
-  Future<Map<String, Map<String, dynamic>>> getAvailableProductsWithBalanceAndUnit() async {
+  Future<Map<String, Map<String, dynamic>>>
+      getAvailableProductsWithBalanceAndUnit() async {
     final db = await _db.database;
-    
+
     // Join intake_balances with stock_intake to get unit information
     // We'll get the most recent unit for each product
     final List<Map<String, dynamic>> maps = await db.rawQuery('''
@@ -475,20 +476,33 @@ class StockIntakeService {
     return maps.map((map) => ProductDistribution.fromMap(map)).toList();
   }
 
+  // Check if a product is assigned to any outlet
+  Future<bool> isProductAssignedToOutlet(String productName) async {
+    final db = await _db.database;
+    final List<Map<String, dynamic>> result = await db.query(
+      'product_distributions',
+      where: 'product_name = ?',
+      whereArgs: [productName],
+      limit: 1,
+    );
+
+    return result.isNotEmpty;
+  }
+
   // Update stock intake
   Future<void> updateStockIntake(StockIntake stockIntake) async {
     final db = await _db.database;
-    
+
     // Get the original stock intake to calculate balance changes
     final List<Map<String, dynamic>> originalMaps = await db.query(
       'stock_intake',
       where: 'id = ?',
       whereArgs: [stockIntake.id],
     );
-    
+
     if (originalMaps.isNotEmpty) {
       final originalIntake = StockIntake.fromMap(originalMaps.first);
-      
+
       // Update the stock intake record
       await db.update(
         'stock_intake',
@@ -496,17 +510,16 @@ class StockIntakeService {
         where: 'id = ?',
         whereArgs: [stockIntake.id],
       );
-      
+
       // Update intake balances if quantity or product changed
       if (originalIntake.productName != stockIntake.productName ||
           originalIntake.quantityReceived != stockIntake.quantityReceived) {
-        
         // Subtract the original quantity from the original product
         await _updateBalanceOnIntakeChange(
           originalIntake.productName,
           -originalIntake.quantityReceived,
         );
-        
+
         // Add the new quantity to the new product
         await _updateBalanceOnIntakeChange(
           stockIntake.productName,
@@ -519,29 +532,32 @@ class StockIntakeService {
   // Delete stock intake
   Future<void> deleteStockIntake(String id) async {
     final db = await _db.database;
-    
+
     // Get the stock intake to update balances
     final List<Map<String, dynamic>> maps = await db.query(
       'stock_intake',
       where: 'id = ?',
       whereArgs: [id],
     );
-    
+
     if (maps.isNotEmpty) {
       final stockIntake = StockIntake.fromMap(maps.first);
-      
+
       // Delete the stock intake record
       await db.delete(
         'stock_intake',
         where: 'id = ?',
         whereArgs: [id],
       );
-      
+
       // Update intake balances by subtracting the deleted quantity
       await _updateBalanceOnIntakeChange(
         stockIntake.productName,
         -stockIntake.quantityReceived,
       );
+
+      // Mark the record for deletion during sync
+      await _syncService.markForSync('stock_intake', id, isDelete: true);
     }
   }
 

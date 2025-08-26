@@ -50,32 +50,76 @@ class SyncService {
     final db = await _dbHelper.database;
 
     // Build the main query to get sales with aggregated data
-    String query = '''
-      SELECT 
-        s.id,
-        s.created_at,
-        s.outlet_id,
-        s.customer_id,
-        s.rep_id,
-        s.total_amount,
-        s.amount_paid,
-        s.outstanding_amount,
-        s.is_paid,
-        COUNT(si.id) as item_count,
-        GROUP_CONCAT(p.product_name, ', ') as product_names
-      FROM sales s
-      LEFT JOIN sale_items si ON si.sale_id = s.id
-      LEFT JOIN products p ON si.product_id = p.id
-      WHERE 1=1
-    ''';
+    String query;
+    
+    if (productId != null) {
+      // When filtering by specific product, get the quantity of that specific product
+      query = '''
+        SELECT 
+          s.id,
+          s.created_at,
+          s.outlet_id,
+          s.customer_id,
+          s.rep_id,
+          s.total_amount,
+          s.amount_paid,
+          s.outstanding_amount,
+          s.is_paid,
+          COUNT(si.id) as item_count,
+          CASE 
+            WHEN COUNT(si.id) = 0 THEN 'No Items' 
+            ELSE GROUP_CONCAT(COALESCE(p.product_name, 'Product ID: ' || si.product_id), ', ')
+          END as product_names,
+          CASE 
+            WHEN COUNT(si.id) = 0 THEN 'No Items' 
+            ELSE GROUP_CONCAT(si.quantity || ' x ' || COALESCE(p.product_name, 'Product ID: ' || si.product_id), ', ')
+          END as items_detail,
+          COALESCE((
+            SELECT si2.quantity 
+            FROM sale_items si2 
+            WHERE si2.sale_id = s.id AND si2.product_id = ?
+            LIMIT 1
+          ), 0) as quantity
+        FROM sales s
+        LEFT JOIN sale_items si ON si.sale_id = s.id
+        LEFT JOIN products p ON p.id = si.product_id
+        WHERE s.id IN (SELECT DISTINCT sale_id FROM sale_items WHERE product_id = ?)
+      ''';
+    } else {
+      // Original query for general sales data
+      query = '''
+        SELECT 
+          s.id,
+          s.created_at,
+          s.outlet_id,
+          s.customer_id,
+          s.rep_id,
+          s.total_amount,
+          s.amount_paid,
+          s.outstanding_amount,
+          s.is_paid,
+          COUNT(si.id) as item_count,
+          CASE 
+            WHEN COUNT(si.id) = 0 THEN 'No Items' 
+            ELSE GROUP_CONCAT(COALESCE(p.product_name, 'Product ID: ' || si.product_id), ', ')
+          END as product_names,
+          CASE 
+            WHEN COUNT(si.id) = 0 THEN 'No Items' 
+            ELSE GROUP_CONCAT(si.quantity || ' x ' || COALESCE(p.product_name, 'Product ID: ' || si.product_id), ', ')
+          END as items_detail
+        FROM sales s
+        LEFT JOIN sale_items si ON si.sale_id = s.id
+        LEFT JOIN products p ON p.id = si.product_id
+        WHERE 1=1
+      ''';
+    }
 
     List<dynamic> args = [];
 
     // Add product filter if provided (filter by sales that contain the product)
     if (productId != null) {
-      query +=
-          ' AND s.id IN (SELECT DISTINCT sale_id FROM sale_items WHERE product_id = ?)';
-      args.add(productId);
+      args.add(productId); // For the subquery to get quantity
+      args.add(productId); // For the main WHERE clause
     }
 
     // Add date range filter if provided
@@ -243,7 +287,9 @@ class SyncService {
     final db = await _dbHelper.database;
     final List<Map<String, dynamic>> items = await db.rawQuery(
       '''
-      SELECT si.*, p.product_name 
+      SELECT si.id, si.sale_id, si.product_id, si.quantity, 
+             si.unit_price, si.total_price as total, si.created_at, 
+             si.is_synced, COALESCE(p.product_name, 'Product ID: ' || si.product_id) as product_name 
       FROM sale_items si
       LEFT JOIN products p ON si.product_id = p.id
       WHERE si.sale_id = ?
@@ -320,7 +366,7 @@ class SyncService {
   // These caches are already declared at the top of the class
   // No need to redeclare them here
 
-  Future<void> syncSalesToLocalDb() async {
+  Future<Map<String, int>> syncSalesToLocalDb() async {
     try {
       print('Syncing sales from cloud database...');
       print('Supabase client: ${supabase != null ? 'initialized' : 'null'}');
@@ -415,6 +461,20 @@ class SyncService {
 
       // Sync sale items in a separate transaction
       await syncSaleItemsToLocalDb();
+
+      // Count total synced records
+      final salesCount = Sqflite.firstIntValue(
+              await db.rawQuery('SELECT COUNT(*) FROM sales')) ??
+          0;
+      final itemsCount = Sqflite.firstIntValue(
+              await db.rawQuery('SELECT COUNT(*) FROM sale_items')) ??
+          0;
+
+      return {
+        'synced': salesCount + itemsCount,
+        'sales': salesCount,
+        'items': itemsCount
+      };
     } catch (e) {
       print('Error syncing sales: $e');
       rethrow;
@@ -531,7 +591,7 @@ class SyncService {
   }
 
   // Outlets Sync
-  Future<void> syncOutletsToLocalDb([List<Outlet>? outlets]) async {
+  Future<Map<String, int>> syncOutletsToLocalDb([List<Outlet>? outlets]) async {
     try {
       final outletsToSync = outlets ??
           (await supabase.from('outlets').select() as List)
@@ -539,6 +599,7 @@ class SyncService {
               .toList();
 
       final db = await _dbHelper.database;
+      int syncedCount = 0;
       await db.transaction((txn) async {
         for (var outlet in outletsToSync) {
           await txn.insert(
@@ -546,8 +607,11 @@ class SyncService {
             outlet.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+          syncedCount++;
         }
       });
+
+      return {'synced': syncedCount, 'total': outletsToSync.length};
     } catch (e) {
       print('Error syncing outlets: $e');
       throw e;
@@ -598,33 +662,45 @@ class SyncService {
           whereArgs: [product.id],
         );
 
-        // Only update balance if the product name is the same
+        // Only update balance if the quantity has actually changed and increased
         if (previousProduct.productName == product.productName) {
           // Calculate the difference in quantity
           final quantityDifference =
               product.quantity - previousProduct.quantity;
 
-          // Update balance
-          final outletName = await getOutletName(product.outletId);
-          final stockIntakeService = StockIntakeService();
-          await stockIntakeService.updateBalanceOnProductAssignment(
-            product.productName,
-            quantityDifference,
-            product.outletId,
-            outletName,
-            product.costPerUnit,
-          );
+          // Only update balance if quantity increased (additional assignment needed)
+          if (quantityDifference > 0) {
+            final outletName = await getOutletName(product.outletId);
+            final stockIntakeService = StockIntakeService();
+            final success = await stockIntakeService.updateBalanceOnProductAssignment(
+              product.productName,
+              quantityDifference,
+              product.outletId,
+              outletName,
+              product.costPerUnit,
+            );
+            
+            if (!success) {
+              throw Exception('Insufficient balance for quantity increase');
+            }
+          }
+          // If quantity decreased or stayed the same, no balance update needed
+          // as we're not consuming additional stock
         } else {
           // If product name changed, treat it as a new assignment
           final stockIntakeService = StockIntakeService();
           final outletName = await getOutletName(product.outletId);
-          await stockIntakeService.updateBalanceOnProductAssignment(
+          final success = await stockIntakeService.updateBalanceOnProductAssignment(
             product.productName,
             product.quantity,
             product.outletId,
             outletName,
             product.costPerUnit,
           );
+          
+          if (!success) {
+            throw Exception('Insufficient balance for product assignment');
+          }
         }
       } else {
         // If product doesn't exist (shouldn't happen), just update and mark for syncing
@@ -641,6 +717,63 @@ class SyncService {
     }
   }
 
+  // Helper method to add items to sync queue
+  Future<void> _addToSyncQueue(String tableName, String recordId,
+      {bool isDelete = false}) async {
+    try {
+      final db = await _dbHelper.database;
+      await db.insert('sync_queue', {
+        'table_name': tableName,
+        'record_id': recordId,
+        'is_delete': isDelete ? 1 : 0,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+    } catch (e) {
+      print('Error adding to sync queue: $e');
+    }
+  }
+
+  /// Checks if a product is referenced by other tables
+  /// Returns a map with 'canDelete' boolean and 'message' string
+  Future<Map<String, dynamic>> canDeleteProduct(String productId) async {
+    final db = await _dbHelper.database;
+
+    // Check if product is referenced in sale_items
+    final saleItemsCount = Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM sale_items WHERE product_id = ?',
+          [productId],
+        )) ??
+        0;
+
+    if (saleItemsCount > 0) {
+      return {
+        'canDelete': false,
+        'message':
+            'Cannot delete this product because it is used in $saleItemsCount sales record(s). '
+                'Please remove all related sales records before deleting this product.'
+      };
+    }
+
+    // Check if product is referenced in stock_balances
+    final stockBalancesCount = Sqflite.firstIntValue(await db.rawQuery(
+          'SELECT COUNT(*) FROM stock_balances WHERE product_id = ?',
+          [productId],
+        )) ??
+        0;
+
+    if (stockBalancesCount > 0) {
+      return {
+        'canDelete': false,
+        'message':
+            'Cannot delete this product because it is used in $stockBalancesCount stock balance record(s). '
+                'Please remove all related stock records before deleting this product.'
+      };
+    }
+
+    // Product can be deleted
+    return {'canDelete': true, 'message': ''};
+  }
+
   Future<void> deleteProduct(String productId) async {
     try {
       final db = await _dbHelper.database;
@@ -655,22 +788,97 @@ class SyncService {
       if (productMaps.isNotEmpty) {
         final product = Product.fromMap(productMaps.first);
 
-        // Delete the product
-        await db.delete('products', where: 'id = ?', whereArgs: [productId]);
+        try {
+          // Delete the product locally
+          await db.delete('products', where: 'id = ?', whereArgs: [productId]);
 
-        // Update the balance by adding back the quantity (negative assignment)
-        final stockIntakeService = StockIntakeService();
-        final outletName = await getOutletName(product.outletId);
-        await stockIntakeService.updateBalanceOnProductAssignment(
-          product.productName,
-          -product.quantity, // Negative quantity to add back to balance
-          product.outletId,
-          outletName,
-          product.costPerUnit,
-        );
+          // Update the balance by adding back the quantity (negative assignment)
+          final stockIntakeService = StockIntakeService();
+          final outletName = await getOutletName(product.outletId);
+          await stockIntakeService.updateBalanceOnProductAssignment(
+            product.productName,
+            -product.quantity, // Negative quantity to add back to balance
+            product.outletId,
+            outletName,
+            product.costPerUnit,
+          );
+
+          // Sync deletion to cloud database
+          if (await isOnline()) {
+            try {
+              // Delete from cloud database immediately if online
+              await supabase.from('products').delete().eq('id', productId);
+            } catch (e) {
+              print('Error deleting product from cloud: $e');
+
+              // Check for foreign key constraint violation in Supabase
+              String errorMessage = e.toString();
+              if (errorMessage.contains('violates foreign key constraint')) {
+                if (errorMessage.contains('sale_items')) {
+                  // Create a more user-friendly error message for sales records
+                  throw Exception(
+                      'Cannot delete this product because it is being used in sales records on the server. '
+                      'Please remove all related sales records before deleting this product.');
+                } else if (errorMessage.contains('stock_balances')) {
+                  // Create a more user-friendly error message for stock balances
+                  throw Exception(
+                      'Cannot delete this product because it is being used in stock balance records on the server. '
+                      'Please remove all related stock records before deleting this product.');
+                } else {
+                  // Generic foreign key constraint message
+                  throw Exception(
+                      'Cannot delete this product because it is referenced by other records on the server. '
+                      'Please remove all related records before deleting this product.');
+                }
+              }
+
+              // If cloud deletion fails for other reasons, mark for sync to retry later
+              await _addToSyncQueue('products', productId, isDelete: true);
+            }
+          } else {
+            // If offline, mark for sync when connection is restored
+            await _addToSyncQueue('products', productId, isDelete: true);
+          }
+        } catch (e) {
+          String errorMessage = e.toString();
+
+          // Check for foreign key constraint violation
+          if (errorMessage.contains('FOREIGN KEY constraint failed')) {
+            // Try to determine which table is causing the constraint violation
+            if (errorMessage.toLowerCase().contains('sale_items')) {
+              throw Exception(
+                  'Cannot delete this product because it is being used in sales records. '
+                  'Please remove all related sales records before deleting this product.');
+            } else if (errorMessage.toLowerCase().contains('stock_balances')) {
+              throw Exception(
+                  'Cannot delete this product because it is being used in stock balance records. '
+                  'Please remove all related stock records before deleting this product.');
+            } else {
+              // Generic foreign key constraint message
+              throw Exception(
+                  'Cannot delete this product because it is being used in other records. '
+                  'Please remove all related records before deleting this product.');
+            }
+          } else {
+            // For other errors, rethrow with original message
+            print('Error deleting product: $e');
+            throw e;
+          }
+        }
       } else {
-        // If product doesn't exist, just try to delete
-        await db.delete('products', where: 'id = ?', whereArgs: [productId]);
+        // If product doesn't exist locally, still try to delete from cloud if online
+        if (await isOnline()) {
+          try {
+            await supabase.from('products').delete().eq('id', productId);
+          } catch (e) {
+            print('Error deleting non-existent product from cloud: $e');
+            // Mark for sync in case the product exists in cloud but not locally
+            await _addToSyncQueue('products', productId, isDelete: true);
+          }
+        } else {
+          // Mark for sync when connection is restored
+          await _addToSyncQueue('products', productId, isDelete: true);
+        }
       }
     } catch (e) {
       print('Error deleting product: $e');
@@ -839,11 +1047,16 @@ class SyncService {
   }
 
   // Products Sync
-  Future<void> syncProductsToLocalDb() async {
+  // Separate method to push local products to cloud
+  Future<int> syncProductsToCloud() async {
     try {
       final db = await _dbHelper.database;
+      int syncedCount = 0;
 
-      // First sync local changes to cloud in a single transaction
+      // Process sync queue first to handle any pending deletions
+      await processSyncQueue();
+
+      // Push unsynced local products to cloud
       await db.transaction((txn) async {
         final unsyncedProducts = await txn.query(
           'products',
@@ -851,160 +1064,180 @@ class SyncService {
           whereArgs: [0],
         );
 
-        // Push unsynced products to Supabase
+        print(
+            'Found ${unsyncedProducts.length} unsynced products to push to cloud');
+
         for (var productMap in unsyncedProducts) {
           final product = Product.fromMap(productMap);
-          await supabase.from('products').upsert(product.toCloudMap());
 
-          // Mark as synced locally
-          await txn.update(
-            'products',
-            {'is_synced': 1},
-            where: 'id = ?',
-            whereArgs: [product.id],
-          );
+          try {
+            // Check if product exists in cloud first
+            final existingCloudProduct = await supabase
+                .from('products')
+                .select()
+                .eq('id', product.id)
+                .maybeSingle();
+
+            if (existingCloudProduct != null) {
+              // Product exists in cloud, update it
+              await supabase
+                  .from('products')
+                  .update(product.toCloudMap())
+                  .eq('id', product.id);
+              print('Updated existing product ${product.id} in cloud');
+            } else {
+              // Product doesn't exist in cloud, insert it
+              await supabase.from('products').insert(product.toCloudMap());
+              print('Inserted new product ${product.id} to cloud');
+            }
+
+            // Mark as synced locally
+            await txn.update(
+              'products',
+              {'is_synced': 1},
+              where: 'id = ?',
+              whereArgs: [product.id],
+            );
+            syncedCount++;
+          } catch (e) {
+            print('Error syncing product ${product.id} to cloud: $e');
+            // Continue with other products instead of failing entire sync
+          }
         }
       });
 
-      // Pull latest products from Supabase
-      final response = await supabase.from('products').select();
-      print('Supabase products response: $response');
+      return syncedCount;
+    } catch (e) {
+      print('Error syncing products to cloud: $e');
+      throw e;
+    }
+  }
 
-      final products = (response as List).map((data) {
-        print('Processing product data: $data');
-        try {
-          return Product.fromMap(data);
-        } catch (e) {
-          print('Error processing product: $data');
-          print('Error details: $e');
-          rethrow;
-        }
-      }).toList();
+  // Separate method to fetch products from cloud to local (only when local data is missing)
+  Future<int> fetchProductsFromCloud() async {
+    try {
+      final db = await _dbHelper.database;
+      int fetchedCount = 0;
 
-      // Get existing products to compare quantities
-      final List<Map<String, dynamic>> existingProductsMaps = await db.query(
+      // Get all local product IDs to check what's missing
+      final localProductIds = await db.query(
         'products',
+        columns: ['id'],
       );
-      final Map<String, Product> existingProducts = {};
-      for (var map in existingProductsMaps) {
-        final product = Product.fromMap(map);
-        existingProducts[product.id] = product;
-      }
+      final localIds =
+          localProductIds.map((row) => row['id'] as String).toSet();
+
+      // Fetch all products from cloud
+      final response = await supabase.from('products').select();
+      print('Fetched ${(response as List).length} products from cloud');
+
+      final cloudProducts = (response as List)
+          .map((data) {
+            try {
+              return Product.fromMap(data);
+            } catch (e) {
+              print('Error processing cloud product: $data');
+              print('Error details: $e');
+              return null;
+            }
+          })
+          .where((product) => product != null)
+          .cast<Product>()
+          .toList();
 
       final stockIntakeService = StockIntakeService();
-
-      // Create a list to track all balance updates needed
       final List<Map<String, dynamic>> balanceUpdateData = [];
 
-      // First transaction: Update products table
-      await db.transaction((txn) async {
-        for (var product in products) {
-          // Check if product exists and quantity has changed
-          if (existingProducts.containsKey(product.id)) {
-            final existingProduct = existingProducts[product.id]!;
+      // Only process products that don't exist locally
+      final missingProducts = cloudProducts
+          .where((product) => !localIds.contains(product.id))
+          .toList();
 
-            // If product name is the same and quantity has changed
-            if (existingProduct.productName == product.productName &&
-                existingProduct.quantity != product.quantity) {
-              // Calculate quantity difference
-              final quantityDifference =
-                  product.quantity - existingProduct.quantity;
+      print(
+          'Found ${missingProducts.length} missing products to fetch from cloud');
 
-              // Add to balance update data list
-              balanceUpdateData.add({
-                'productName': product.productName,
-                'quantity': quantityDifference,
-                'outletId': product.outletId,
-                'costPerUnit': product.costPerUnit,
-              });
-            }
-            // If product name has changed, treat as deletion of old and addition of new
-            else if (existingProduct.productName != product.productName) {
-              // Add removal of old product quantity to balance update data
-              balanceUpdateData.add({
-                'productName': existingProduct.productName,
-                'quantity': -existingProduct.quantity,
-                'outletId': existingProduct.outletId,
-                'costPerUnit': existingProduct.costPerUnit,
-              });
+      if (missingProducts.isNotEmpty) {
+        await db.transaction((txn) async {
+          for (var product in missingProducts) {
+            // Insert the missing product locally
+            await txn.insert(
+              'products',
+              {
+                ...product.toMap(),
+                'is_synced': 1, // Mark as synced since it came from cloud
+              },
+              conflictAlgorithm:
+                  ConflictAlgorithm.ignore, // Ignore if somehow exists
+            );
 
-              // Add new product quantity to balance update data
-              balanceUpdateData.add({
-                'productName': product.productName,
-                'quantity': product.quantity,
-                'outletId': product.outletId,
-                'costPerUnit': product.costPerUnit,
-              });
-            }
-          }
-          // New product, add its quantity to balance update data
-          else {
+            // Add to balance update data for new products
             balanceUpdateData.add({
               'productName': product.productName,
               'quantity': product.quantity,
               'outletId': product.outletId,
               'costPerUnit': product.costPerUnit,
             });
+
+            fetchedCount++;
+            print('Fetched missing product ${product.id} from cloud');
           }
+        });
 
-          // Insert or update the product
-          await txn.insert(
-              'products',
-              {
-                ...product.toMap(),
-                'is_synced': 1,
-              },
-              conflictAlgorithm: ConflictAlgorithm.replace);
+        // Update intake balances for newly fetched products
+        for (var updateData in balanceUpdateData) {
+          final outletName = await getOutletName(updateData['outletId']);
+          await stockIntakeService.updateBalanceOnProductAssignment(
+            updateData['productName'],
+            updateData['quantity'],
+            updateData['outletId'],
+            outletName,
+            updateData['costPerUnit'],
+          );
         }
-
-        // Handle deleted products (products that exist locally but not in the server response)
-        for (var existingProduct in existingProducts.values) {
-          if (!products.any((p) => p.id == existingProduct.id)) {
-            // Add removal of deleted product's quantity to balance update data
-            balanceUpdateData.add({
-              'productName': existingProduct.productName,
-              'quantity': -existingProduct.quantity,
-              'outletId': existingProduct.outletId,
-              'costPerUnit': existingProduct.costPerUnit,
-            });
-
-            // Delete the product locally
-            await txn.delete(
-              'products',
-              where: 'id = ?',
-              whereArgs: [existingProduct.id],
-            );
-          }
-        }
-      });
-
-      // Process all balance updates one by one to prevent locking
-      for (var updateData in balanceUpdateData) {
-        final outletName = await getOutletName(updateData['outletId']);
-        // Process each balance update without wrapping in a transaction
-        // since updateBalanceOnProductAssignment already performs its own DB operations
-        await stockIntakeService.updateBalanceOnProductAssignment(
-          updateData['productName'],
-          updateData['quantity'],
-          updateData['outletId'],
-          outletName,
-          updateData['costPerUnit'],
-        );
       }
+
+      return fetchedCount;
     } catch (e) {
-      print('Error syncing products: $e');
+      print('Error fetching products from cloud: $e');
+      throw e;
+    }
+  }
+
+  // Combined sync method that handles both directions intelligently
+  Future<Map<String, int>> syncProductsToLocalDb() async {
+    try {
+      print('Starting intelligent product sync...');
+
+      // First, push any local changes to cloud
+      final uploadedCount = await syncProductsToCloud();
+
+      // Then, fetch any missing products from cloud
+      final downloadedCount = await fetchProductsFromCloud();
+
+      final totalSynced = uploadedCount + downloadedCount;
+      print(
+          'Product sync completed successfully - uploaded: $uploadedCount, downloaded: $downloadedCount');
+
+      return {
+        'synced': totalSynced,
+        'uploaded': uploadedCount,
+        'downloaded': downloadedCount
+      };
+    } catch (e) {
+      print('Error in product sync: $e');
       throw e;
     }
   }
 
   // Reps Sync
-  Future<void> syncRepsToLocalDb() async {
+  Future<Map<String, int>> syncRepsToLocalDb() async {
     try {
       final response =
           await supabase.from('profiles').select().eq('role', 'rep');
       final reps = (response as List).map((data) => Rep.fromMap(data)).toList();
 
       final db = await _dbHelper.database;
+      int syncedCount = 0;
       await db.transaction((txn) async {
         // Clear existing reps
         await txn.delete('reps');
@@ -1015,8 +1248,11 @@ class SyncService {
             rep.toMap(),
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+          syncedCount++;
         }
       });
+
+      return {'synced': syncedCount, 'total': reps.length};
     } catch (e) {
       print('Error syncing reps: $e');
       throw e;
@@ -1089,22 +1325,27 @@ class SyncService {
   }
 
   // Sync All Data
-  Future<void> syncAll() async {
+  Future<Map<String, Map<String, int>>> syncAll() async {
+    Map<String, Map<String, int>> syncResults = {};
+
     try {
+      // Process any pending sync queue operations first (including deletions)
+      await processSyncQueue();
+
       // Sync user and outlet data
       await syncProfilesToLocalDb();
-      await syncOutletsToLocalDb();
-      await syncRepsToLocalDb();
+      syncResults['outlets'] = await syncOutletsToLocalDb();
+      syncResults['reps'] = await syncRepsToLocalDb();
       await syncCustomersToLocalDb();
 
       // Sync product data with proper transaction handling
-      await syncProductsToLocalDb();
+      syncResults['products'] = await syncProductsToLocalDb();
 
       // Sync sales data with proper transaction handling
-      await syncSalesToLocalDb();
+      syncResults['sales'] = await syncSalesToLocalDb();
 
       // Sync stock-related data
-      await syncStockBalancesToLocalDb();
+      syncResults['stock_balances'] = await syncStockBalancesToLocalDb();
 
       // Sync product distributions with error handling for missing table
       try {
@@ -1125,10 +1366,18 @@ class SyncService {
       }
 
       // Sync stock intake data
-      await syncStockIntakesToLocalDb();
+      syncResults['stock_intake'] = await syncStockIntakesToLocalDb();
+
+      // Sync intake balances
+      syncResults['intake_balances'] = await syncIntakeBalancesToLocalDb();
 
       // Sync expenditures data
-      await syncExpendituresToLocalDb();
+      syncResults['expenditures'] = await syncExpendituresToLocalDb();
+
+      // Process any remaining sync queue operations after all syncs
+      await processSyncQueue();
+
+      return syncResults;
     } catch (e) {
       print('Error in syncAll: $e');
       throw e;
@@ -1248,27 +1497,49 @@ class SyncService {
         final table = item['table_name'] as String;
         final recordId = item['record_id'] as String;
         final isDelete = item['is_delete'] == 1;
+        bool shouldRemoveFromQueue = true;
 
-        if (isDelete) {
-          await supabase.from(table).delete().eq('id', recordId);
-        } else {
-          final record = await db.query(
-            table,
-            where: 'id = ?',
-            whereArgs: [recordId],
-            limit: 1,
-          );
+        try {
+          if (isDelete) {
+            await supabase.from(table).delete().eq('id', recordId);
+          } else {
+            final record = await db.query(
+              table,
+              where: 'id = ?',
+              whereArgs: [recordId],
+              limit: 1,
+            );
 
-          if (record.isNotEmpty) {
-            await supabase.from(table).upsert(record.first);
+            if (record.isNotEmpty) {
+              await supabase.from(table).upsert(record.first);
+            }
+          }
+        } catch (e) {
+          print('Error processing sync queue item $table:$recordId: $e');
+
+          // Handle foreign key constraint violations for product deletions
+          if (isDelete &&
+              table == 'products' &&
+              e.toString().contains('violates foreign key constraint')) {
+            print(
+                'Cannot delete product $recordId from server due to foreign key constraints. Skipping this sync operation.');
+            // Remove from queue since this deletion cannot be completed
+            shouldRemoveFromQueue = true;
+          } else {
+            // For other errors, don't remove from queue so it can be retried later
+            shouldRemoveFromQueue = false;
+            print('Keeping sync queue item $table:$recordId for retry later');
           }
         }
 
-        await db.delete(
-          'sync_queue',
-          where: 'table_name = ? AND record_id = ?',
-          whereArgs: [table, recordId],
-        );
+        // Only remove from queue if operation succeeded or if it's a foreign key constraint that can't be resolved
+        if (shouldRemoveFromQueue) {
+          await db.delete(
+            'sync_queue',
+            where: 'table_name = ? AND record_id = ?',
+            whereArgs: [table, recordId],
+          );
+        }
       }
     } catch (e) {
       print('Error processing sync queue: $e');
@@ -1276,9 +1547,11 @@ class SyncService {
     }
   }
 
-  Future<void> syncStockBalancesToLocalDb() async {
+  Future<Map<String, int>> syncStockBalancesToLocalDb() async {
     try {
       final db = await _dbHelper.database;
+      int uploadedCount = 0;
+      int downloadedCount = 0;
 
       // First sync local changes to cloud in a transaction
       await db.transaction((txn) async {
@@ -1308,6 +1581,7 @@ class SyncService {
             where: 'id = ?',
             whereArgs: [balanceMap['id']],
           );
+          uploadedCount++;
         }
       });
 
@@ -1351,8 +1625,15 @@ class SyncService {
                 'synced': 1,
               },
               conflictAlgorithm: ConflictAlgorithm.replace);
+          downloadedCount++;
         }
       });
+
+      return {
+        'synced': uploadedCount + downloadedCount,
+        'uploaded': uploadedCount,
+        'downloaded': downloadedCount
+      };
     } catch (e) {
       print('Error syncing stock balances: $e');
       throw e;
@@ -1407,15 +1688,32 @@ class SyncService {
 
   Future<void> syncIntakeBalancesToSupabase(dynamic intakeBalance) async {
     try {
-      // Try to upsert the data
-      await supabase.from('intake_balances').upsert({
-        'id': intakeBalance.id,
-        'product_name': intakeBalance.productName,
-        'total_received': intakeBalance.totalReceived,
-        'total_assigned': intakeBalance.totalAssigned,
-        'balance_quantity': intakeBalance.balanceQuantity,
-        'last_updated': intakeBalance.lastUpdated.toIso8601String(),
-      });
+      // Check if balance already exists in cloud by product_name to prevent duplicates
+      final existingResponse = await supabase
+          .from('intake_balances')
+          .select('id')
+          .eq('product_name', intakeBalance.productName)
+          .maybeSingle();
+
+      if (existingResponse != null) {
+        // Update existing record instead of creating duplicate
+        await supabase.from('intake_balances').update({
+          'total_received': intakeBalance.totalReceived,
+          'total_assigned': intakeBalance.totalAssigned,
+          'balance_quantity': intakeBalance.balanceQuantity,
+          'last_updated': intakeBalance.lastUpdated.toIso8601String(),
+        }).eq('product_name', intakeBalance.productName);
+      } else {
+        // Insert new record only if it doesn't exist
+        await supabase.from('intake_balances').insert({
+          'id': intakeBalance.id,
+          'product_name': intakeBalance.productName,
+          'total_received': intakeBalance.totalReceived,
+          'total_assigned': intakeBalance.totalAssigned,
+          'balance_quantity': intakeBalance.balanceQuantity,
+          'last_updated': intakeBalance.lastUpdated.toIso8601String(),
+        });
+      }
     } catch (e) {
       // If the table doesn't exist, provide instructions for creating it
       if (e.toString().contains('404') || e.toString().contains('Not Found')) {
@@ -1428,7 +1726,7 @@ class SyncService {
         print('''
         CREATE TABLE public.intake_balances (
           id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-          product_name TEXT NOT NULL,
+          product_name TEXT NOT NULL UNIQUE,
           total_received NUMERIC NOT NULL,
           total_assigned NUMERIC NOT NULL,
           balance_quantity NUMERIC NOT NULL,
@@ -1442,7 +1740,7 @@ class SyncService {
     }
   }
 
-  Future<void> syncIntakeBalancesToLocalDb() async {
+  Future<Map<String, int>> syncIntakeBalancesToLocalDb() async {
     try {
       final db = await _dbHelper.database;
 
@@ -1454,18 +1752,37 @@ class SyncService {
           whereArgs: [0],
         );
 
-        // Push unsynced balances to Supabase
+        // Push unsynced balances to Supabase with proper deduplication
         for (var balanceMap in unsyncedBalances) {
           final balance = IntakeBalance.fromMap(balanceMap);
           try {
-            await supabase.from('intake_balances').upsert({
-              'id': balance.id,
-              'product_name': balance.productName,
-              'total_received': balance.totalReceived,
-              'total_assigned': balance.totalAssigned,
-              'balance_quantity': balance.balanceQuantity,
-              'last_updated': balance.lastUpdated.toIso8601String(),
-            });
+            // Check if balance already exists in cloud by product_name
+            final existingResponse = await supabase
+                .from('intake_balances')
+                .select('id')
+                .eq('product_name', balance.productName)
+                .maybeSingle();
+
+            if (existingResponse != null) {
+              // Update existing record
+              await supabase.from('intake_balances').update({
+                'total_received': balance.totalReceived,
+                'total_assigned': balance.totalAssigned,
+                'balance_quantity': balance.balanceQuantity,
+                'last_updated': balance.lastUpdated.toIso8601String(),
+              }).eq('product_name', balance.productName);
+            } else {
+              // Insert new record
+              await supabase.from('intake_balances').insert({
+                'id': balance.id,
+                'product_name': balance.productName,
+                'total_received': balance.totalReceived,
+                'total_assigned': balance.totalAssigned,
+                'balance_quantity': balance.balanceQuantity,
+                'last_updated': balance.lastUpdated.toIso8601String(),
+              });
+            }
+
             // Mark as synced locally
             await txn.update(
               'intake_balances',
@@ -1480,34 +1797,54 @@ class SyncService {
         }
       });
 
-      // Pull latest balances from Supabase
+      // Pull latest balances from Supabase and merge with local data
       try {
         final response = await supabase.from('intake_balances').select();
-        final balances = (response as List)
+        final cloudBalances = (response as List)
             .map((data) => IntakeBalance.fromMap(data))
             .toList();
 
-        // Update local database - MERGE instead of CLEAR
+        // Update local database - MERGE cloud data with locally calculated data
         await db.transaction((txn) async {
-          // Insert or update balances from cloud
-          for (var balance in balances) {
+          // Get locally calculated balances
+          final localCalculatedBalances =
+              await _getCalculatedBalancesFromLocal(txn);
+
+          // Clear existing balances to prevent duplicates
+          await txn.delete('intake_balances');
+
+          // Use locally calculated data as the source of truth, but preserve cloud sync status
+          final Map<String, IntakeBalance> cloudBalanceMap = {
+            for (var balance in cloudBalances) balance.productName: balance
+          };
+
+          for (var localBalance in localCalculatedBalances) {
+            final cloudBalance = cloudBalanceMap[localBalance.productName];
             await txn.insert(
               'intake_balances',
               {
-                ...balance.toMap(),
-                'is_synced': 1,
+                ...localBalance.toMap(),
+                'is_synced': cloudBalance != null ? 1 : 0,
               },
               conflictAlgorithm: ConflictAlgorithm.replace,
             );
           }
         });
 
-        print(
-            'Successfully synced ${balances.length} intake balances from Supabase');
+        print('Successfully synced intake balances with local calculations');
       } catch (downloadError) {
-        print('Error downloading intake balances from Supabase: $downloadError');
-        // Don't throw error to allow local operations to continue
+        print(
+            'Error downloading intake balances from Supabase: $downloadError');
+        // Fallback to local calculation if cloud sync fails
+        await _recalculateIntakeBalancesFromLocalData();
       }
+
+      // Count total synced records
+      final balanceCount = Sqflite.firstIntValue(
+              await db.rawQuery('SELECT COUNT(*) FROM intake_balances')) ??
+          0;
+
+      return {'synced': balanceCount, 'intake_balances': balanceCount};
     } catch (e) {
       print('Error syncing intake balances: $e');
       throw e;
@@ -1515,9 +1852,11 @@ class SyncService {
   }
 
   // Expenditures Sync
-  Future<void> syncExpendituresToLocalDb() async {
+  Future<Map<String, int>> syncExpendituresToLocalDb() async {
     try {
       final db = await _dbHelper.database;
+      int uploadedCount = 0;
+      int downloadedCount = 0;
 
       // Get a valid outlet ID as fallback
       String? fallbackOutletId;
@@ -1599,6 +1938,7 @@ class SyncService {
             where: 'id = ?',
             whereArgs: [expenditureMap['id']],
           );
+          uploadedCount++;
         }
       });
 
@@ -1646,8 +1986,15 @@ class SyncService {
             },
             conflictAlgorithm: ConflictAlgorithm.replace,
           );
+          downloadedCount++;
         }
       });
+
+      return {
+        'synced': uploadedCount + downloadedCount,
+        'uploaded': uploadedCount,
+        'downloaded': downloadedCount
+      };
     } catch (e) {
       if (e.toString().contains('null value in column "outlet_name"') ||
           e.toString().contains(
@@ -1657,6 +2004,7 @@ class SyncService {
         print(
             'Please run the migration: fix_missing_tables.sql to add the missing column.');
         print('Skipping expenditures sync for now.');
+        return {'synced': 0, 'uploaded': 0, 'downloaded': 0};
       } else {
         print('Error syncing expenditures: $e');
         throw e;
@@ -1664,8 +2012,11 @@ class SyncService {
     }
   }
 
-  Future<void> syncStockIntakesToLocalDb() async {
+  Future<Map<String, int>> syncStockIntakesToLocalDb() async {
     try {
+      // Process sync queue before main sync operations
+      await processSyncQueue();
+
       final db = await _dbHelper.database;
 
       // First sync local changes to cloud in a transaction
@@ -1749,6 +2100,16 @@ class SyncService {
       } catch (balanceError) {
         print('Error recalculating intake balances: $balanceError');
       }
+
+      // Process sync queue after main sync operations
+      await processSyncQueue();
+
+      // Count total synced records
+      final intakeCount = Sqflite.firstIntValue(
+              await db.rawQuery('SELECT COUNT(*) FROM stock_intake')) ??
+          0;
+
+      return {'synced': intakeCount, 'stock_intake': intakeCount};
     } catch (e) {
       print('Error syncing stock intakes: $e');
       throw e;
@@ -1810,9 +2171,63 @@ class SyncService {
   }
 
   // Recalculate intake balances from local stock_intake and products data
+  // Helper method to get calculated balances from local data without modifying the database
+  Future<List<IntakeBalance>> _getCalculatedBalancesFromLocal(
+      DatabaseExecutor txn) async {
+    // Calculate total received per product from stock_intake
+    final receivedQuery = await txn.rawQuery('''
+      SELECT 
+        product_name,
+        SUM(quantity_received) as total_received
+      FROM stock_intake
+      GROUP BY product_name
+    ''');
+
+    // Calculate total assigned per product from product_distributions table
+    // This ensures we only count actual distributions, not just product assignments
+    final assignedQuery = await txn.rawQuery('''
+      SELECT 
+        product_name,
+        SUM(quantity) as total_assigned
+      FROM product_distributions
+      GROUP BY product_name
+    ''');
+
+    // Create a map of assigned quantities
+    final Map<String, double> assignedQuantities = {};
+    for (var row in assignedQuery) {
+      final productName = row['product_name'] as String;
+      final totalAssigned = (row['total_assigned'] as num?)?.toDouble() ?? 0.0;
+      assignedQuantities[productName] = totalAssigned;
+    }
+
+    // Create intake balance records
+    final List<IntakeBalance> balances = [];
+    for (var row in receivedQuery) {
+      final productName = row['product_name'] as String;
+      final totalReceived = (row['total_received'] as num?)?.toDouble() ?? 0.0;
+      final totalAssigned = assignedQuantities[productName] ?? 0.0;
+      final balanceQuantity = totalReceived - totalAssigned;
+
+      final balance = IntakeBalance(
+        id: const Uuid().v4(),
+        productName: productName,
+        totalReceived: totalReceived,
+        totalAssigned: totalAssigned,
+        balanceQuantity: balanceQuantity,
+        lastUpdated: DateTime.now(),
+        isSynced: false,
+      );
+
+      balances.add(balance);
+    }
+
+    return balances;
+  }
+
   Future<void> _recalculateIntakeBalancesFromLocalData() async {
     final db = await _dbHelper.database;
-    
+
     await db.transaction((txn) async {
       // Create table if it doesn't exist
       await txn.execute('''
@@ -1822,62 +2237,86 @@ class SyncService {
           total_received REAL NOT NULL,
           total_assigned REAL DEFAULT 0,
           balance_quantity REAL NOT NULL,
-          last_updated TEXT NOT NULL
+          last_updated TEXT NOT NULL,
+          is_synced INTEGER DEFAULT 0
         )
       ''');
 
-      // Clear existing balances
+      // Clear existing balances to prevent duplicates
       await txn.delete('intake_balances');
 
-      // Calculate total received per product from stock_intake
-      final receivedQuery = await txn.rawQuery('''
-        SELECT 
-          product_name,
-          SUM(quantity_received) as total_received
-        FROM stock_intake
-        GROUP BY product_name
-      ''');
-
-      // Calculate total assigned per product from products table
-      final assignedQuery = await txn.rawQuery('''
-        SELECT 
-          product_name,
-          SUM(quantity) as total_assigned
-        FROM products
-        GROUP BY product_name
-      ''');
-
-      // Create a map of assigned quantities
-      final Map<String, double> assignedQuantities = {};
-      for (var row in assignedQuery) {
-        final productName = row['product_name'] as String;
-        final totalAssigned = (row['total_assigned'] as num?)?.toDouble() ?? 0.0;
-        assignedQuantities[productName] = totalAssigned;
-      }
-
-      // Create intake balance records
-      for (var row in receivedQuery) {
-        final productName = row['product_name'] as String;
-        final totalReceived = (row['total_received'] as num?)?.toDouble() ?? 0.0;
-        final totalAssigned = assignedQuantities[productName] ?? 0.0;
-        final balanceQuantity = totalReceived - totalAssigned;
-
-        final balance = IntakeBalance(
-          id: const Uuid().v4(),
-          productName: productName,
-          totalReceived: totalReceived,
-          totalAssigned: totalAssigned,
-          balanceQuantity: balanceQuantity,
-          lastUpdated: DateTime.now(),
-          isSynced: false,
-        );
-
+      // Get calculated balances and insert them
+      final balances = await _getCalculatedBalancesFromLocal(txn);
+      for (var balance in balances) {
         await txn.insert(
           'intake_balances',
           balance.toMap(),
         );
       }
     });
+  }
+
+  // Utility method to clean up duplicate intake balance records in Supabase
+  Future<void> cleanupDuplicateIntakeBalances() async {
+    try {
+      print('Starting cleanup of duplicate intake balance records...');
+
+      // Get all records from Supabase
+      final response = await supabase.from('intake_balances').select();
+      final allRecords = response as List<dynamic>;
+
+      if (allRecords.isEmpty) {
+        print('No records found to clean up.');
+        return;
+      }
+
+      // Group records by product_name
+      final Map<String, List<dynamic>> groupedRecords = {};
+      for (var record in allRecords) {
+        final productName = record['product_name'] as String;
+        if (!groupedRecords.containsKey(productName)) {
+          groupedRecords[productName] = [];
+        }
+        groupedRecords[productName]!.add(record);
+      }
+
+      int duplicatesRemoved = 0;
+
+      // For each product, keep only the most recent record and delete the rest
+      for (var entry in groupedRecords.entries) {
+        final productName = entry.key;
+        final records = entry.value;
+
+        if (records.length > 1) {
+          // Sort by last_updated (most recent first)
+          records.sort((a, b) {
+            final aTime = DateTime.parse(a['last_updated']);
+            final bTime = DateTime.parse(b['last_updated']);
+            return bTime.compareTo(aTime);
+          });
+
+          // Keep the first (most recent) record, delete the rest
+          final recordsToDelete = records.skip(1).toList();
+
+          for (var recordToDelete in recordsToDelete) {
+            await supabase
+                .from('intake_balances')
+                .delete()
+                .eq('id', recordToDelete['id']);
+            duplicatesRemoved++;
+          }
+
+          print(
+              'Cleaned up ${recordsToDelete.length} duplicate records for product: $productName');
+        }
+      }
+
+      print('Cleanup completed. Removed $duplicatesRemoved duplicate records.');
+      print('Remaining unique products: ${groupedRecords.length}');
+    } catch (e) {
+      print('Error during cleanup: $e');
+      throw e;
+    }
   }
 
   @override

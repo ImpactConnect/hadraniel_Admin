@@ -14,18 +14,18 @@ class Profile {
   });
 
   factory Profile.fromMap(Map<String, dynamic> json) => Profile(
-    id: json['id'],
-    outletId: json['outlet_id'],
-    fullName: json['full_name'],
-    role: json['role'],
-    createdAt: json['created_at'],
-  );
+        id: json['id'],
+        outletId: json['outlet_id'],
+        fullName: json['full_name'],
+        role: json['role'],
+        createdAt: json['created_at'],
+      );
 
   Map<String, dynamic> toMap() => {
-    'id': id,
-    'outlet_id': outletId,
-    'full_name': fullName,
-    'role': role,
-    'created_at': createdAt,
-  };
+        'id': id,
+        'outlet_id': outletId,
+        'full_name': fullName,
+        'role': role,
+        'created_at': createdAt,
+      };
 }

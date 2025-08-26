@@ -178,47 +178,100 @@ class _StockDetailDialogState extends State<StockDetailDialog> {
               DataColumn(label: Text('Quantity')),
               DataColumn(label: Text('Total Cost')),
             ],
-            rows: _salesHistory.map((sale) {
-              final saleDate = DateTime.parse(sale['created_at']);
-              return DataRow(
-                cells: [
-                  DataCell(Text(
-                    DateFormat('MMM d, yyyy').format(saleDate),
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  )),
-                  DataCell(Text(
-                    sale['outlet_name'] ?? 'N/A',
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  )),
-                  DataCell(Text(
-                    sale['customer_name'] ?? 'Walk-in',
-                    style: const TextStyle(fontWeight: FontWeight.w500),
-                  )),
-                  DataCell(Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: Colors.blue.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Text(
-                      sale['quantity']?.toString() ?? '0',
+            rows: [
+              // Regular sales data rows
+              ..._salesHistory.map((sale) {
+                final saleDate = DateTime.parse(sale['created_at']);
+                return DataRow(
+                  cells: [
+                    DataCell(Text(
+                      DateFormat('MMM d, yyyy').format(saleDate),
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    )),
+                    DataCell(Text(
+                      sale['outlet_name'] ?? 'N/A',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    )),
+                    DataCell(Text(
+                      sale['customer_name'] ?? 'Walk-in',
+                      style: const TextStyle(fontWeight: FontWeight.w500),
+                    )),
+                    DataCell(Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade100,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        sale['quantity']?.toString() ?? '0',
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Colors.blue.shade800,
+                        ),
+                      ),
+                    )),
+                    DataCell(Text(
+                      '₦${(sale['total_amount'] ?? 0.0).toStringAsFixed(2)}',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
-                        color: Colors.blue.shade800,
+                        color: Colors.green.shade700,
                       ),
-                    ),
-                  )),
-                  DataCell(Text(
-                    '₦${(sale['total_amount'] ?? 0.0).toStringAsFixed(2)}',
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      color: Colors.green.shade700,
-                    ),
-                  )),
-                ],
-              );
-            }).toList(),
+                    )),
+                  ],
+                );
+              }).toList(),
+              // Summary row
+              if (_salesHistory.isNotEmpty)
+                DataRow(
+                  color: MaterialStateProperty.all(
+                    Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  ),
+                  cells: [
+                    const DataCell(Text(
+                      'TOTAL',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        fontSize: 14,
+                      ),
+                    )),
+                    const DataCell(Text('')), // Empty outlet cell
+                    const DataCell(Text('')), // Empty customer cell
+                    DataCell(Container(
+                      padding:
+                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                         _salesHistory
+                              .fold<double>(
+                                0.0,
+                                (sum, sale) => sum + ((sale['quantity'] as num?)?.toDouble() ?? 0.0),
+                              )
+                              .toStringAsFixed(3),
+                        style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                          fontSize: 14,
+                        ),
+                      ),
+                    )),
+                    DataCell(Text(
+                      '₦${_salesHistory.fold<double>(
+                        0.0,
+                        (sum, sale) => sum + (sale['total_amount'] as num? ?? 0).toDouble(),
+                      ).toStringAsFixed(2)}',
+                      style: TextStyle(
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context).colorScheme.primary,
+                        fontSize: 14,
+                      ),
+                    )),
+                  ],
+                ),
+            ],
           ),
         ),
       ),

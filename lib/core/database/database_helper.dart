@@ -2,6 +2,8 @@ import 'dart:io' show Platform, Directory;
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
+import 'database_migration_v11.dart';
+import 'database_migration_v12.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -46,14 +48,29 @@ class DatabaseHelper {
       print('Created database directory: $databasePath');
     }
 
-    return await dbFactory.openDatabase(
+    final database = await dbFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 9,
+        version: 12,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
+        onOpen: _onOpen,
       ),
     );
+
+    return database;
+  }
+
+  Future<void> _onOpen(Database db) async {
+    // Enable WAL mode for better concurrency and crash recovery
+    await db.execute('PRAGMA journal_mode=WAL');
+    // Enable foreign key constraints
+    await db.execute('PRAGMA foreign_keys=ON');
+    // Set synchronous mode to NORMAL for better performance with WAL
+    await db.execute('PRAGMA synchronous=NORMAL');
+    // Set cache size to 10MB for better performance
+    await db.execute('PRAGMA cache_size=10000');
+    print('Database opened with WAL mode and optimizations enabled');
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -217,6 +234,59 @@ class DatabaseHelper {
         print('Error adding is_synced to intake_balances: $e');
       }
     }
+
+    if (oldVersion < 10) {
+      // Enhance sync_queue table with retry capabilities
+      try {
+        await db.execute(
+            'ALTER TABLE sync_queue ADD COLUMN failed_attempts INTEGER DEFAULT 0');
+      } catch (e) {
+        // Column might already exist, ignore error
+        print('Error adding failed_attempts to sync_queue: $e');
+      }
+
+      try {
+        await db
+            .execute('ALTER TABLE sync_queue ADD COLUMN error_message TEXT');
+      } catch (e) {
+        // Column might already exist, ignore error
+        print('Error adding error_message to sync_queue: $e');
+      }
+
+      try {
+        await db
+            .execute('ALTER TABLE sync_queue ADD COLUMN last_retry_at TEXT');
+      } catch (e) {
+        // Column might already exist, ignore error
+        print('Error adding last_retry_at to sync_queue: $e');
+      }
+    }
+
+    if (oldVersion < 11) {
+      // Apply performance indexes and schema fixes
+      await DatabaseMigrationV11.applyMigration(db);
+
+      // Verify migration was successful
+      final migrationSuccess = await DatabaseMigrationV11.verifyMigration(db);
+      if (migrationSuccess) {
+        print('Database migration v11 completed successfully');
+      } else {
+        print('Warning: Database migration v11 may not have completed fully');
+      }
+    }
+
+    if (oldVersion < 12) {
+      // Apply foreign key cascade delete constraints
+      await DatabaseMigrationV12.applyMigration(db);
+
+      // Verify migration was successful
+      final migrationSuccess = await DatabaseMigrationV12.verifyMigration(db);
+      if (migrationSuccess) {
+        print('Database migration v12 completed successfully');
+      } else {
+        print('Warning: Database migration v12 may not have completed fully');
+      }
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -281,9 +351,9 @@ class DatabaseHelper {
     await db.execute('''
       CREATE TABLE outlets (
         id TEXT PRIMARY KEY,
-        name TEXT,
-        location TEXT,
-        created_at TEXT
+        name TEXT NOT NULL,
+        location TEXT NOT NULL,
+        created_at TEXT NOT NULL
       )
     ''');
 
@@ -347,7 +417,7 @@ class DatabaseHelper {
         product_id TEXT NOT NULL,
         quantity REAL NOT NULL,
         unit_price REAL NOT NULL,
-        total REAL NOT NULL,
+        total_price REAL NOT NULL,
         created_at TEXT,
         is_synced INTEGER DEFAULT 0,
         FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,

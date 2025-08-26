@@ -15,8 +15,8 @@ class CustomerDetailsDialog extends StatefulWidget {
 }
 
 class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
-  late CustomerService _customerService;
-  late SyncService _syncService;
+  final CustomerService _customerService = CustomerService();
+  final SyncService _syncService = SyncService();
   String _outletName = '-';
   List<Map<String, dynamic>> _purchaseHistory = [];
   bool _isLoading = true;
@@ -29,20 +29,30 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
 
   Future<void> _loadCustomerDetails() async {
     try {
-      // TODO: Initialize services properly
-      // final outletName = await _syncService.getOutletName(widget.customer.outletId ?? '');
-      // final history = await _customerService.getCustomerPurchaseHistory(widget.customer.id);
+      // Load outlet name if customer has an outlet assigned
+      if (widget.customer.outletId != null &&
+          widget.customer.outletId!.isNotEmpty) {
+        final outletName =
+            await _syncService.getOutletName(widget.customer.outletId!);
+        _outletName = outletName;
+      }
+
+      // Load customer purchase history
+      final history =
+          await _customerService.getCustomerPurchaseHistory(widget.customer.id);
 
       setState(() {
-        _outletName = '-'; // Replace with actual outlet name
-        _purchaseHistory = []; // Replace with actual purchase history
+        _purchaseHistory = history;
         _isLoading = false;
       });
     } catch (e) {
+      print('Error loading customer details: $e');
       setState(() => _isLoading = false);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Error loading customer details: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error loading customer details: $e')),
+        );
+      }
     }
   }
 
@@ -80,26 +90,6 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
         ).showSnackBar(SnackBar(content: Text('Error deleting customer: $e')));
       }
     }
-  }
-
-  Widget _buildSectionTitle(String title, IconData icon) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16.0),
-      child: Row(
-        children: [
-          Icon(icon, color: Theme.of(context).colorScheme.primary, size: 24),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 18,
-              fontWeight: FontWeight.bold,
-              color: Theme.of(context).colorScheme.primary,
-            ),
-          ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -152,12 +142,12 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
                           builder: (context) => EditCustomerDialog(
                             customer: widget.customer,
                             onCustomerUpdated: (updatedCustomer) {
-                        setState(() {
-                          // Note: Since Customer fields are final, we would need to
-                          // update the parent widget or reload from database
-                        });
-                        _loadCustomerDetails(); // Reload customer details if changed
-                      },
+                              setState(() {
+                                // Note: Since Customer fields are final, we would need to
+                                // update the parent widget or reload from database
+                              });
+                              _loadCustomerDetails(); // Reload customer details if changed
+                            },
                           ),
                         );
                       },
@@ -202,58 +192,163 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildSectionTitle(
-                      'Customer Information',
-                      Icons.info_outline,
-                    ),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _DetailCard(
-                            title: 'Phone Number',
-                            value: widget.customer.phone ?? '-',
-                            icon: Icons.phone,
-                            color: colorScheme.primary,
-                          ),
+                    // Compact Customer Information
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            colorScheme.primary.withOpacity(0.1),
+                            colorScheme.primary.withOpacity(0.05),
+                          ],
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _DetailCard(
-                            title: 'Assigned Outlet',
-                            value: _outletName,
-                            icon: Icons.store,
-                            color: colorScheme.primary,
-                          ),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: colorScheme.primary.withOpacity(0.2),
+                          width: 1,
                         ),
-                      ],
+                      ),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Phone',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color:
+                                        colorScheme.onSurface.withOpacity(0.6),
+                                  ),
+                                ),
+                                Text(
+                                  widget.customer.phone ?? '-',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Outlet',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color:
+                                        colorScheme.onSurface.withOpacity(0.6),
+                                  ),
+                                ),
+                                Text(
+                                  _outletName,
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Outstanding',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color:
+                                        colorScheme.onSurface.withOpacity(0.6),
+                                  ),
+                                ),
+                                Text(
+                                  '₦${NumberFormat('#,##0.00').format(widget.customer.totalOutstanding)}',
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: widget.customer.totalOutstanding > 0
+                                        ? Colors.red.shade700
+                                        : Colors.green.shade700,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Expanded(
+                            flex: 2,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Created',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color:
+                                        colorScheme.onSurface.withOpacity(0.6),
+                                  ),
+                                ),
+                                Text(
+                                  DateFormat('MMM dd, yyyy')
+                                      .format(widget.customer.createdAt),
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                     const SizedBox(height: 16),
                     Row(
                       children: [
-                        Expanded(
-                          child: _DetailCard(
-                            title: 'Outstanding Balance',
-                            value:
-                                '₦${NumberFormat('#,##0.00').format(widget.customer.totalOutstanding)}',
-                            icon: Icons.account_balance_wallet,
+                        Icon(
+                          Icons.history,
+                          color: colorScheme.primary,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Purchase History',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
                             color: colorScheme.primary,
                           ),
                         ),
-                        const SizedBox(width: 16),
-                        Expanded(
-                          child: _DetailCard(
-                            title: 'Created At',
-                            value: DateFormat(
-                              'yyyy-MM-dd',
-                            ).format(widget.customer.createdAt),
-                            icon: Icons.calendar_today,
-                            color: colorScheme.primary,
+                        const Spacer(),
+                        if (_purchaseHistory.isNotEmpty)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: colorScheme.primary.withOpacity(0.1),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Text(
+                              '${_purchaseHistory.length} transactions',
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: colorScheme.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
                           ),
-                        ),
                       ],
                     ),
-                    const SizedBox(height: 24),
-                    _buildSectionTitle('Purchase History', Icons.history),
+                    const SizedBox(height: 12),
                     Expanded(
                       child: Card(
                         elevation: 2,
@@ -282,116 +377,260 @@ class _CustomerDetailsDialogState extends State<CustomerDetailsDialog> {
                                   ],
                                 ),
                               )
-                            : ListView.builder(
-                                itemCount: _purchaseHistory.length,
-                                itemBuilder: (context, index) {
-                                  final purchase = _purchaseHistory[index];
-                                  return Card(
-                                    margin: const EdgeInsets.symmetric(
-                                      horizontal: 16,
-                                      vertical: 8,
-                                    ),
-                                    elevation: 1,
-                                    shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(8),
-                                    ),
-                                    child: ListTile(
-                                      leading: CircleAvatar(
-                                        backgroundColor: colorScheme.primary
-                                            .withOpacity(0.1),
-                                        child: Icon(
-                                          Icons.shopping_cart,
-                                          color: colorScheme.primary,
-                                        ),
-                                      ),
-                                      title: Text(
-                                        DateFormat('yyyy-MM-dd').format(
-                                          DateTime.parse(purchase['date']),
-                                        ),
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                        ),
-                                      ),
-                                      subtitle: Text(
-                                        purchase['items'].toString(),
-                                      ),
-                                      trailing: Text(
-                                        '₦${NumberFormat('#,##0.00').format(purchase['amount'])}',
-                                        style: TextStyle(
-                                          fontWeight: FontWeight.bold,
-                                          color: colorScheme.primary,
-                                          fontSize: 16,
-                                        ),
+                            : Column(
+                                children: [
+                                  // Table Header
+                                  Container(
+                                    padding: const EdgeInsets.all(16),
+                                    decoration: BoxDecoration(
+                                      color:
+                                          colorScheme.primary.withOpacity(0.1),
+                                      borderRadius: const BorderRadius.only(
+                                        topLeft: Radius.circular(12),
+                                        topRight: Radius.circular(12),
                                       ),
                                     ),
-                                  );
-                                },
+                                    child: Row(
+                                      children: [
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            'Date',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: colorScheme.primary,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 3,
+                                          child: Text(
+                                            'Items Purchased',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: colorScheme.primary,
+                                              fontSize: 14,
+                                            ),
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            'Amount Paid',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: colorScheme.primary,
+                                              fontSize: 14,
+                                            ),
+                                            textAlign: TextAlign.right,
+                                          ),
+                                        ),
+                                        Expanded(
+                                          flex: 2,
+                                          child: Text(
+                                            'Outstanding',
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.bold,
+                                              color: colorScheme.primary,
+                                              fontSize: 14,
+                                            ),
+                                            textAlign: TextAlign.right,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  // Table Body
+                                  Expanded(
+                                    child: ListView.builder(
+                                      itemCount: _purchaseHistory.length,
+                                      itemBuilder: (context, index) {
+                                        final purchase =
+                                            _purchaseHistory[index];
+                                        final isEven = index % 2 == 0;
+
+                                        return Container(
+                                          padding: const EdgeInsets.all(16),
+                                          decoration: BoxDecoration(
+                                            color: isEven
+                                                ? Colors.grey.shade50
+                                                : Colors.white,
+                                            border: Border(
+                                              bottom: BorderSide(
+                                                color: Colors.grey.shade200,
+                                                width: 0.5,
+                                              ),
+                                            ),
+                                          ),
+                                          child: Row(
+                                            children: [
+                                              // Date
+                                              Expanded(
+                                                flex: 2,
+                                                child: Text(
+                                                  DateFormat('MMM dd, yyyy')
+                                                      .format(
+                                                    DateTime.parse(
+                                                        purchase['date']),
+                                                  ),
+                                                  style: const TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w500,
+                                                  ),
+                                                ),
+                                              ),
+                                              // Items Purchased
+                                              Expanded(
+                                                flex: 3,
+                                                child: Tooltip(
+                                                  message: purchase[
+                                                          'items_detail'] ??
+                                                      'No items',
+                                                  child: Text(
+                                                    purchase['product_names'] ??
+                                                        'No items',
+                                                    style: const TextStyle(
+                                                      fontSize: 13,
+                                                    ),
+                                                    maxLines: 2,
+                                                    overflow:
+                                                        TextOverflow.ellipsis,
+                                                  ),
+                                                ),
+                                              ),
+                                              // Amount Paid
+                                              Expanded(
+                                                flex: 2,
+                                                child: Text(
+                                                  '₦${NumberFormat('#,##0.00').format((purchase['amount_paid'] as num?)?.toDouble() ?? 0.0)}',
+                                                  style: TextStyle(
+                                                    fontSize: 13,
+                                                    fontWeight: FontWeight.w600,
+                                                    color:
+                                                        Colors.green.shade700,
+                                                  ),
+                                                  textAlign: TextAlign.right,
+                                                ),
+                                              ),
+                                              // Outstanding
+                                              Expanded(
+                                                flex: 2,
+                                                child: Builder(
+                                                  builder: (context) {
+                                                    final outstandingAmount =
+                                                        (purchase['outstanding_amount']
+                                                                    as num?)
+                                                                ?.toDouble() ??
+                                                            0.0;
+                                                    return Text(
+                                                      '₦${NumberFormat('#,##0.00').format(outstandingAmount)}',
+                                                      style: TextStyle(
+                                                        fontSize: 13,
+                                                        fontWeight:
+                                                            FontWeight.w600,
+                                                        color:
+                                                            outstandingAmount >
+                                                                    0
+                                                                ? Colors.red
+                                                                    .shade700
+                                                                : Colors.green
+                                                                    .shade700,
+                                                      ),
+                                                      textAlign:
+                                                          TextAlign.right,
+                                                    );
+                                                  },
+                                                ),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ),
+                                  // Summary Footer
+                                  if (_purchaseHistory.isNotEmpty)
+                                    Container(
+                                      padding: const EdgeInsets.all(16),
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primary
+                                            .withOpacity(0.05),
+                                        borderRadius: const BorderRadius.only(
+                                          bottomLeft: Radius.circular(12),
+                                          bottomRight: Radius.circular(12),
+                                        ),
+                                        border: Border(
+                                          top: BorderSide(
+                                            color: colorScheme.primary
+                                                .withOpacity(0.2),
+                                            width: 1,
+                                          ),
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Expanded(
+                                            flex: 5,
+                                            child: Text(
+                                              'Total (${_purchaseHistory.length} transactions)',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: colorScheme.primary,
+                                                fontSize: 14,
+                                              ),
+                                            ),
+                                          ),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Text(
+                                              '₦${NumberFormat('#,##0.00').format(_purchaseHistory.fold<double>(0, (sum, p) => sum + ((p['amount_paid'] as num?)?.toDouble() ?? 0.0)))}',
+                                              style: TextStyle(
+                                                fontWeight: FontWeight.bold,
+                                                color: Colors.green.shade700,
+                                                fontSize: 14,
+                                              ),
+                                              textAlign: TextAlign.right,
+                                            ),
+                                          ),
+                                          Expanded(
+                                            flex: 2,
+                                            child: Builder(
+                                              builder: (context) {
+                                                final totalOutstanding =
+                                                    _purchaseHistory.fold<
+                                                            double>(
+                                                        0,
+                                                        (sum, p) =>
+                                                            sum +
+                                                            ((p['outstanding_amount']
+                                                                        as num?)
+                                                                    ?.toDouble() ??
+                                                                0.0));
+                                                return Text(
+                                                  '₦${NumberFormat('#,##0.00').format(totalOutstanding)}',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: totalOutstanding > 0
+                                                        ? Colors.red.shade700
+                                                        : Colors.green.shade700,
+                                                    fontSize: 14,
+                                                  ),
+                                                  textAlign: TextAlign.right,
+                                                );
+                                              },
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                ],
                               ),
                       ),
                     ),
                   ],
                 ),
               ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
-class _DetailCard extends StatelessWidget {
-  final String title;
-  final String value;
-  final IconData? icon;
-  final Color? color;
-
-  const _DetailCard({
-    required this.title,
-    required this.value,
-    this.icon,
-    this.color,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Row(
-          children: [
-            if (icon != null) ...[
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color:
-                      color?.withOpacity(0.1) ?? Colors.blue.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color ?? Colors.blue, size: 24),
-              ),
-              const SizedBox(width: 12),
-            ],
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    title,
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    value,
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
           ],
         ),
       ),

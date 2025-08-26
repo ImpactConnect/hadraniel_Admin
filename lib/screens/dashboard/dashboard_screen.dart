@@ -4,6 +4,7 @@ import '../../widgets/loading_indicator.dart';
 import '../../core/services/sync_service.dart';
 import '../../core/services/stock_intake_service.dart';
 import '../../core/services/customer_service.dart';
+import '../../core/database/database_helper.dart';
 import 'package:intl/intl.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:sqflite/sqflite.dart';
@@ -31,6 +32,29 @@ class _DashboardScreenState extends State<DashboardScreen> {
     'outstandingPayments': 0.0,
   };
 
+  // Cache for dashboard data
+  Map<String, dynamic>? _cachedDashboardData;
+  DateTime? _lastCacheTime;
+  static const Duration _cacheValidDuration = Duration(minutes: 10);
+
+  // Method to clear all caches for manual refresh
+  void _clearAllCaches() {
+    _cachedDashboardData = null;
+    _lastCacheTime = null;
+    _cachedChartData = null;
+    _lastChartCacheTime = null;
+  }
+
+  // Method to force refresh all data
+  Future<void> _forceRefreshData() async {
+    _clearAllCaches();
+    await Future.wait([
+      _loadDashboardData(),
+      _loadAlertData(),
+      _loadChartData(),
+    ]);
+  }
+
   // Alert data
   List<Map<String, dynamic>> _lowStockItems = [];
   List<Map<String, dynamic>> _outstandingCustomers = [];
@@ -51,8 +75,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.initState();
     _loadDashboardData();
     _loadAlertData();
-    _loadChartData();
+    // Load charts lazily - only when needed
+    _loadChartsLazily();
     _startAlertTimer();
+  }
+
+  // Lazy loading for charts - load after a short delay to prioritize main dashboard data
+  void _loadChartsLazily() {
+    Future.delayed(const Duration(milliseconds: 500), () {
+      if (mounted) {
+        _loadChartData();
+      }
+    });
   }
 
   @override
@@ -67,25 +101,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
         _isLoading = true;
       });
 
-      // Fetch data from various services
-      final salesMetrics = await _syncService.getSalesMetrics();
-      final salesRepsCount = await _getSalesRepsCount();
-      final outletsCount = await _getOutletsCount();
-      final productsCount = await _getProductsCount();
-      final stockValue = await _getStockValue();
-      final salesCount = await _getSalesCount();
+      // Check if we have valid cached data
+      if (_cachedDashboardData != null &&
+          _lastCacheTime != null &&
+          DateTime.now().difference(_lastCacheTime!) < _cacheValidDuration) {
+        setState(() {
+          _dashboardData = Map<String, dynamic>.from(_cachedDashboardData!);
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // Load all data in parallel for better performance
+      final results = await Future.wait([
+        _syncService.getSalesMetrics(),
+        _getSalesRepsCount(),
+        _getOutletsCount(),
+        _getProductsCount(),
+        _getStockValueOptimized(), // Use optimized version
+        _getSalesCount(),
+      ]);
+
+      final salesMetrics = results[0] as Map<String, dynamic>;
+      final salesRepsCount = results[1] as int;
+      final outletsCount = results[2] as int;
+      final productsCount = results[3] as int;
+      final stockValue = results[4] as double;
+      final salesCount = results[5] as int;
+
+      final dashboardData = {
+        'salesRepsCount': salesRepsCount,
+        'outletsCount': outletsCount,
+        'productsCount': productsCount,
+        'totalSales': salesMetrics['total_amount'] ?? 0.0,
+        'stockValue': stockValue,
+        'outstandingPayments': salesMetrics['total_outstanding'] ?? 0.0,
+        'totalItemsSold': salesMetrics['total_items_sold'] ?? 0,
+        'salesCount': salesCount,
+      };
+
+      // Cache the data
+      _cachedDashboardData = Map<String, dynamic>.from(dashboardData);
+      _lastCacheTime = DateTime.now();
 
       setState(() {
-        _dashboardData = {
-          'salesRepsCount': salesRepsCount,
-          'outletsCount': outletsCount,
-          'productsCount': productsCount,
-          'totalSales': salesMetrics['total_amount'] ?? 0.0,
-          'stockValue': stockValue,
-          'outstandingPayments': salesMetrics['total_outstanding'] ?? 0.0,
-          'totalItemsSold': salesMetrics['total_items_sold'] ?? 0,
-          'salesCount': salesCount,
-        };
+        _dashboardData = dashboardData;
         _isLoading = false;
       });
     } catch (e) {
@@ -109,17 +169,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _startAlertTimer() {
-    _alertTimer = Timer.periodic(const Duration(minutes: 5), (timer) {
+    // Reduced frequency from 5 to 10 minutes for better performance
+    _alertTimer = Timer.periodic(const Duration(minutes: 10), (timer) {
       _loadAlertData();
     });
   }
 
   Future<void> _loadAlertData() async {
     try {
-      final lowStock = await _getLowStockItems();
-      final outstanding = await _getOutstandingCustomers();
-      final recent = await _getRecentSales();
-      final syncStatus = await _getSyncStatus();
+      // Load alert data in parallel for better performance
+      final results = await Future.wait([
+        _getLowStockItems(),
+        _getOutstandingCustomers(),
+        _getRecentSales(),
+        _getSyncStatus(),
+      ]);
+
+      final lowStock = results[0] as List<Map<String, dynamic>>;
+      final outstanding = results[1] as List<Map<String, dynamic>>;
+      final recent = results[2] as List<Map<String, dynamic>>;
+      final syncStatus = results[3] as Map<String, dynamic>;
 
       setState(() {
         _lowStockItems = lowStock;
@@ -226,6 +295,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // Optimized method to get all counts in a single database operation
+  Future<Map<String, int>> _getAllCountsOptimized() async {
+    try {
+      final db = await DatabaseHelper().database;
+      final results = await Future.wait<List<Map<String, Object?>>>([
+        db.rawQuery('SELECT COUNT(*) as count FROM sales_reps'),
+        db.rawQuery('SELECT COUNT(*) as count FROM outlets'),
+        db.rawQuery('SELECT COUNT(*) as count FROM products'),
+        db.rawQuery('SELECT COUNT(*) as count FROM sales'),
+      ]);
+
+      return {
+        'salesReps': results[0].first['count'] as int,
+        'outlets': results[1].first['count'] as int,
+        'products': results[2].first['count'] as int,
+        'sales': results[3].first['count'] as int,
+      };
+    } catch (e) {
+      print('Error getting optimized counts: $e');
+      // Fallback to individual methods
+      return {
+        'salesReps': await _getSalesRepsCount(),
+        'outlets': await _getOutletsCount(),
+        'products': await _getProductsCount(),
+        'sales': await _getSalesCount(),
+      };
+    }
+  }
+
   Future<double> _getStockValue() async {
     try {
       final intakes = await _stockIntakeService.getAllIntakes();
@@ -240,6 +338,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // Optimized stock value calculation with direct database query
+  Future<double> _getStockValueOptimized() async {
+    try {
+      final db = await DatabaseHelper().database;
+      final result = await db.rawQuery('''
+        SELECT COALESCE(SUM(quantity * cost_price), 0.0) as total_value
+        FROM stock_intake
+        WHERE quantity > 0
+      ''');
+      return (result.first['total_value'] as num?)?.toDouble() ?? 0.0;
+    } catch (e) {
+      print('Error getting optimized stock value: $e');
+      // Fallback to original method if optimized fails
+      return await _getStockValue();
+    }
+  }
+
   Future<int> _getSalesCount() async {
     try {
       final sales = await _syncService.getAllLocalSales();
@@ -250,15 +365,49 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  // Cache for chart data
+  Map<String, List<Map<String, dynamic>>>? _cachedChartData;
+  DateTime? _lastChartCacheTime;
+  static const Duration _chartCacheValidDuration = Duration(minutes: 15);
+
   Future<void> _loadChartData() async {
     setState(() {
       _isLoadingCharts = true;
     });
 
     try {
-      final salesTrend = await _getSalesTrendData(_selectedTrendFilter);
-      final topOutlets = await _getTopOutletsData();
-      final topCustomers = await _getTopCustomersData();
+      // Check if we have valid cached chart data
+      if (_cachedChartData != null &&
+          _lastChartCacheTime != null &&
+          DateTime.now().difference(_lastChartCacheTime!) <
+              _chartCacheValidDuration) {
+        setState(() {
+          _salesTrendData = _cachedChartData!['salesTrend'] ?? [];
+          _topOutletsData = _cachedChartData!['topOutlets'] ?? [];
+          _topCustomersData = _cachedChartData!['topCustomers'] ?? [];
+          _isLoadingCharts = false;
+        });
+        return;
+      }
+
+      // Load chart data in parallel for better performance
+      final results = await Future.wait([
+        _getSalesTrendData(_selectedTrendFilter),
+        _getTopOutletsData(),
+        _getTopCustomersData(),
+      ]);
+
+      final salesTrend = results[0] as List<Map<String, dynamic>>;
+      final topOutlets = results[1] as List<Map<String, dynamic>>;
+      final topCustomers = results[2] as List<Map<String, dynamic>>;
+
+      // Cache the chart data
+      _cachedChartData = {
+        'salesTrend': salesTrend,
+        'topOutlets': topOutlets,
+        'topCustomers': topCustomers,
+      };
+      _lastChartCacheTime = DateTime.now();
 
       setState(() {
         _salesTrendData = salesTrend;

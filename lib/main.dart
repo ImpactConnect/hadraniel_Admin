@@ -54,10 +54,11 @@ Future<void> _initializeSupabaseWithRetry({
     } catch (e) {
       // Check if the error is due to already being initialized
       if (e.toString().contains('This instance is already initialized')) {
-        print('Supabase is already initialized by another instance, continuing...');
+        print(
+            'Supabase is already initialized by another instance, continuing...');
         return;
       }
-      
+
       print('Supabase initialization attempt $attempt failed: $e');
 
       if (attempt < maxRetries) {
@@ -132,13 +133,14 @@ void main() async {
   } catch (e, stackTrace) {
     print('Error during app initialization: $e');
     print('Stack trace: $stackTrace');
-    
+
     // Provide user-friendly error message for Supabase initialization conflicts
     String errorMessage = 'Error: $e';
     if (e.toString().contains('This instance is already initialized')) {
-      errorMessage = 'Another instance of the app is already running. Please close other instances and try again.';
+      errorMessage =
+          'Another instance of the app is already running. Please close other instances and try again.';
     }
-    
+
     // Run a minimal app to show the error
     runApp(MaterialApp(
       home: Scaffold(

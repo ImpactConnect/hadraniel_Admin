@@ -23,7 +23,6 @@ class _RepsScreenState extends State<RepsScreen> {
   List<Outlet> _outlets = [];
   String _searchQuery = '';
   bool _isLoading = false;
-  bool _isSyncing = false;
 
   // Metrics
   int get totalReps => _reps.where((rep) => !rep.isAdmin).length;
@@ -42,7 +41,7 @@ class _RepsScreenState extends State<RepsScreen> {
   void initState() {
     super.initState();
     _loadData();
-    _syncData();
+// Remove _syncData() call since the method doesn't exist and data is already loaded in _loadData()
   }
 
   Future<void> _loadData() async {
@@ -63,35 +62,6 @@ class _RepsScreenState extends State<RepsScreen> {
       }
     } finally {
       setState(() => _isLoading = false);
-    }
-  }
-
-  Future<void> _syncData() async {
-    try {
-      setState(() => _isSyncing = true);
-      await _syncService.syncRepsToLocalDb();
-      await _syncService.syncOutletsToLocalDb();
-      await _loadData();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Data synced successfully')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        String errorMessage;
-        if (e.toString().contains('HandshakeException') || 
-            e.toString().contains('Connection terminated during handshake')) {
-          errorMessage = 'Network connection problem. Please check your internet connection and try again.';
-        } else {
-          errorMessage = 'Error syncing data: $e';
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMessage)));
-      }
-    } finally {
-      setState(() => _isSyncing = false);
     }
   }
 
@@ -188,18 +158,9 @@ class _RepsScreenState extends State<RepsScreen> {
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   ElevatedButton.icon(
-                    icon: _isSyncing
-                        ? SizedBox(
-                            width: 20,
-                            height: 20,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Icon(Icons.sync),
-                    label: Text(_isSyncing ? 'Syncing...' : 'Sync Data'),
-                    onPressed: _isLoading || _isSyncing ? null : _syncData,
+                    icon: const Icon(Icons.sync),
+                    label: const Text('Go to Sync Page'),
+                    onPressed: () => Navigator.pushNamed(context, '/sync'),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: colorScheme.primary,
                       foregroundColor: Colors.white,
@@ -324,10 +285,10 @@ class _RepsScreenState extends State<RepsScreen> {
                                     child: DataTable(
                                       headingRowColor:
                                           MaterialStateProperty.all(
-                                            colorScheme.primary.withOpacity(
-                                              0.05,
-                                            ),
-                                          ),
+                                        colorScheme.primary.withOpacity(
+                                          0.05,
+                                        ),
+                                      ),
                                       dataRowMinHeight: 64,
                                       dataRowMaxHeight: 64,
                                       columns: [
@@ -427,9 +388,9 @@ class _RepsScreenState extends State<RepsScreen> {
                                               Container(
                                                 padding:
                                                     const EdgeInsets.symmetric(
-                                                      horizontal: 12,
-                                                      vertical: 6,
-                                                    ),
+                                                  horizontal: 12,
+                                                  vertical: 6,
+                                                ),
                                                 decoration: BoxDecoration(
                                                   color: colorScheme.primary
                                                       .withOpacity(0.1),
@@ -449,8 +410,8 @@ class _RepsScreenState extends State<RepsScreen> {
                                             DataCell(
                                               Text(
                                                 rep.createdAt?.toString().split(
-                                                      '.',
-                                                    )[0] ??
+                                                          '.',
+                                                        )[0] ??
                                                     'N/A',
                                               ),
                                               onTap: () => _showRepDetails(rep),
@@ -476,8 +437,8 @@ class _RepsScreenState extends State<RepsScreen> {
                                                     ),
                                                     onPressed: () =>
                                                         _navigateToRepForm(
-                                                          rep: rep,
-                                                        ),
+                                                      rep: rep,
+                                                    ),
                                                     tooltip: 'Edit Rep',
                                                   ),
                                                   IconButton(

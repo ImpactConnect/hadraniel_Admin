@@ -55,6 +55,103 @@ class _StockScreenState extends State<StockScreen> {
     );
   }
 
+  Widget _buildFlexHeaderCell(String text, int flex) {
+    return Expanded(
+      flex: flex,
+      child: Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        alignment: Alignment.centerLeft,
+        child: Text(
+          text,
+          style: const TextStyle(
+            color: Colors.white,
+            fontWeight: FontWeight.bold,
+            fontSize: 14,
+          ),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFlexContentCell(String text, int flex) {
+    return Expanded(
+      flex: flex,
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        alignment: Alignment.centerLeft,
+        child: Text(
+          text,
+          style: TextStyle(color: Colors.grey.shade800, fontSize: 14),
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFlexContentCellWithIndicator(
+      String text, String? indicator, int flex) {
+    return Expanded(
+      flex: flex,
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        alignment: Alignment.centerLeft,
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              text,
+              style: TextStyle(color: Colors.grey.shade800, fontSize: 14),
+              overflow: TextOverflow.ellipsis,
+            ),
+            if (indicator != null)
+              Text(
+                indicator,
+                style: const TextStyle(
+                  color: Colors.red,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFlexContentCellWithWarning(
+      String text, bool showWarning, int flex) {
+    return Expanded(
+      flex: flex,
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 16.0),
+        alignment: Alignment.centerLeft,
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                text,
+                style: TextStyle(color: Colors.grey.shade800, fontSize: 14),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            if (showWarning)
+              const Icon(
+                Icons.warning,
+                color: Colors.red,
+                size: 14,
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildMetricCard(
     String title,
     String value,
@@ -118,7 +215,6 @@ class _StockScreenState extends State<StockScreen> {
   List<Outlet> _outlets = [];
   List<Product> _products = [];
   bool _isLoading = false;
-  bool _isSyncing = false;
 
   // Filters
   String _searchQuery = '';
@@ -164,42 +260,8 @@ class _StockScreenState extends State<StockScreen> {
 
   // Helper function to format balance numbers with proper decimal places
   String _formatBalance(double value) {
-    if (value == value.toInt()) {
-      return value.toInt().toString();
-    }
-    // Round to 2 decimal places and remove trailing zeros
-    String formatted = value.toStringAsFixed(2);
-    formatted = formatted.replaceAll(RegExp(r'0*$'), '');
-    formatted = formatted.replaceAll(RegExp(r'\.$'), '');
-    return formatted;
-  }
-
-  Future<void> _syncData() async {
-    setState(() => _isSyncing = true);
-    try {
-      await _syncService.syncStockBalancesToLocalDb();
-      await _loadData();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Stock data synced successfully')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        String errorMessage;
-        if (e.toString().contains('HandshakeException') || 
-            e.toString().contains('Connection terminated during handshake')) {
-          errorMessage = 'Network connection problem. Please check your internet connection and try again.';
-        } else {
-          errorMessage = 'Error syncing data: $e';
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMessage)));
-      }
-    } finally {
-      setState(() => _isSyncing = false);
-    }
+    // Always show 2 decimal places
+    return value.toStringAsFixed(2);
   }
 
   Future<void> _exportStockToCSV() async {
@@ -606,18 +668,9 @@ class _StockScreenState extends State<StockScreen> {
           tooltip: 'Refresh',
         ),
         IconButton(
-          icon: _isSyncing
-              ? SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
-              : const Icon(Icons.sync),
-          onPressed: _isSyncing ? null : _syncData,
-          tooltip: 'Sync Stock',
+          icon: const Icon(Icons.sync),
+          onPressed: () => Navigator.pushNamed(context, '/sync'),
+          tooltip: 'Go to Sync Page',
         ),
         IconButton(
           icon: const Icon(Icons.file_download),
@@ -924,179 +977,116 @@ class _StockScreenState extends State<StockScreen> {
                             Container(
                               color: Theme.of(context).colorScheme.primary,
                               height: 48,
-                              child: SingleChildScrollView(
-                                scrollDirection: Axis.horizontal,
-                                child: Row(
-                                  children: [
-                                    _buildHeaderCell('Product Name', 200),
-                                    _buildHeaderCell('Outlet', 150),
-                                    _buildHeaderCell('Given Qty', 100),
-                                    _buildHeaderCell('Sold Qty', 100),
-                                    _buildHeaderCell('Balance', 100),
-                                    _buildHeaderCell('Cost Price', 120),
-                                    _buildHeaderCell('Total Value', 120),
-                                  ],
-                                ),
+                              child: Row(
+                                children: [
+                                  _buildFlexHeaderCell('Product Name', 3),
+                                  _buildFlexHeaderCell('Outlet', 2),
+                                  _buildFlexHeaderCell('Given Qty', 1),
+                                  _buildFlexHeaderCell('Sold Qty', 1),
+                                  _buildFlexHeaderCell('Balance', 1),
+                                  _buildFlexHeaderCell('Cost Price', 1),
+                                  _buildFlexHeaderCell('Total Value', 2),
+                                ],
                               ),
                             ),
                             // Scrollable content
                             Expanded(
                               child: SingleChildScrollView(
-                                child: SingleChildScrollView(
-                                  scrollDirection: Axis.horizontal,
-                                  child: Column(
-                                    children: filteredStockBalances.map((
-                                      stock,
-                                    ) {
-                                      final product = _products.firstWhere(
-                                        (p) => p.id == stock.productId,
-                                        orElse: () => Product(
-                                          id: stock.productId,
-                                          productName: 'Unknown',
-                                          quantity: 0,
-                                          unit: 'N/A',
-                                          costPerUnit: 0,
-                                          totalCost: 0,
-                                          dateAdded: DateTime.now(),
-                                          outletId: '',
-                                          createdAt: DateTime.now(),
-                                          isSynced: false,
-                                        ),
-                                      );
-                                      final outlet = _outlets.firstWhere(
-                                        (o) => o.id == stock.outletId,
-                                        orElse: () => Outlet(
-                                          id: stock.outletId,
-                                          name: 'Unknown',
-                                          createdAt: null,
-                                        ),
-                                      );
+                                child: Column(
+                                  children: filteredStockBalances.map((
+                                    stock,
+                                  ) {
+                                    final product = _products.firstWhere(
+                                      (p) => p.id == stock.productId,
+                                      orElse: () => Product(
+                                        id: stock.productId,
+                                        productName: 'Unknown',
+                                        quantity: 0,
+                                        unit: 'N/A',
+                                        costPerUnit: 0,
+                                        totalCost: 0,
+                                        dateAdded: DateTime.now(),
+                                        outletId: '',
+                                        createdAt: DateTime.now(),
+                                        isSynced: false,
+                                      ),
+                                    );
+                                    final outlet = _outlets.firstWhere(
+                                      (o) => o.id == stock.outletId,
+                                      orElse: () => Outlet(
+                                        id: stock.outletId,
+                                        name: 'Unknown',
+                                        createdAt: null,
+                                      ),
+                                    );
 
-                                      return InkWell(
-                                        onTap: () {
-                                          showDialog(
-                                            context: context,
-                                            builder: (context) =>
-                                                StockDetailDialog(
-                                              stock: stock,
-                                              product: product,
-                                              outlet: outlet,
-                                            ),
-                                          );
-                                        },
-                                        child: Container(
-                                          decoration: BoxDecoration(
-                                            color: Colors.white,
-                                            border: Border(
-                                              bottom: BorderSide(
-                                                color: Colors.grey.shade200,
-                                              ),
-                                            ),
+                                    return InkWell(
+                                      onTap: () {
+                                        showDialog(
+                                          context: context,
+                                          builder: (context) =>
+                                              StockDetailDialog(
+                                            stock: stock,
+                                            product: product,
+                                            outlet: outlet,
                                           ),
-                                          child: Row(
-                                            children: [
-                                              _buildContentCell(
-                                                product.productName,
-                                                200,
-                                              ),
-                                              _buildContentCell(
-                                                outlet.name,
-                                                150,
-                                              ),
-                                              Container(
-                                                width: 120,
-                                                height: 52,
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 8.0),
-                                                alignment: Alignment.centerLeft,
-                                                child: Column(
-                                                  mainAxisAlignment:
-                                                      MainAxisAlignment.center,
-                                                  crossAxisAlignment:
-                                                      CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      stock.givenQuantity
-                                                          .toString(),
-                                                      style: TextStyle(
-                                                          color: Colors
-                                                              .grey.shade800,
-                                                          fontSize: 14),
-                                                      overflow:
-                                                          TextOverflow.ellipsis,
-                                                    ),
-                                                    if (stock.givenQuantity >
-                                                            0 &&
-                                                        (stock.balanceQuantity /
-                                                                stock
-                                                                    .givenQuantity) <
-                                                            0.75)
-                                                      Text(
-                                                        '${((stock.balanceQuantity / stock.givenQuantity) * 100).toStringAsFixed(1)}%',
-                                                        style: const TextStyle(
-                                                          color: Colors.red,
-                                                          fontSize: 10,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                        ),
-                                                      ),
-                                                  ],
-                                                ),
-                                              ),
-                                              _buildContentCell(
-                                                stock.soldQuantity.toString(),
-                                                100,
-                                              ),
-                                              Container(
-                                                width: 120,
-                                                height: 52,
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                        horizontal: 8.0),
-                                                alignment: Alignment.centerLeft,
-                                                child: Row(
-                                                  children: [
-                                                    Expanded(
-                                                      child: Text(
-                                                        stock.balanceQuantity
-                                                            .toString(),
-                                                        style: TextStyle(
-                                                            color: Colors
-                                                                .grey.shade800,
-                                                            fontSize: 14),
-                                                        overflow: TextOverflow
-                                                            .ellipsis,
-                                                      ),
-                                                    ),
-                                                    if (stock.givenQuantity >
-                                                            0 &&
-                                                        (stock.balanceQuantity /
-                                                                stock
-                                                                    .givenQuantity) <
-                                                            0.75)
-                                                      const Icon(
-                                                        Icons.warning,
-                                                        color: Colors.red,
-                                                        size: 14,
-                                                      ),
-                                                  ],
-                                                ),
-                                              ),
-                                              _buildContentCell(
-                                                '₦${product.costPerUnit}',
-                                                120,
-                                              ),
-                                              _buildContentCell(
-                                                '₦${(stock.givenQuantity * product.costPerUnit).toStringAsFixed(2)}',
-                                                120,
-                                              ),
-                                            ],
+                                        );
+                                      },
+                                      child: Container(
+                                        decoration: BoxDecoration(
+                                          color: Colors.white,
+                                          border: Border(
+                                            bottom: BorderSide(
+                                              color: Colors.grey.shade200,
+                                            ),
                                           ),
                                         ),
-                                      );
-                                    }).toList(),
-                                  ),
+                                        child: Row(
+                                          children: [
+                                            _buildFlexContentCell(
+                                              product.productName,
+                                              3,
+                                            ),
+                                            _buildFlexContentCell(
+                                              outlet.name,
+                                              2,
+                                            ),
+                                            _buildFlexContentCellWithIndicator(
+                                              stock.givenQuantity.toString(),
+                                              stock.givenQuantity > 0 &&
+                                                      (stock.balanceQuantity /
+                                                              stock
+                                                                  .givenQuantity) <
+                                                          0.75
+                                                  ? '${((stock.balanceQuantity / stock.givenQuantity) * 100).toStringAsFixed(1)}%'
+                                                  : null,
+                                              1,
+                                            ),
+                                            _buildFlexContentCell(
+                                              stock.soldQuantity.toString(),
+                                              1,
+                                            ),
+                                            _buildFlexContentCellWithWarning(
+                                              stock.balanceQuantity.toString(),
+                                              stock.givenQuantity > 0 &&
+                                                  (stock.balanceQuantity /
+                                                          stock.givenQuantity) <
+                                                      0.75,
+                                              1,
+                                            ),
+                                            _buildFlexContentCell(
+                                              '₦${product.costPerUnit}',
+                                              1,
+                                            ),
+                                            _buildFlexContentCell(
+                                              '₦${(stock.givenQuantity * product.costPerUnit).toStringAsFixed(2)}',
+                                              2,
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                    );
+                                  }).toList(),
                                 ),
                               ),
                             ),

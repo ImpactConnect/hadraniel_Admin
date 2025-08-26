@@ -18,20 +18,14 @@ class SaleItem {
   });
 
   factory SaleItem.fromMap(Map<String, dynamic> map) {
-    // Handle both 'total' and 'total_price' fields for compatibility
-    final totalValue = map.containsKey('total_price')
-        ? map['total_price']
-        : (map.containsKey('total')
-              ? map['total']
-              : map['quantity'] * map['unit_price']);
-
     return SaleItem(
       id: map['id'] as String,
       saleId: map['sale_id'] as String,
       productId: map['product_id'] as String,
       quantity: (map['quantity'] as num).toDouble(),
       unitPrice: (map['unit_price'] as num).toDouble(),
-      total: (totalValue as num).toDouble(),
+      total: (map['total_price'] ?? map['total'] as num)
+          .toDouble(), // Handle both old and new column names
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at'] as String)
           : null,
@@ -45,8 +39,7 @@ class SaleItem {
       'product_id': productId,
       'quantity': quantity,
       'unit_price': unitPrice,
-      'total': total, // Used for local DB
-      // We don't include total_price for cloud DB as it's a generated column
+      'total_price': total, // Updated to match database column name
       'created_at': createdAt?.toIso8601String(),
     };
   }

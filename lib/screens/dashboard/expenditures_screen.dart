@@ -450,8 +450,8 @@ class _ExpendituresScreenState extends State<ExpendituresScreen>
       actions: [
         IconButton(
           icon: const Icon(Icons.sync),
-          onPressed: _syncData,
-          tooltip: 'Sync Data',
+          onPressed: () => Navigator.pushNamed(context, '/sync'),
+          tooltip: 'Go to Sync Page',
         ),
         IconButton(
           icon: const Icon(Icons.picture_as_pdf),
@@ -1719,18 +1719,7 @@ class _ExpendituresScreenState extends State<ExpendituresScreen>
     );
   }
 
-  Future<void> _syncData() async {
-    setState(() => _isLoading = true);
-    try {
-      await _syncService.syncExpendituresToLocalDb();
-      await _loadData();
-      _showSuccessSnackBar('Data synced successfully');
-    } catch (e) {
-      _showErrorSnackBar('Error syncing data: $e');
-    } finally {
-      setState(() => _isLoading = false);
-    }
-  }
+
 
   Future<void> _exportToPDF() async {
     try {

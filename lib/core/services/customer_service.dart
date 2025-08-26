@@ -156,4 +156,75 @@ class CustomerService {
     );
     return (result.first['total'] as num?)?.toDouble() ?? 0.0;
   }
+
+  /// Get customer purchase history with detailed information
+  Future<List<Map<String, dynamic>>> getCustomerPurchaseHistory(
+      String customerId) async {
+    final db = await database;
+
+    final result = await db.rawQuery('''
+      SELECT 
+        s.id as sale_id,
+        s.created_at,
+        s.total_amount,
+        s.amount_paid,
+        s.outstanding_amount,
+        (s.total_amount - s.amount_paid) as calculated_outstanding,
+        s.is_paid,
+        COUNT(si.id) as item_count,
+        GROUP_CONCAT(COALESCE(p.product_name, 'Product ID: ' || si.product_id), ', ') as product_names,
+        GROUP_CONCAT(si.quantity || ' x ' || COALESCE(p.product_name, 'Product ID: ' || si.product_id), ', ') as items_detail
+      FROM sales s
+      LEFT JOIN sale_items si ON si.sale_id = s.id
+      LEFT JOIN products p ON si.product_id = p.id
+      WHERE s.customer_id = ?
+      GROUP BY s.id, s.created_at, s.total_amount, s.amount_paid, s.outstanding_amount, s.is_paid
+      ORDER BY s.created_at DESC
+    ''', [customerId]);
+
+    return result
+        .map((row) => {
+              'sale_id': row['sale_id'] as String,
+              'date': row['created_at'] as String,
+              'total_amount': (row['total_amount'] as num?)?.toDouble() ?? 0.0,
+              'amount_paid': (row['amount_paid'] as num?)?.toDouble() ?? 0.0,
+              'outstanding_amount':
+                  (row['calculated_outstanding'] as num?)?.toDouble() ?? 0.0,
+              'is_paid': (row['is_paid'] as int?) == 1,
+              'item_count': (row['item_count'] as int?) ?? 0,
+              'product_names': (row['product_names'] as String?) ?? 'No items',
+              'items_detail': (row['items_detail'] as String?) ?? 'No items',
+            })
+        .toList();
+  }
+
+  /// Get detailed sale items for a specific sale
+  Future<List<Map<String, dynamic>>> getSaleItemsForSale(String saleId) async {
+    final db = await database;
+
+    final result = await db.rawQuery('''
+      SELECT 
+        si.id,
+        si.quantity,
+        si.unit_price,
+        si.total,
+        COALESCE(p.product_name, 'Product ID: ' || si.product_id) as product_name,
+        p.unit
+      FROM sale_items si
+      LEFT JOIN products p ON si.product_id = p.id
+      WHERE si.sale_id = ?
+      ORDER BY p.product_name
+    ''', [saleId]);
+
+    return result
+        .map((row) => {
+              'id': row['id'] as String,
+              'product_name': row['product_name'] as String,
+              'quantity': (row['quantity'] as num?)?.toDouble() ?? 0.0,
+              'unit_price': (row['unit_price'] as num?)?.toDouble() ?? 0.0,
+              'total': (row['total'] as num?)?.toDouble() ?? 0.0,
+              'unit': (row['unit'] as String?) ?? '',
+            })
+        .toList();
+  }
 }

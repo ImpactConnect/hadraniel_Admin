@@ -234,9 +234,8 @@ class ProductDetailPopup extends StatelessWidget {
                         Text(
                           product.isSynced ? 'Synced to cloud' : 'Not synced',
                           style: TextStyle(
-                            color: product.isSynced
-                                ? Colors.green
-                                : Colors.grey,
+                            color:
+                                product.isSynced ? Colors.green : Colors.grey,
                             fontWeight: FontWeight.w500,
                           ),
                         ),

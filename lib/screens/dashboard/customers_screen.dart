@@ -85,11 +85,11 @@ class _CustomersScreenState extends State<CustomersScreen> {
             .where(
               (customer) =>
                   customer.fullName.toLowerCase().contains(
-                    _searchQuery.toLowerCase(),
-                  ) ||
-                  (customer.phone?.toLowerCase().contains(
                         _searchQuery.toLowerCase(),
-                      ) ??
+                      ) ||
+                  (customer.phone?.toLowerCase().contains(
+                            _searchQuery.toLowerCase(),
+                          ) ??
                       false),
             )
             .toList();
@@ -553,8 +553,8 @@ class _CustomersScreenState extends State<CustomersScreen> {
                                               fontWeight: FontWeight.bold,
                                               color:
                                                   customer.totalOutstanding > 0
-                                                  ? Colors.red.shade700
-                                                  : Colors.green.shade700,
+                                                      ? Colors.red.shade700
+                                                      : Colors.green.shade700,
                                             ),
                                           ),
                                         ),

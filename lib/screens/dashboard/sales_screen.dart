@@ -7,6 +7,7 @@ import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
 import 'package:intl/intl.dart';
 import 'package:calendar_date_picker2/calendar_date_picker2.dart';
+import 'dart:async';
 import '../../widgets/dashboard_layout.dart';
 import '../../core/services/sync_service.dart';
 import '../../core/models/outlet_model.dart';
@@ -41,6 +42,13 @@ class _SalesScreenState extends State<SalesScreen> {
   DateTime? _customStartDate;
   DateTime? _customEndDate;
 
+  // Product search
+  final TextEditingController _productSearchController =
+      TextEditingController();
+  List<Product> _filteredProducts = [];
+  final LayerLink _layerLink = LayerLink();
+  OverlayEntry? _overlayEntry;
+
   // Lists for dropdowns
   List<Outlet> _outlets = [];
   List<Rep> _reps = [];
@@ -50,6 +58,110 @@ class _SalesScreenState extends State<SalesScreen> {
   void initState() {
     super.initState();
     _loadData();
+
+    // Setup product search listener
+    _productSearchController.addListener(_filterProducts);
+  }
+
+  @override
+  void dispose() {
+    _productSearchController.removeListener(_filterProducts);
+    _productSearchController.dispose();
+    _removeOverlay();
+    super.dispose();
+  }
+
+  void _showOverlay() {
+    _removeOverlay(); // Remove existing overlay if any
+
+    final RenderBox renderBox = context.findRenderObject() as RenderBox;
+    final size = renderBox.size;
+
+    _overlayEntry = OverlayEntry(
+      builder: (context) => Positioned(
+        width: 300,
+        child: CompositedTransformFollower(
+          link: _layerLink,
+          showWhenUnlinked: false,
+          offset: const Offset(0, 45),
+          child: Material(
+            elevation: 24,
+            borderRadius: BorderRadius.circular(4),
+            clipBehavior: Clip.antiAlias,
+            child: Container(
+              constraints: const BoxConstraints(maxHeight: 200),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(4),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.2),
+                    blurRadius: 6,
+                    offset: const Offset(0, 3),
+                  ),
+                ],
+              ),
+              child: ListView.builder(
+                shrinkWrap: true,
+                itemCount: _filteredProducts.length,
+                itemBuilder: (context, index) {
+                  final product = _filteredProducts[index];
+                  return ListTile(
+                    dense: true,
+                    title: Text(
+                      product.productName,
+                      style: const TextStyle(fontSize: 13),
+                    ),
+                    subtitle: Text(
+                      'Qty: ${product.quantity} ${product.unit}',
+                      style: const TextStyle(fontSize: 11),
+                    ),
+                    onTap: () {
+                      setState(() {
+                        _selectedProductId = product.id;
+                        _productSearchController.text = product.productName;
+                        _filteredProducts = [];
+                      });
+                      _removeOverlay();
+                      _applyFilters().then((_) {
+                        setState(() {});
+                      });
+                    },
+                  );
+                },
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Overlay.of(context).insert(_overlayEntry!);
+  }
+
+  void _removeOverlay() {
+    _overlayEntry?.remove();
+    _overlayEntry = null;
+  }
+
+  void _filterProducts() {
+    final query = _productSearchController.text.toLowerCase();
+    setState(() {
+      if (query.isEmpty) {
+        _filteredProducts = [];
+        _removeOverlay();
+      } else {
+        _filteredProducts = _products
+            .where(
+                (product) => product.productName.toLowerCase().contains(query))
+            .toList();
+        if (_filteredProducts.isNotEmpty) {
+          _showOverlay();
+        } else {
+          _removeOverlay();
+        }
+      }
+    });
   }
 
   Future<void> _loadData() async {
@@ -211,162 +323,299 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildFilters() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            'Filters',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-          ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            children: [
-              // Date filter
-              DropdownButton<String>(
-                value: _selectedDateFilter,
-                hint: const Text('Date Range'),
-                items: [
-                  'All Time',
-                  'Today',
-                  'Yesterday',
-                  'Last 7 Days',
-                  'This Month',
-                  'Last Month',
-                  'Custom',
-                ].map((String value) {
-                  return DropdownMenuItem<String>(
-                    value: value,
-                    child: Text(value),
-                  );
-                }).toList(),
-                onChanged: (newValue) {
-                  setState(() {
-                    _selectedDateFilter = newValue!;
-                  });
-                  _applyFilters().then((_) {
-                    setState(() {});
-                  });
-                },
-              ),
+    final hasActiveFilters = _selectedDateFilter != 'All Time' ||
+        _selectedOutletId != null ||
+        _selectedRepId != null ||
+        _selectedProductId != null ||
+        _customStartDate != null ||
+        _customEndDate != null;
 
-              // Outlet filter
-              DropdownButton<String>(
-                value: _selectedOutletId,
-                hint: const Text('All Outlets'),
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('All Outlets'),
-                  ),
-                  ..._outlets.map((outlet) {
-                    return DropdownMenuItem<String>(
-                      value: outlet.id,
-                      child: Text(outlet.name),
-                    );
-                  }),
-                ],
-                onChanged: (newValue) {
-                  setState(() {
-                    _selectedOutletId = newValue;
-                  });
-                  _applyFilters().then((_) {
-                    setState(() {});
-                  });
-                },
-              ),
-
-              // Rep filter
-              DropdownButton<String>(
-                value: _selectedRepId,
-                hint: const Text('All Reps'),
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('All Reps'),
-                  ),
-                  ..._reps.map((rep) {
-                    return DropdownMenuItem<String>(
-                      value: rep.id,
-                      child: Text(rep.fullName),
-                    );
-                  }),
-                ],
-                onChanged: (newValue) {
-                  setState(() {
-                    _selectedRepId = newValue;
-                  });
-                  _applyFilters().then((_) {
-                    setState(() {});
-                  });
-                },
-              ),
-
-              // Product filter
-              DropdownButton<String>(
-                value: _selectedProductId,
-                hint: const Text('All Products'),
-                items: [
-                  const DropdownMenuItem<String>(
-                    value: null,
-                    child: Text('All Products'),
-                  ),
-                  ..._products.map((product) {
-                    return DropdownMenuItem<String>(
-                      value: product.id,
-                      child: Text(product.productName),
-                    );
-                  }),
-                ],
-                onChanged: (newValue) {
-                  setState(() {
-                    _selectedProductId = newValue;
-                  });
-                  _applyFilters().then((_) {
-                    setState(() {});
-                  });
-                },
-              ),
-
-              // Calendar date range filter
-              ElevatedButton.icon(
-                onPressed: _showDateRangePicker,
-                icon: const Icon(Icons.calendar_today),
-                label: Text(_getDateRangeText()),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade100,
-                  foregroundColor: Colors.blue.shade900,
+    return Card(
+      elevation: 2,
+      margin: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      child: Padding(
+        padding: const EdgeInsets.all(16.0),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  'Filters',
+                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
                 ),
-              ),
-
-              // Clear filters button
-              ElevatedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _selectedDateFilter = 'All Time';
-                    _selectedOutletId = null;
-                    _selectedRepId = null;
-                    _selectedProductId = null;
-                    _customStartDate = null;
-                    _customEndDate = null;
-                  });
-                  _applyFilters().then((_) {
-                    setState(() {});
-                  });
-                },
-                icon: const Icon(Icons.clear),
-                label: const Text('Clear Filters'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red.shade100,
-                  foregroundColor: Colors.red.shade900,
+                if (hasActiveFilters)
+                  TextButton.icon(
+                    onPressed: () {
+                      setState(() {
+                        _selectedDateFilter = 'All Time';
+                        _selectedOutletId = null;
+                        _selectedRepId = null;
+                        _selectedProductId = null;
+                        _customStartDate = null;
+                        _customEndDate = null;
+                        _productSearchController.clear();
+                        _filteredProducts = [];
+                      });
+                      _applyFilters().then((_) {
+                        setState(() {});
+                      });
+                    },
+                    icon:
+                        Icon(Icons.clear, size: 16, color: Colors.red.shade700),
+                    label: Text(
+                      'Clear All',
+                      style:
+                          TextStyle(fontSize: 13, color: Colors.red.shade700),
+                    ),
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
+                    ),
+                  ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            // Single row layout for all filters
+            Row(
+              children: [
+                // Date filter
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedDateFilter,
+                    decoration: InputDecoration(
+                      labelText: 'Date',
+                      labelStyle:
+                          TextStyle(color: Theme.of(context).primaryColor),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: Theme.of(context).primaryColor),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    items: [
+                      'All Time',
+                      'Today',
+                      'Yesterday',
+                      'Last 7 Days',
+                      'This Month',
+                      'Last Month',
+                      'Custom',
+                    ].map((String value) {
+                      return DropdownMenuItem<String>(
+                        value: value,
+                        child:
+                            Text(value, style: const TextStyle(fontSize: 13)),
+                      );
+                    }).toList(),
+                    onChanged: (newValue) {
+                      setState(() {
+                        _selectedDateFilter = newValue!;
+                      });
+                      _applyFilters().then((_) {
+                        setState(() {});
+                      });
+                    },
+                    icon: Icon(Icons.arrow_drop_down,
+                        color: Theme.of(context).primaryColor),
+                    dropdownColor: Colors.white,
+                  ),
                 ),
-              ),
-            ],
-          ),
-        ],
+                const SizedBox(width: 12),
+
+                // Outlet filter
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedOutletId,
+                    decoration: InputDecoration(
+                      labelText: 'Outlet',
+                      labelStyle:
+                          TextStyle(color: Theme.of(context).primaryColor),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: Theme.of(context).primaryColor),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: null,
+                        child:
+                            Text('All Outlets', style: TextStyle(fontSize: 13)),
+                      ),
+                      ..._outlets.map((outlet) {
+                        return DropdownMenuItem<String>(
+                          value: outlet.id,
+                          child: Text(outlet.name,
+                              style: const TextStyle(fontSize: 13)),
+                        );
+                      }),
+                    ],
+                    onChanged: (newValue) {
+                      setState(() {
+                        _selectedOutletId = newValue;
+                      });
+                      _applyFilters().then((_) {
+                        setState(() {});
+                      });
+                    },
+                    icon: Icon(Icons.arrow_drop_down,
+                        color: Theme.of(context).primaryColor),
+                    dropdownColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Rep filter
+                Expanded(
+                  flex: 2,
+                  child: DropdownButtonFormField<String>(
+                    value: _selectedRepId,
+                    decoration: InputDecoration(
+                      labelText: 'Rep',
+                      labelStyle:
+                          TextStyle(color: Theme.of(context).primaryColor),
+                      border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8)),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide: BorderSide(color: Colors.grey.shade300),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                        borderSide:
+                            BorderSide(color: Theme.of(context).primaryColor),
+                      ),
+                      contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 12),
+                      isDense: true,
+                      filled: true,
+                      fillColor: Colors.grey.shade50,
+                    ),
+                    items: [
+                      const DropdownMenuItem<String>(
+                        value: null,
+                        child: Text('All Reps', style: TextStyle(fontSize: 13)),
+                      ),
+                      ..._reps.map((rep) {
+                        return DropdownMenuItem<String>(
+                          value: rep.id,
+                          child: Text(rep.fullName,
+                              style: const TextStyle(fontSize: 13)),
+                        );
+                      }),
+                    ],
+                    onChanged: (newValue) {
+                      setState(() {
+                        _selectedRepId = newValue;
+                      });
+                      _applyFilters().then((_) {
+                        setState(() {});
+                      });
+                    },
+                    icon: Icon(Icons.arrow_drop_down,
+                        color: Theme.of(context).primaryColor),
+                    dropdownColor: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Product search filter
+                Expanded(
+                  flex: 3,
+                  child: CompositedTransformTarget(
+                    link: _layerLink,
+                    child: TextField(
+                      controller: _productSearchController,
+                      decoration: InputDecoration(
+                        labelText: 'Search Product',
+                        labelStyle:
+                            TextStyle(color: Theme.of(context).primaryColor),
+                        hintText: 'Type to search...',
+                        border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide: BorderSide(color: Colors.grey.shade300),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                          borderSide:
+                              BorderSide(color: Theme.of(context).primaryColor),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 12),
+                        isDense: true,
+                        filled: true,
+                        fillColor: Colors.grey.shade50,
+                        prefixIcon: const Icon(Icons.search, size: 18),
+                        suffixIcon: _productSearchController.text.isNotEmpty
+                            ? IconButton(
+                                icon: const Icon(Icons.clear, size: 16),
+                                onPressed: () {
+                                  _productSearchController.clear();
+                                  setState(() {
+                                    _selectedProductId = null;
+                                  });
+                                  _applyFilters().then((_) {
+                                    setState(() {});
+                                  });
+                                },
+                              )
+                            : null,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+
+                // Calendar date range filter icon
+                if (_selectedDateFilter == 'Custom')
+                  Tooltip(
+                    message: _getDateRangeText(),
+                    child: IconButton(
+                      onPressed: _showDateRangePicker,
+                      icon: const Icon(Icons.calendar_today),
+                      style: IconButton.styleFrom(
+                        backgroundColor:
+                            Theme.of(context).primaryColor.withOpacity(0.1),
+                        foregroundColor: Theme.of(context).primaryColor,
+                        padding: const EdgeInsets.all(12),
+                        shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8)),
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -510,7 +759,7 @@ class _SalesScreenState extends State<SalesScreen> {
                                         _buildFlexHeaderCell('Product Name')),
                                 Expanded(
                                     flex: 1,
-                                    child: _buildFlexHeaderCell('Items')),
+                                    child: _buildFlexHeaderCell('Qty')),
                                 Expanded(
                                     flex: 2,
                                     child:
@@ -669,9 +918,18 @@ class _SalesScreenState extends State<SalesScreen> {
   }
 
   Widget _buildProductCell(Map<String, dynamic> sale) {
-    final productNames = sale['product_names'] as String? ?? 'N/A';
+    // First try to use product_names which is more reliable
+    final productNames = sale['product_names'] as String? ?? 'No Items';
+    
+    if (productNames == 'No Items') {
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+        child: const Text('No Items', overflow: TextOverflow.ellipsis),
+      );
+    }
+    
     final products = productNames.split(', ');
-
+    
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
       child: products.length > 1
@@ -680,39 +938,54 @@ class _SalesScreenState extends State<SalesScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: products
                   .map((product) => Text(
-                        product.trim(),
+                        product,
                         style: const TextStyle(fontSize: 12),
                         overflow: TextOverflow.ellipsis,
                       ))
                   .toList(),
             )
           : Text(
-              productNames,
+              products.first,
               overflow: TextOverflow.ellipsis,
             ),
     );
   }
 
   Widget _buildQuantityCell(Map<String, dynamic> sale) {
-    final productNames = sale['product_names'] as String? ?? 'N/A';
-    final products = productNames.split(', ');
-    final itemCount = sale['item_count'] ?? 0;
+    // First check if we have items_detail which contains quantity information
+    final itemsDetail = sale['items_detail'] as String? ?? 'No Items';
+    
+    if (itemsDetail == 'No Items') {
+      // If no items, display 0
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
+        child: const Text('0'),
+      );
+    }
+    
+    final items = itemsDetail.split(', ');
+    
+    // Extract just the quantity from each item (format: "X x Product Name")
+    final quantities = items.map((item) {
+      final parts = item.split(' x ');
+      return parts.isNotEmpty ? parts[0] : '0';
+    }).toList();
 
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
-      child: products.length > 1
+      child: quantities.length > 1
           ? Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisAlignment: MainAxisAlignment.center,
-              children: List.generate(
-                  products.length,
-                  (index) => Text(
-                        '${(itemCount / products.length).round()}',
+              children: quantities
+                  .map((qty) => Text(
+                        qty,
                         style: const TextStyle(fontSize: 12),
-                      )),
+                      ))
+                  .toList(),
             )
           : Text(
-              itemCount.toString(),
+              quantities.first,
             ),
     );
   }

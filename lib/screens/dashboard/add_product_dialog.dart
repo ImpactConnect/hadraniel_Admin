@@ -64,8 +64,8 @@ class _AddProductDialogState extends State<AddProductDialog> {
       final stockIntakeService = StockIntakeService();
 
       // Get products with balance > 0 along with their balances and units
-      final productsWithBalanceAndUnit = await stockIntakeService
-          .getAvailableProductsWithBalanceAndUnit();
+      final productsWithBalanceAndUnit =
+          await stockIntakeService.getAvailableProductsWithBalanceAndUnit();
 
       // Cache the balances for backward compatibility
       _cachedProductBalances = {};
@@ -145,8 +145,8 @@ class _AddProductDialogState extends State<AddProductDialog> {
                 Text(
                   widget.product == null ? 'Add New Product' : 'Edit Product',
                   style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                    fontWeight: FontWeight.bold,
-                  ),
+                        fontWeight: FontWeight.bold,
+                      ),
                 ),
                 IconButton(
                   icon: const Icon(Icons.close),
@@ -167,22 +167,21 @@ class _AddProductDialogState extends State<AddProductDialog> {
                       initialValue: TextEditingValue(text: productName),
                       optionsBuilder:
                           (TextEditingValue textEditingValue) async {
-                            // Get product names with balance
-                            final productNames =
-                                await _getPreloadedProductNames();
+                        // Get product names with balance
+                        final productNames = await _getPreloadedProductNames();
 
-                            if (textEditingValue.text.isEmpty) {
-                              return ['Add New Product', ...productNames];
-                            }
-                            return productNames
-                                .where(
-                                  (product) => product.toLowerCase().contains(
+                        if (textEditingValue.text.isEmpty) {
+                          return ['Add New Product', ...productNames];
+                        }
+                        return productNames
+                            .where(
+                              (product) => product.toLowerCase().contains(
                                     textEditingValue.text.toLowerCase(),
                                   ),
-                                )
-                                .toList()
-                              ..insert(0, 'Add New Product');
-                          },
+                            )
+                            .toList()
+                          ..insert(0, 'Add New Product');
+                      },
                       onSelected: (String selection) {
                         if (selection == 'Add New Product') {
                           setState(() {
@@ -203,41 +202,39 @@ class _AddProductDialogState extends State<AddProductDialog> {
                           });
                         }
                       },
-                      fieldViewBuilder:
-                          (
-                            context,
-                            textEditingController,
-                            focusNode,
-                            onFieldSubmitted,
-                          ) {
-                            // Initialize the controller with our stored value
-                            if (_productNameController.text.isNotEmpty &&
-                                textEditingController.text.isEmpty) {
-                              textEditingController.text =
-                                  _productNameController.text;
-                            }
+                      fieldViewBuilder: (
+                        context,
+                        textEditingController,
+                        focusNode,
+                        onFieldSubmitted,
+                      ) {
+                        // Initialize the controller with our stored value
+                        if (_productNameController.text.isNotEmpty &&
+                            textEditingController.text.isEmpty) {
+                          textEditingController.text =
+                              _productNameController.text;
+                        }
 
-                            return TextFormField(
-                              controller: textEditingController,
-                              focusNode: focusNode,
-                              decoration: InputDecoration(
-                                labelText: 'Product Name',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                filled: true,
-                                fillColor: Colors.grey[50],
-                              ),
-                              onChanged: (value) {
-                                // Keep our controller in sync
-                                _productNameController.text = value;
-                                productName = value;
-                              },
-                              validator: (value) => value?.isEmpty ?? true
-                                  ? 'Required field'
-                                  : null,
-                            );
+                        return TextFormField(
+                          controller: textEditingController,
+                          focusNode: focusNode,
+                          decoration: InputDecoration(
+                            labelText: 'Product Name',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            filled: true,
+                            fillColor: Colors.grey[50],
+                          ),
+                          onChanged: (value) {
+                            // Keep our controller in sync
+                            _productNameController.text = value;
+                            productName = value;
                           },
+                          validator: (value) =>
+                              value?.isEmpty ?? true ? 'Required field' : null,
+                        );
+                      },
                     ),
                   ),
                   SizedBox(
@@ -255,19 +252,23 @@ class _AddProductDialogState extends State<AddProductDialog> {
                       items: const [
                         DropdownMenuItem(value: 'Kg', child: Text('Kg')),
                         DropdownMenuItem(value: 'Pcs', child: Text('Pcs')),
-                        DropdownMenuItem(value: 'Carton', child: Text('Carton')),
+                        DropdownMenuItem(
+                            value: 'Carton', child: Text('Carton')),
                         DropdownMenuItem(value: 'Paint', child: Text('Paint')),
                         DropdownMenuItem(value: 'Cup', child: Text('Cup')),
                         DropdownMenuItem(value: 'Ltr', child: Text('Ltr')),
                         DropdownMenuItem(value: 'Box', child: Text('Box')),
                         DropdownMenuItem(value: 'Roll', child: Text('Roll')),
                         DropdownMenuItem(value: 'Bag', child: Text('Bag')),
-                        DropdownMenuItem(value: 'Gallon', child: Text('Gallon')),
+                        DropdownMenuItem(
+                            value: 'Gallon', child: Text('Gallon')),
                         DropdownMenuItem(value: 'Mudu', child: Text('Mudu')),
                         DropdownMenuItem(value: 'Tin', child: Text('Tin')),
-                        DropdownMenuItem(value: 'Sachet', child: Text('Sachet')),
+                        DropdownMenuItem(
+                            value: 'Sachet', child: Text('Sachet')),
                         DropdownMenuItem(value: 'Bowl', child: Text('Bowl')),
-                        DropdownMenuItem(value: 'Bundle', child: Text('Bundle')),
+                        DropdownMenuItem(
+                            value: 'Bundle', child: Text('Bundle')),
                       ],
                       onChanged: (value) {
                         setState(() => unit = value ?? 'Kg');
@@ -289,7 +290,7 @@ class _AddProductDialogState extends State<AddProductDialog> {
                         fillColor: Colors.grey[50],
                         // Show the available balance in the helper text
                         helperText: !_isNewProduct
-                            ? 'Available: ${_formatBalance(getAvailableBalance(productName))} ${unit}'
+                            ? 'Available for additional assignment: ${_formatBalance(getAvailableBalance(productName))} ${unit}'
                             : null,
                       ),
                       keyboardType: TextInputType.number,
@@ -301,12 +302,17 @@ class _AddProductDialogState extends State<AddProductDialog> {
                         // Check if quantity exceeds available balance for existing products
                         if (!_isNewProduct) {
                           final requestedQuantity = double.parse(value);
+                          final originalQuantity = widget.product?.quantity ?? 0.0;
                           final availableBalance = getAvailableBalance(
                             productName,
                           );
 
-                          if (requestedQuantity > availableBalance) {
-                            return 'Exceeds available balance of ${_formatBalance(availableBalance)} ${unit}';
+                          // Only validate balance if quantity is being increased
+                          if (requestedQuantity > originalQuantity) {
+                            final additionalQuantityNeeded = requestedQuantity - originalQuantity;
+                            if (additionalQuantityNeeded > availableBalance) {
+                              return 'Exceeds available balance of ${_formatBalance(availableBalance)} ${unit}';
+                            }
                           }
                         }
                         return null;

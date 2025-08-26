@@ -26,7 +26,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
   String _searchQuery = '';
   String? _selectedOutlet;
   String? _selectedUnit;
-  bool _isSyncing = false;
+
   DateTime? _selectedStartDate;
   DateTime? _selectedEndDate;
 
@@ -38,35 +38,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
     return 'Custom';
   }
 
-  Future<void> _syncProducts() async {
-    setState(() => _isSyncing = true);
-    try {
-      await _syncService.syncProductsToLocalDb();
-      await _loadProducts();
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Products synced successfully')),
-        );
-      }
-    } catch (e) {
-      if (mounted) {
-        String errorMessage;
-        if (e.toString().contains('HandshakeException') || 
-            e.toString().contains('Connection terminated during handshake')) {
-          errorMessage = 'Network connection problem. Please check your internet connection and try again.';
-        } else {
-          errorMessage = 'Error syncing products: $e';
-        }
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text(errorMessage)));
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isSyncing = false);
-      }
-    }
-  }
+
 
   @override
   void initState() {
@@ -88,6 +60,31 @@ class _ProductsScreenState extends State<ProductsScreen> {
   }
 
   Future<void> _deleteProduct(Product product) async {
+    // First check if the product can be deleted
+    final canDeleteResult = await _syncService.canDeleteProduct(product.id);
+
+    // If product cannot be deleted, show reason and return early
+    if (!canDeleteResult['canDelete']) {
+      await showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text(
+            'Cannot Delete Product',
+            style: TextStyle(color: Colors.red),
+          ),
+          content: Text(canDeleteResult['message']),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('OK'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
+
+    // If product can be deleted, show confirmation dialog
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
@@ -112,13 +109,36 @@ class _ProductsScreenState extends State<ProductsScreen> {
       try {
         await _syncService.deleteProduct(product.id);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Product deleted successfully')),
+          const SnackBar(
+            content: Text('Product deleted successfully'),
+            backgroundColor: Colors.green,
+          ),
         );
         _loadProducts(); // Refresh the list
       } catch (e) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(SnackBar(content: Text('Error deleting product: $e')));
+        // Extract the error message without the Exception prefix
+        String errorMessage = e.toString();
+        if (errorMessage.startsWith('Exception: ')) {
+          errorMessage = errorMessage.substring('Exception: '.length);
+        }
+
+        // Show a more prominent error dialog for better visibility
+        await showDialog(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: const Text(
+              'Cannot Delete Product',
+              style: TextStyle(color: Colors.red),
+            ),
+            content: Text(errorMessage),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        );
       }
     }
   }
@@ -431,18 +451,9 @@ class _ProductsScreenState extends State<ProductsScreen> {
           tooltip: 'Refresh',
         ),
         IconButton(
-          icon: _isSyncing
-              ? SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: CircularProgressIndicator(
-                    color: Colors.white,
-                    strokeWidth: 2,
-                  ),
-                )
-              : const Icon(Icons.sync),
-          onPressed: _isSyncing ? null : _syncProducts,
-          tooltip: 'Sync Products',
+          icon: const Icon(Icons.sync),
+          onPressed: () => Navigator.pushNamed(context, '/sync'),
+          tooltip: 'Go to Sync Page',
         ),
         IconButton(
           icon: const Icon(Icons.file_download),
@@ -477,13 +488,29 @@ class _ProductsScreenState extends State<ProductsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  // Top row with title
-                  Text(
-                    'Product Inventory',
-                    style: theme.textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.bold,
-                      color: Theme.of(context).colorScheme.primary,
-                    ),
+                  // Top row with title and add button
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Product Inventory',
+                        style: theme.textTheme.titleLarge?.copyWith(
+                          fontWeight: FontWeight.bold,
+                          color: Theme.of(context).colorScheme.primary,
+                        ),
+                      ),
+                      ElevatedButton.icon(
+                        onPressed: () => _showProductDialog(),
+                        icon: const Icon(Icons.add),
+                        label: const Text('Add New Product'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 16),
 
@@ -644,26 +671,10 @@ class _ProductsScreenState extends State<ProductsScreen> {
                           ),
                           const SizedBox(height: 16),
 
-                          // Filter section
-                          Text(
-                            'Filters',
-                            style: theme.textTheme.titleMedium?.copyWith(
-                              fontWeight: FontWeight.bold,
-                              color: colorScheme.primary,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-
                           // Date filter chips in a horizontal scrollable row
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text(
-                                'Date Range',
-                                style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
                               const SizedBox(height: 8),
                               SingleChildScrollView(
                                 scrollDirection: Axis.horizontal,
@@ -947,14 +958,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           ],
         ),
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showProductDialog(),
-        tooltip: 'Add New Product',
-        icon: const Icon(Icons.add),
-        label: const Text('Add Product', style: TextStyle(color: Colors.white)),
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        elevation: 4,
-      ),
+      // Floating action button removed and moved to the top
     );
   }
 
