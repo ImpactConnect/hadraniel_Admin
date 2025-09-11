@@ -54,12 +54,10 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
       setState(() {
         _reps = reps.where((rep) => rep.outletId == widget.outlet.id).toList();
         _products = products;
-        _sales = sales
-            .where((sale) => sale.outletId == widget.outlet.id)
-            .toList();
-        _lowStockProducts = products
-            .where((product) => (product.quantity ?? 0) < 10)
-            .toList();
+        _sales =
+            sales.where((sale) => sale.outletId == widget.outlet.id).toList();
+        _lowStockProducts =
+            products.where((product) => (product.quantity ?? 0) < 10).toList();
       });
     } catch (e) {
       if (mounted) {
@@ -276,8 +274,8 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                                   ),
                                   subtitle: Text(
                                     widget.outlet.createdAt?.toString().split(
-                                          '.',
-                                        )[0] ??
+                                              '.',
+                                            )[0] ??
                                         'Not specified',
                                     style: const TextStyle(fontSize: 15),
                                   ),
@@ -316,8 +314,8 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                                                 (rep) => Padding(
                                                   padding:
                                                       const EdgeInsets.only(
-                                                        bottom: 4,
-                                                      ),
+                                                    bottom: 4,
+                                                  ),
                                                   child: Text(
                                                     rep.fullName ??
                                                         'Unnamed Rep',
@@ -618,8 +616,8 @@ class _OutletProfileScreenState extends State<OutletProfileScreen> {
                                           flex: 2,
                                           child: Text(
                                             sale.createdAt?.toString().split(
-                                                  '.',
-                                                )[0] ??
+                                                      '.',
+                                                    )[0] ??
                                                 'No date',
                                           ),
                                         ),

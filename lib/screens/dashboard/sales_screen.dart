@@ -920,16 +920,16 @@ class _SalesScreenState extends State<SalesScreen> {
   Widget _buildProductCell(Map<String, dynamic> sale) {
     // First try to use product_names which is more reliable
     final productNames = sale['product_names'] as String? ?? 'No Items';
-    
+
     if (productNames == 'No Items') {
       return Container(
         padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
         child: const Text('No Items', overflow: TextOverflow.ellipsis),
       );
     }
-    
+
     final products = productNames.split(', ');
-    
+
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8.0, vertical: 12.0),
       child: products.length > 1
@@ -954,7 +954,7 @@ class _SalesScreenState extends State<SalesScreen> {
   Widget _buildQuantityCell(Map<String, dynamic> sale) {
     // First check if we have items_detail which contains quantity information
     final itemsDetail = sale['items_detail'] as String? ?? 'No Items';
-    
+
     if (itemsDetail == 'No Items') {
       // If no items, display 0
       return Container(
@@ -962,9 +962,9 @@ class _SalesScreenState extends State<SalesScreen> {
         child: const Text('0'),
       );
     }
-    
+
     final items = itemsDetail.split(', ');
-    
+
     // Extract just the quantity from each item (format: "X x Product Name")
     final quantities = items.map((item) {
       final parts = item.split(' x ');

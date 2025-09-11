@@ -1719,8 +1719,6 @@ class _ExpendituresScreenState extends State<ExpendituresScreen>
     );
   }
 
-
-
   Future<void> _exportToPDF() async {
     try {
       final pdf = pw.Document();

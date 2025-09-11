@@ -56,7 +56,15 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   bool _sortAscending = true;
   String _balanceFilter = 'all'; // 'all', 'positive', 'zero', 'negative'
 
-  final List<String> _units = ['Pcs', 'Kg', 'L', 'Box', 'Carton', 'Bag'];
+  final List<String> _units = [
+    'Pcs',
+    'Kg',
+    'L',
+    'Box',
+    'Carton',
+    '1/2 Carton',
+    'Bag'
+  ];
 
   // List of predefined product names
 

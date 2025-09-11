@@ -18,6 +18,7 @@ import 'screens/dashboard/stock_screen.dart';
 import 'screens/dashboard/settings_screen.dart';
 import 'screens/dashboard/expenditures_screen.dart';
 import 'screens/stock_intake_screen.dart';
+import 'screens/dashboard/stock_count_screen.dart';
 
 Future<void> _initializeSupabaseWithRetry({
   required String url,
@@ -239,6 +240,7 @@ class _MyAppState extends State<MyApp> {
         '/sales': (context) => const SalesScreen(),
         '/stock': (context) => const StockScreen(),
         '/stock-intake': (context) => const StockIntakeScreen(),
+        '/stock-count': (context) => const StockCountScreen(),
         '/expenditures': (context) => const ExpendituresScreen(),
         '/customers': (context) => const CustomersScreen(),
         '/settings': (context) => const SettingsScreen(),

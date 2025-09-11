@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:uuid/uuid.dart';
 import '../../core/models/outlet_model.dart';
 import '../../core/services/sync_service.dart';
 import '../../widgets/dashboard_layout.dart';
@@ -13,6 +14,7 @@ class OutletsScreen extends StatefulWidget {
 
 class _OutletsScreenState extends State<OutletsScreen> {
   final SyncService _syncService = SyncService();
+  final Uuid _uuid = const Uuid();
   List<Outlet> _outlets = [];
   String _searchQuery = '';
   bool _isLoading = false;
@@ -45,8 +47,6 @@ class _OutletsScreenState extends State<OutletsScreen> {
       setState(() => _isLoading = false);
     }
   }
-
-
 
   void _showOutletDialog({Outlet? outlet}) {
     final formKey = GlobalKey<FormState>();
@@ -93,13 +93,13 @@ class _OutletsScreenState extends State<OutletsScreen> {
                         setState(() => isLoading = true);
                         try {
                           final newOutlet = Outlet(
-                            id: outlet?.id ?? DateTime.now().toIso8601String(),
+                            id: outlet?.id ?? _uuid.v4(),
                             name: nameController.text,
                             location: locationController.text,
                             createdAt: outlet?.createdAt ?? DateTime.now(),
                           );
 
-                          await _syncService.syncOutletsToLocalDb([newOutlet]);
+                          await _syncService.insertOrUpdateOutlet(newOutlet);
                           Navigator.pop(context);
                           _loadOutlets();
                           ScaffoldMessenger.of(context).showSnackBar(

@@ -49,8 +49,8 @@ class SyncOperation {
       timestamp: DateTime.fromMillisecondsSinceEpoch(json['timestamp']),
       duration: Duration(milliseconds: json['duration']),
       error: json['error'],
-      detailedResults: json['detailedResults'] != null 
-          ? Map<String, int>.from(json['detailedResults']) 
+      detailedResults: json['detailedResults'] != null
+          ? Map<String, int>.from(json['detailedResults'])
           : null,
       sessionId: json['sessionId'],
     );
@@ -85,6 +85,8 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
         return 'Stock Balances';
       case 'expenditures':
         return 'Expenditures';
+      case 'stock_counts':
+        return 'Stock Counts';
       default:
         return tableName;
     }
@@ -114,11 +116,11 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
     try {
       final prefs = await SharedPreferences.getInstance();
       final historyJson = prefs.getStringList('sync_history') ?? [];
-      
+
       final loadedHistory = historyJson
           .map((jsonStr) => SyncOperation.fromJson(json.decode(jsonStr)))
           .toList();
-      
+
       setState(() {
         _syncHistory = loadedHistory;
       });
@@ -137,7 +139,7 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
       final historyJson = _syncHistory
           .map((operation) => json.encode(operation.toJson()))
           .toList();
-      
+
       // Keep only the last 50 sync operations to prevent storage bloat
       final limitedHistory = historyJson.take(50).toList();
       await prefs.setStringList('sync_history', limitedHistory);
@@ -151,7 +153,8 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Clear Sync History'),
-        content: const Text('Are you sure you want to clear all sync history? This action cannot be undone.'),
+        content: const Text(
+            'Are you sure you want to clear all sync history? This action cannot be undone.'),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -179,7 +182,7 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
 
   List<List<SyncOperation>> _groupSyncOperationsBySession() {
     final Map<String, List<SyncOperation>> sessionGroups = {};
-    
+
     for (final operation in _syncHistory) {
       final sessionId = operation.sessionId;
       if (!sessionGroups.containsKey(sessionId)) {
@@ -187,11 +190,12 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
       }
       sessionGroups[sessionId]!.add(operation);
     }
-    
+
     // Sort sessions by timestamp (newest first)
     final sortedSessions = sessionGroups.entries.toList()
-      ..sort((a, b) => b.value.first.timestamp.compareTo(a.value.first.timestamp));
-    
+      ..sort(
+          (a, b) => b.value.first.timestamp.compareTo(a.value.first.timestamp));
+
     return sortedSessions.map((entry) => entry.value).toList();
   }
 
@@ -211,7 +215,8 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
       'stock_balances',
       'stock_intake',
       'intake_balances',
-      'expenditures'
+      'expenditures',
+      'stock_counts'
     ];
 
     try {
@@ -234,7 +239,7 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
 
       // Perform actual sync and get results
       final syncResults = await _syncService.syncAll();
-      
+
       // Update sync history with actual results
       setState(() {
         for (String tableName in tables) {
@@ -243,7 +248,7 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
           if (index != -1) {
             final tableResults = syncResults[tableName];
             final recordsCount = tableResults?['synced'] ?? 0;
-            
+
             _syncHistory[index] = SyncOperation(
               tableName: tableName,
               status: SyncStatus.completed,
@@ -257,7 +262,7 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
         }
         _lastSyncTime = DateTime.now();
       });
-      
+
       // Save sync history to persistent storage
       await _saveSyncHistory();
     } catch (e) {
@@ -278,7 +283,7 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
           }
         }
       });
-      
+
       // Save sync history even on failure
       await _saveSyncHistory();
     } finally {
@@ -415,20 +420,23 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
 
   void _showSessionDetails(List<SyncOperation> sessionOperations) {
     final firstOperation = sessionOperations.first;
-    final totalRecords = sessionOperations.fold<int>(0, (sum, op) => sum + op.recordsCount);
-    final hasFailures = sessionOperations.any((op) => op.status == SyncStatus.failed);
-    final allCompleted = sessionOperations.every((op) => op.status == SyncStatus.completed);
+    final totalRecords =
+        sessionOperations.fold<int>(0, (sum, op) => sum + op.recordsCount);
+    final hasFailures =
+        sessionOperations.any((op) => op.status == SyncStatus.failed);
+    final allCompleted =
+        sessionOperations.every((op) => op.status == SyncStatus.completed);
     final totalDuration = sessionOperations.fold<Duration>(
-      Duration.zero, 
+      Duration.zero,
       (sum, op) => sum + op.duration,
     );
-    
-    final statusText = hasFailures 
-        ? 'Failed' 
-        : allCompleted 
-            ? 'Completed' 
+
+    final statusText = hasFailures
+        ? 'Failed'
+        : allCompleted
+            ? 'Completed'
             : 'In Progress';
-    
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -442,9 +450,14 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
               children: [
                 _buildDetailRow('Status', statusText),
                 _buildDetailRow('Session ID', firstOperation.sessionId),
-                _buildDetailRow('Timestamp', DateFormat('MMM dd, yyyy HH:mm:ss').format(firstOperation.timestamp)),
-                _buildDetailRow('Total Duration', '${totalDuration.inSeconds}.${(totalDuration.inMilliseconds % 1000).toString().padLeft(3, '0')}s'),
-                _buildDetailRow('Tables Synced', sessionOperations.length.toString()),
+                _buildDetailRow(
+                    'Timestamp',
+                    DateFormat('MMM dd, yyyy HH:mm:ss')
+                        .format(firstOperation.timestamp)),
+                _buildDetailRow('Total Duration',
+                    '${totalDuration.inSeconds}.${(totalDuration.inMilliseconds % 1000).toString().padLeft(3, '0')}s'),
+                _buildDetailRow(
+                    'Tables Synced', sessionOperations.length.toString()),
                 _buildDetailRow('Total Records', totalRecords.toString()),
                 const SizedBox(height: 16),
                 const Text(
@@ -453,67 +466,70 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
                 ),
                 const SizedBox(height: 8),
                 ...sessionOperations.map((operation) => Card(
-                  margin: const EdgeInsets.only(bottom: 8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(12),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                shape: BoxShape.circle,
-                                color: operation.status == SyncStatus.completed
-                                    ? Colors.green
-                                    : operation.status == SyncStatus.failed
-                                        ? Colors.red
-                                        : Colors.orange,
-                              ),
+                            Row(
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    shape: BoxShape.circle,
+                                    color: operation.status ==
+                                            SyncStatus.completed
+                                        ? Colors.green
+                                        : operation.status == SyncStatus.failed
+                                            ? Colors.red
+                                            : Colors.orange,
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  _getDisplayName(operation.tableName),
+                                  style: const TextStyle(
+                                      fontWeight: FontWeight.w500),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
+                            const SizedBox(height: 4),
                             Text(
-                              _getDisplayName(operation.tableName),
-                              style: const TextStyle(fontWeight: FontWeight.w500),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 4),
-                        Text(
-                           '${operation.recordsCount} records • ${operation.duration.inSeconds}.${(operation.duration.inMilliseconds % 1000).toString().padLeft(3, '0')}s',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 12,
-                          ),
-                        ),
-                        if (operation.detailedResults != null && operation.detailedResults!.isNotEmpty) ...[
-                           const SizedBox(height: 4),
-                           ...operation.detailedResults!.entries.map(
-                            (entry) => Text(
-                              '${_getDetailLabel(entry.key)}: ${entry.value}',
+                              '${operation.recordsCount} records • ${operation.duration.inSeconds}.${(operation.duration.inMilliseconds % 1000).toString().padLeft(3, '0')}s',
                               style: TextStyle(
                                 color: Colors.grey[600],
-                                fontSize: 11,
+                                fontSize: 12,
                               ),
                             ),
-                          ),
-                        ],
-                        if (operation.error != null) ...[
-                           const SizedBox(height: 4),
-                           Text(
-                             'Error: ${operation.error}',
-                            style: const TextStyle(
-                              color: Colors.red,
-                              fontSize: 11,
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                )),
+                            if (operation.detailedResults != null &&
+                                operation.detailedResults!.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              ...operation.detailedResults!.entries.map(
+                                (entry) => Text(
+                                  '${_getDetailLabel(entry.key)}: ${entry.value}',
+                                  style: TextStyle(
+                                    color: Colors.grey[600],
+                                    fontSize: 11,
+                                  ),
+                                ),
+                              ),
+                            ],
+                            if (operation.error != null) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                'Error: ${operation.error}',
+                                style: const TextStyle(
+                                  color: Colors.red,
+                                  fontSize: 11,
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    )),
               ],
             ),
           ),
@@ -563,13 +579,19 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 _buildDetailRow('Status', _getStatusText(operation.status)),
-                _buildDetailRow('Timestamp', DateFormat('MMM dd, yyyy HH:mm:ss').format(operation.timestamp)),
-                _buildDetailRow('Duration', '${operation.duration.inSeconds}.${(operation.duration.inMilliseconds % 1000).toString().padLeft(3, '0')}s'),
-                _buildDetailRow('Total Records', operation.recordsCount.toString()),
-                if (operation.detailedResults != null) ...
-                  operation.detailedResults!.entries.map((entry) =>
-                    _buildDetailRow(_getDetailLabel(entry.key), entry.value.toString())
-                  ).toList(),
+                _buildDetailRow(
+                    'Timestamp',
+                    DateFormat('MMM dd, yyyy HH:mm:ss')
+                        .format(operation.timestamp)),
+                _buildDetailRow('Duration',
+                    '${operation.duration.inSeconds}.${(operation.duration.inMilliseconds % 1000).toString().padLeft(3, '0')}s'),
+                _buildDetailRow(
+                    'Total Records', operation.recordsCount.toString()),
+                if (operation.detailedResults != null)
+                  ...operation.detailedResults!.entries
+                      .map((entry) => _buildDetailRow(
+                          _getDetailLabel(entry.key), entry.value.toString()))
+                      .toList(),
                 if (operation.error != null) ...[
                   const SizedBox(height: 8),
                   const Text(
@@ -667,30 +689,37 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
       case 'downloaded':
         return 'Downloaded';
       default:
-        return key.replaceAll('_', ' ').split(' ').map((word) => 
-          word.isNotEmpty ? word[0].toUpperCase() + word.substring(1) : ''
-        ).join(' ');
+        return key
+            .replaceAll('_', ' ')
+            .split(' ')
+            .map((word) => word.isNotEmpty
+                ? word[0].toUpperCase() + word.substring(1)
+                : '')
+            .join(' ');
     }
   }
 
   Widget _buildSyncSessionCard(List<SyncOperation> sessionOperations) {
     final firstOperation = sessionOperations.first;
-    final totalRecords = sessionOperations.fold<int>(0, (sum, op) => sum + op.recordsCount);
-    final hasFailures = sessionOperations.any((op) => op.status == SyncStatus.failed);
-    final allCompleted = sessionOperations.every((op) => op.status == SyncStatus.completed);
-    
-    final statusColor = hasFailures 
-        ? Colors.red 
-        : allCompleted 
-            ? Colors.green 
+    final totalRecords =
+        sessionOperations.fold<int>(0, (sum, op) => sum + op.recordsCount);
+    final hasFailures =
+        sessionOperations.any((op) => op.status == SyncStatus.failed);
+    final allCompleted =
+        sessionOperations.every((op) => op.status == SyncStatus.completed);
+
+    final statusColor = hasFailures
+        ? Colors.red
+        : allCompleted
+            ? Colors.green
             : Colors.orange;
-    
-    final statusText = hasFailures 
-        ? 'Failed' 
-        : allCompleted 
-            ? 'Completed' 
+
+    final statusText = hasFailures
+        ? 'Failed'
+        : allCompleted
+            ? 'Completed'
             : 'In Progress';
-    
+
     return Card(
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 2,
@@ -709,7 +738,11 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: Icon(
-                  hasFailures ? Icons.error : allCompleted ? Icons.check_circle : Icons.sync,
+                  hasFailures
+                      ? Icons.error
+                      : allCompleted
+                          ? Icons.check_circle
+                          : Icons.sync,
                   color: statusColor,
                   size: 20,
                 ),
@@ -751,7 +784,8 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
                 crossAxisAlignment: CrossAxisAlignment.end,
                 children: [
                   Text(
-                    DateFormat('MMM dd, HH:mm').format(firstOperation.timestamp),
+                    DateFormat('MMM dd, HH:mm')
+                        .format(firstOperation.timestamp),
                     style: TextStyle(
                       color: Colors.grey.shade600,
                       fontSize: 12,
@@ -948,38 +982,40 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
                         ),
                       ),
                     Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const Text(
-                            'Recent Sync Operations',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        const Text(
+                          'Recent Sync Operations',
+                          style: TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                          ),
+                        ),
+                        Row(
+                          children: [
+                            TextButton.icon(
+                              onPressed: _syncHistory.isEmpty
+                                  ? null
+                                  : _clearSyncHistory,
+                              icon: const Icon(Icons.clear_all, size: 18),
+                              label: const Text('Clear History'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.orange.shade600,
+                              ),
                             ),
-                          ),
-                          Row(
-                            children: [
-                              TextButton.icon(
-                                onPressed: _syncHistory.isEmpty ? null : _clearSyncHistory,
-                                icon: const Icon(Icons.clear_all, size: 18),
-                                label: const Text('Clear History'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Colors.orange.shade600,
-                                ),
+                            const SizedBox(width: 8),
+                            TextButton.icon(
+                              onPressed: _isSyncing ? null : _resetDatabase,
+                              icon: const Icon(Icons.restore, size: 18),
+                              label: const Text('Reset DB'),
+                              style: TextButton.styleFrom(
+                                foregroundColor: Colors.red.shade600,
                               ),
-                              const SizedBox(width: 8),
-                              TextButton.icon(
-                                onPressed: _isSyncing ? null : _resetDatabase,
-                                icon: const Icon(Icons.restore, size: 18),
-                                label: const Text('Reset DB'),
-                                style: TextButton.styleFrom(
-                                  foregroundColor: Colors.red.shade600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 16),
                     Expanded(
                       child: _syncHistory.isEmpty
@@ -1014,7 +1050,8 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
                           : ListView.builder(
                               itemCount: _groupSyncOperationsBySession().length,
                               itemBuilder: (context, index) {
-                                final sessionOperations = _groupSyncOperationsBySession()[index];
+                                final sessionOperations =
+                                    _groupSyncOperationsBySession()[index];
                                 return _buildSyncSessionCard(sessionOperations);
                               },
                             ),

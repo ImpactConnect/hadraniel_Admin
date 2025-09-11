@@ -9,6 +9,7 @@ import 'package:path_provider/path_provider.dart';
 import '../../core/models/product_model.dart';
 import '../../core/models/outlet_model.dart';
 import '../../core/services/sync_service.dart';
+// ProductHarmonizationUtility import removed - harmonization disabled
 import '../../widgets/dashboard_layout.dart';
 import 'product_detail_popup.dart';
 import 'add_product_dialog.dart';
@@ -37,8 +38,6 @@ class _ProductsScreenState extends State<ProductsScreen> {
     }
     return 'Custom';
   }
-
-
 
   @override
   void initState() {
@@ -405,6 +404,8 @@ class _ProductsScreenState extends State<ProductsScreen> {
     );
   }
 
+  // Harmonization method removed to prevent merging of separate product assignments
+
   @override
   Widget build(BuildContext context) {
     // Filter products based on search query and filters
@@ -465,6 +466,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
           onPressed: _exportProductsToPDF,
           tooltip: 'Export to PDF',
         ),
+        // Harmonization removed to keep each product assignment as separate record
         const SizedBox(width: 8),
       ],
       child: Container(
@@ -504,10 +506,13 @@ class _ProductsScreenState extends State<ProductsScreen> {
                         icon: const Icon(Icons.add),
                         label: const Text('Add New Product'),
                         style: ElevatedButton.styleFrom(
-                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          backgroundColor:
+                              Theme.of(context).colorScheme.primary,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 12.0, horizontal: 16.0),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8.0)),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 12.0, horizontal: 16.0),
+                          shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8.0)),
                         ),
                       ),
                     ],
@@ -643,6 +648,7 @@ class _ProductsScreenState extends State<ProductsScreen> {
                                       'Kg',
                                       'Pcs',
                                       'Carton',
+                                      '1/2 Carton',
                                       'Paint',
                                       'Cup',
                                       'Ltr',

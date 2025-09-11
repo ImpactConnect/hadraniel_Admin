@@ -49,6 +49,24 @@ class StockBalance {
     );
   }
 
+  factory StockBalance.fromMap(Map<String, dynamic> map) {
+    return StockBalance(
+      id: map['id'] as String,
+      outletId: map['outlet_id'] as String,
+      productId: map['product_id'] as String,
+      givenQuantity: (map['given_quantity'] as num).toDouble(),
+      soldQuantity: (map['sold_quantity'] as num?)?.toDouble() ?? 0,
+      balanceQuantity: (map['balance_quantity'] as num).toDouble(),
+      lastUpdated: map['last_updated'] != null
+          ? DateTime.parse(map['last_updated'] as String)
+          : null,
+      createdAt: map['created_at'] != null
+          ? DateTime.parse(map['created_at'] as String)
+          : null,
+      synced: (map['synced'] as int?) == 1,
+    );
+  }
+
   Map<String, dynamic> toMap() {
     return {
       'id': id,

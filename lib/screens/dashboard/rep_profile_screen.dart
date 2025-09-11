@@ -181,9 +181,9 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                                           'Contact Information',
                                           style: theme.textTheme.titleLarge
                                               ?.copyWith(
-                                                fontWeight: FontWeight.bold,
-                                                color: colorScheme.primary,
-                                              ),
+                                            fontWeight: FontWeight.bold,
+                                            color: colorScheme.primary,
+                                          ),
                                         ),
                                       ),
                                     ],
@@ -211,8 +211,8 @@ class _RepProfileScreenState extends State<RepProfileScreen> {
                                     Icons.calendar_today_outlined,
                                     'Created',
                                     widget.rep.createdAt?.toString().split(
-                                          '.',
-                                        )[0] ??
+                                              '.',
+                                            )[0] ??
                                         'N/A',
                                     colorScheme,
                                     isLast: true,

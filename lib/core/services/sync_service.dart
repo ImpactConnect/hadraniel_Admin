@@ -13,9 +13,11 @@ import '../models/stock_intake_model.dart';
 import '../models/intake_balance_model.dart';
 import '../database/database_helper.dart';
 import 'stock_intake_service.dart';
+import 'product_harmonization_utility.dart';
 
 class SyncService {
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  final Uuid _uuid = const Uuid();
 
   // Cache for outlet names to avoid repeated database queries
   final Map<String, String> _outletNameCache = {};
@@ -51,7 +53,7 @@ class SyncService {
 
     // Build the main query to get sales with aggregated data
     String query;
-    
+
     if (productId != null) {
       // When filtering by specific product, get the quantity of that specific product
       query = '''
@@ -618,10 +620,87 @@ class SyncService {
     }
   }
 
+  // Sync outlets from local database to cloud
+  Future<int> syncOutletsToCloud() async {
+    try {
+      final db = await _dbHelper.database;
+      int syncedCount = 0;
+
+      // Get all local outlets
+      final localOutlets = await db.query('outlets');
+      
+      print('Found ${localOutlets.length} local outlets to sync to cloud');
+
+      for (var outletMap in localOutlets) {
+        final outlet = Outlet.fromMap(outletMap);
+
+        try {
+          // Check if outlet exists in cloud first
+          final existingCloudOutlet = await supabase
+              .from('outlets')
+              .select()
+              .eq('id', outlet.id)
+              .maybeSingle();
+
+          if (existingCloudOutlet != null) {
+            // Outlet exists in cloud, update it
+            await supabase
+                .from('outlets')
+                .update({
+                  'name': outlet.name,
+                  'location': outlet.location,
+                })
+                .eq('id', outlet.id);
+            print('Updated existing outlet ${outlet.id} in cloud');
+          } else {
+            // Outlet doesn't exist in cloud, insert it
+            await supabase.from('outlets').insert({
+              'id': outlet.id,
+              'name': outlet.name,
+              'location': outlet.location,
+            });
+            print('Inserted new outlet ${outlet.id} to cloud');
+          }
+
+          syncedCount++;
+        } catch (e) {
+          print('Error syncing outlet ${outlet.id} to cloud: $e');
+          // Continue with other outlets instead of failing entire sync
+        }
+      }
+
+      return syncedCount;
+    } catch (e) {
+      print('Error syncing outlets to cloud: $e');
+      throw e;
+    }
+  }
+
+  // Insert or update outlet in local database
+  Future<void> insertOrUpdateOutlet(Outlet outlet) async {
+    try {
+      final db = await _dbHelper.database;
+      
+      await db.insert(
+        'outlets',
+        outlet.toMap(),
+        conflictAlgorithm: ConflictAlgorithm.replace,
+      );
+      
+      print('Successfully inserted/updated outlet: ${outlet.name}');
+    } catch (e) {
+      print('Error inserting/updating outlet: $e');
+      throw e;
+    }
+  }
+
   // Products Management
   Future<void> insertProduct(Product product) async {
     try {
       final db = await _dbHelper.database;
+
+      // Always create new product entry - no harmonization
+      // Each product assignment should have its own unique record
       await db.insert('products', {...product.toMap(), 'is_synced': 0});
 
       // Update the intake balance when a product is assigned to an outlet
@@ -643,74 +722,33 @@ class SyncService {
   Future<void> updateProduct(Product product) async {
     try {
       final db = await _dbHelper.database;
+      
+      // Update the existing product record with the same ID
+      final updatedProduct = Product(
+        id: product.id, // Keep the same ID
+        productName: product.productName,
+        quantity: product.quantity,
+        unit: product.unit,
+        costPerUnit: product.costPerUnit,
+        totalCost: product.quantity * product.costPerUnit, // Recalculate total cost
+        dateAdded: product.dateAdded, // Keep original date added
+        lastUpdated: DateTime.now(), // Update the last updated timestamp
+        description: product.description,
+        outletId: product.outletId,
+        createdAt: product.createdAt, // Keep original creation time
+        isSynced: false, // Mark as unsynced for cloud sync
+      );
 
-      // Get the previous product to calculate quantity difference
-      final List<Map<String, dynamic>> previousProductMaps = await db.query(
+      // Update the existing record in the database
+      await db.update(
         'products',
+        updatedProduct.toMap(),
         where: 'id = ?',
         whereArgs: [product.id],
       );
 
-      if (previousProductMaps.isNotEmpty) {
-        final previousProduct = Product.fromMap(previousProductMaps.first);
-
-        // Update the product in the database and mark it for syncing
-        await db.update(
-          'products',
-          {...product.toMap(), 'is_synced': 0},
-          where: 'id = ?',
-          whereArgs: [product.id],
-        );
-
-        // Only update balance if the quantity has actually changed and increased
-        if (previousProduct.productName == product.productName) {
-          // Calculate the difference in quantity
-          final quantityDifference =
-              product.quantity - previousProduct.quantity;
-
-          // Only update balance if quantity increased (additional assignment needed)
-          if (quantityDifference > 0) {
-            final outletName = await getOutletName(product.outletId);
-            final stockIntakeService = StockIntakeService();
-            final success = await stockIntakeService.updateBalanceOnProductAssignment(
-              product.productName,
-              quantityDifference,
-              product.outletId,
-              outletName,
-              product.costPerUnit,
-            );
-            
-            if (!success) {
-              throw Exception('Insufficient balance for quantity increase');
-            }
-          }
-          // If quantity decreased or stayed the same, no balance update needed
-          // as we're not consuming additional stock
-        } else {
-          // If product name changed, treat it as a new assignment
-          final stockIntakeService = StockIntakeService();
-          final outletName = await getOutletName(product.outletId);
-          final success = await stockIntakeService.updateBalanceOnProductAssignment(
-            product.productName,
-            product.quantity,
-            product.outletId,
-            outletName,
-            product.costPerUnit,
-          );
-          
-          if (!success) {
-            throw Exception('Insufficient balance for product assignment');
-          }
-        }
-      } else {
-        // If product doesn't exist (shouldn't happen), just update and mark for syncing
-        await db.update(
-          'products',
-          {...product.toMap(), 'is_synced': 0},
-          where: 'id = ?',
-          whereArgs: [product.id],
-        );
-      }
+      // Add to sync queue for cloud synchronization
+      await _addToSyncQueue('products', product.id);
     } catch (e) {
       print('Error updating product: $e');
       throw e;
@@ -1334,7 +1372,12 @@ class SyncService {
 
       // Sync user and outlet data
       await syncProfilesToLocalDb();
+      
+      // Sync outlets both ways - first push local outlets to cloud, then pull from cloud
+      final outletsSyncedToCloud = await syncOutletsToCloud();
       syncResults['outlets'] = await syncOutletsToLocalDb();
+      syncResults['outlets']!['uploaded_to_cloud'] = outletsSyncedToCloud;
+      
       syncResults['reps'] = await syncRepsToLocalDb();
       await syncCustomersToLocalDb();
 
@@ -1609,14 +1652,42 @@ class SyncService {
         // Clear existing stock balances
         await txn.delete('stock_balances');
 
-        // Insert new stock balances
+        // Insert new stock balances with foreign key validation
         for (var stockData in stockBalances) {
+          final outletId = stockData['outlet_id'];
+          final productId = stockData['product_id'];
+          
+          // Validate that outlet exists
+          final outletExists = await txn.query(
+            'outlets',
+            where: 'id = ?',
+            whereArgs: [outletId],
+          );
+          
+          // Validate that product exists
+          final productExists = await txn.query(
+            'products',
+            where: 'id = ?',
+            whereArgs: [productId],
+          );
+          
+          if (outletExists.isEmpty) {
+            print('Warning: Skipping stock balance ${stockData['id']} - outlet $outletId does not exist in local database');
+            continue;
+          }
+          
+          if (productExists.isEmpty) {
+            print('Warning: Skipping stock balance ${stockData['id']} - product $productId does not exist in local database');
+            continue;
+          }
+          
+          // Insert only if both foreign keys are valid
           await txn.insert(
               'stock_balances',
               {
                 'id': stockData['id'],
-                'outlet_id': stockData['outlet_id'],
-                'product_id': stockData['product_id'],
+                'outlet_id': outletId,
+                'product_id': productId,
                 'given_quantity': stockData['given_quantity'],
                 'sold_quantity': stockData['sold_quantity'] ?? 0,
                 'balance_quantity': stockData['balance_quantity'],

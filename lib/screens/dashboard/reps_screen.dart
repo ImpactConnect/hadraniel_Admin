@@ -279,185 +279,262 @@ class _RepsScreenState extends State<RepsScreen> {
                                 shape: RoundedRectangleBorder(
                                   borderRadius: BorderRadius.circular(12),
                                 ),
-                                child: Center(
-                                  child: SingleChildScrollView(
-                                    scrollDirection: Axis.horizontal,
-                                    child: DataTable(
-                                      headingRowColor:
-                                          MaterialStateProperty.all(
-                                        colorScheme.primary.withOpacity(
-                                          0.05,
+                                child: Column(
+                                  children: [
+                                    // Fixed Header
+                                    Container(
+                                      decoration: BoxDecoration(
+                                        color: colorScheme.primary.withOpacity(0.05),
+                                        borderRadius: const BorderRadius.only(
+                                          topLeft: Radius.circular(12),
+                                          topRight: Radius.circular(12),
                                         ),
                                       ),
-                                      dataRowMinHeight: 64,
-                                      dataRowMaxHeight: 64,
-                                      columns: [
-                                        DataColumn(
-                                          label: Text(
-                                            'Name',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: colorScheme.primary,
-                                            ),
-                                          ),
-                                        ),
-                                        DataColumn(
-                                          label: Text(
-                                            'Outlet Assigned',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: colorScheme.primary,
-                                            ),
-                                          ),
-                                        ),
-                                        DataColumn(
-                                          label: Text(
-                                            'Date Created',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: colorScheme.primary,
-                                            ),
-                                          ),
-                                        ),
-                                        DataColumn(
-                                          label: Text(
-                                            'Actions',
-                                            style: TextStyle(
-                                              fontWeight: FontWeight.bold,
-                                              color: colorScheme.primary,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
-                                      rows: filteredReps.map((rep) {
-                                        return DataRow(
-                                          cells: [
-                                            DataCell(
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  Hero(
-                                                    tag: 'rep-avatar-${rep.id}',
-                                                    child: CircleAvatar(
-                                                      radius: 16,
-                                                      backgroundColor:
-                                                          colorScheme.primary,
-                                                      child: Text(
-                                                        rep.fullName
-                                                            .substring(0, 1)
-                                                            .toUpperCase(),
-                                                        style: const TextStyle(
-                                                          color: Colors.white,
-                                                          fontWeight:
-                                                              FontWeight.bold,
-                                                        ),
-                                                      ),
-                                                    ),
-                                                  ),
-                                                  const SizedBox(width: 12),
-                                                  Column(
-                                                    crossAxisAlignment:
-                                                        CrossAxisAlignment
-                                                            .start,
-                                                    mainAxisAlignment:
-                                                        MainAxisAlignment
-                                                            .center,
-                                                    children: [
-                                                      Text(
-                                                        rep.fullName,
-                                                        style: const TextStyle(
-                                                          fontWeight:
-                                                              FontWeight.w600,
-                                                        ),
-                                                      ),
-                                                      Text(
-                                                        rep.email,
-                                                        style: TextStyle(
-                                                          fontSize: 12,
-                                                          color:
-                                                              Colors.grey[600],
-                                                        ),
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ],
-                                              ),
-                                              onTap: () => _showRepDetails(rep),
-                                            ),
-                                            DataCell(
-                                              Container(
-                                                padding:
-                                                    const EdgeInsets.symmetric(
-                                                  horizontal: 12,
-                                                  vertical: 6,
-                                                ),
-                                                decoration: BoxDecoration(
-                                                  color: colorScheme.primary
-                                                      .withOpacity(0.1),
-                                                  borderRadius:
-                                                      BorderRadius.circular(16),
-                                                ),
+                                      child: SingleChildScrollView(
+                                        scrollDirection: Axis.horizontal,
+                                        child: DataTable(
+                                          headingRowHeight: 56,
+                                          dataRowMinHeight: 0,
+                                          dataRowMaxHeight: 0,
+                                          columns: [
+                                            DataColumn(
+                                              label: SizedBox(
+                                                width: 250,
                                                 child: Text(
-                                                  _getOutletName(rep.outletId),
+                                                  'Name',
                                                   style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
                                                     color: colorScheme.primary,
-                                                    fontWeight: FontWeight.w500,
                                                   ),
                                                 ),
                                               ),
-                                              onTap: () => _showRepDetails(rep),
                                             ),
-                                            DataCell(
-                                              Text(
-                                                rep.createdAt?.toString().split(
-                                                          '.',
-                                                        )[0] ??
-                                                    'N/A',
+                                            DataColumn(
+                                              label: SizedBox(
+                                                width: 180,
+                                                child: Text(
+                                                  'Outlet Assigned',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: colorScheme.primary,
+                                                  ),
+                                                ),
                                               ),
-                                              onTap: () => _showRepDetails(rep),
                                             ),
-                                            DataCell(
-                                              Row(
-                                                mainAxisSize: MainAxisSize.min,
-                                                children: [
-                                                  IconButton(
-                                                    icon: Icon(
-                                                      Icons.visibility,
-                                                      color:
-                                                          colorScheme.primary,
-                                                    ),
-                                                    onPressed: () =>
-                                                        _showRepDetails(rep),
-                                                    tooltip: 'View Details',
+                                            DataColumn(
+                                              label: SizedBox(
+                                                width: 150,
+                                                child: Text(
+                                                  'Date Created',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: colorScheme.primary,
                                                   ),
-                                                  IconButton(
-                                                    icon: Icon(
-                                                      Icons.edit,
-                                                      color: Colors.orange[700],
-                                                    ),
-                                                    onPressed: () =>
-                                                        _navigateToRepForm(
-                                                      rep: rep,
-                                                    ),
-                                                    tooltip: 'Edit Rep',
+                                                ),
+                                              ),
+                                            ),
+                                            DataColumn(
+                                              label: SizedBox(
+                                                width: 150,
+                                                child: Text(
+                                                  'Actions',
+                                                  style: TextStyle(
+                                                    fontWeight: FontWeight.bold,
+                                                    color: colorScheme.primary,
                                                   ),
-                                                  IconButton(
-                                                    icon: Icon(
-                                                      Icons.delete,
-                                                      color: Colors.red[700],
-                                                    ),
-                                                    onPressed: () =>
-                                                        _deleteRep(rep),
-                                                    tooltip: 'Delete Rep',
-                                                  ),
-                                                ],
+                                                ),
                                               ),
                                             ),
                                           ],
-                                        );
-                                      }).toList(),
+                                          rows: const [], // Empty rows for header only
+                                        ),
+                                      ),
                                     ),
-                                  ),
+                                    // Scrollable Body
+                                    Expanded(
+                                      child: SingleChildScrollView(
+                                        child: SingleChildScrollView(
+                                          scrollDirection: Axis.horizontal,
+                                          child: DataTable(
+                                            headingRowHeight: 0,
+                                            dataRowMinHeight: 64,
+                                            dataRowMaxHeight: 64,
+                                            columns: [
+                                              DataColumn(
+                                                label: SizedBox(
+                                                  width: 250,
+                                                  child: Container(),
+                                                ),
+                                              ),
+                                              DataColumn(
+                                                label: SizedBox(
+                                                  width: 180,
+                                                  child: Container(),
+                                                ),
+                                              ),
+                                              DataColumn(
+                                                label: SizedBox(
+                                                  width: 150,
+                                                  child: Container(),
+                                                ),
+                                              ),
+                                              DataColumn(
+                                                label: SizedBox(
+                                                  width: 150,
+                                                  child: Container(),
+                                                ),
+                                              ),
+                                            ],
+                                            rows: filteredReps.map((rep) {
+                                              return DataRow(
+                                                cells: [
+                                                  DataCell(
+                                                    SizedBox(
+                                                      width: 250,
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          Hero(
+                                                            tag: 'rep-avatar-${rep.id}',
+                                                            child: CircleAvatar(
+                                                              radius: 16,
+                                                              backgroundColor:
+                                                                  colorScheme.primary,
+                                                              child: Text(
+                                                                rep.fullName
+                                                                    .substring(0, 1)
+                                                                    .toUpperCase(),
+                                                                style: const TextStyle(
+                                                                  color: Colors.white,
+                                                                  fontWeight:
+                                                                      FontWeight.bold,
+                                                                ),
+                                                              ),
+                                                            ),
+                                                          ),
+                                                          const SizedBox(width: 12),
+                                                          Expanded(
+                                                            child: Column(
+                                                              crossAxisAlignment:
+                                                                  CrossAxisAlignment
+                                                                      .start,
+                                                              mainAxisAlignment:
+                                                                  MainAxisAlignment
+                                                                      .center,
+                                                              children: [
+                                                                Text(
+                                                                  rep.fullName,
+                                                                  style: const TextStyle(
+                                                                    fontWeight:
+                                                                        FontWeight.w600,
+                                                                  ),
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),
+                                                                Text(
+                                                                  rep.email,
+                                                                  style: TextStyle(
+                                                                    fontSize: 12,
+                                                                    color:
+                                                                        Colors.grey[600],
+                                                                  ),
+                                                                  overflow: TextOverflow.ellipsis,
+                                                                ),
+                                                              ],
+                                                            ),
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                    onTap: () => _showRepDetails(rep),
+                                                  ),
+                                                  DataCell(
+                                                    SizedBox(
+                                                      width: 180,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets.symmetric(
+                                                          horizontal: 12,
+                                                          vertical: 6,
+                                                        ),
+                                                        decoration: BoxDecoration(
+                                                          color: colorScheme.primary
+                                                              .withOpacity(0.1),
+                                                          borderRadius:
+                                                              BorderRadius.circular(16),
+                                                        ),
+                                                        child: Text(
+                                                          _getOutletName(rep.outletId),
+                                                          style: TextStyle(
+                                                            color: colorScheme.primary,
+                                                            fontWeight: FontWeight.w500,
+                                                          ),
+                                                          overflow: TextOverflow.ellipsis,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    onTap: () => _showRepDetails(rep),
+                                                  ),
+                                                  DataCell(
+                                                    SizedBox(
+                                                      width: 150,
+                                                      child: Text(
+                                                        rep.createdAt?.toString().split(
+                                                                  '.',
+                                                                )[0] ??
+                                                            'N/A',
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ),
+                                                    onTap: () => _showRepDetails(rep),
+                                                  ),
+                                                  DataCell(
+                                                    SizedBox(
+                                                      width: 150,
+                                                      child: Row(
+                                                        mainAxisSize: MainAxisSize.min,
+                                                        children: [
+                                                          IconButton(
+                                                            icon: Icon(
+                                                              Icons.visibility,
+                                                              color:
+                                                                  colorScheme.primary,
+                                                            ),
+                                                            onPressed: () =>
+                                                                _showRepDetails(rep),
+                                                            tooltip: 'View Details',
+                                                          ),
+                                                          IconButton(
+                                                            icon: Icon(
+                                                              Icons.edit,
+                                                              color: Colors.orange[700],
+                                                            ),
+                                                            onPressed: () =>
+                                                                _navigateToRepForm(
+                                                              rep: rep,
+                                                            ),
+                                                            tooltip: 'Edit Rep',
+                                                          ),
+                                                          IconButton(
+                                                            icon: Icon(
+                                                              Icons.delete,
+                                                              color: Colors.red[700],
+                                                            ),
+                                                            onPressed: () =>
+                                                                _deleteRep(rep),
+                                                            tooltip: 'Delete Rep',
+                                                          ),
+                                                        ],
+                                                      ),
+                                                    ),
+                                                  ),
+                                                ],
+                                              );
+                                            }).toList(),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ),
                       ),

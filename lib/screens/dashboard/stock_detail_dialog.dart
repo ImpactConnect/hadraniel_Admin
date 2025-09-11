@@ -197,8 +197,8 @@ class _StockDetailDialogState extends State<StockDetailDialog> {
                       style: const TextStyle(fontWeight: FontWeight.w500),
                     )),
                     DataCell(Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
                         color: Colors.blue.shade100,
                         borderRadius: BorderRadius.circular(12),
@@ -238,19 +238,25 @@ class _StockDetailDialogState extends State<StockDetailDialog> {
                     const DataCell(Text('')), // Empty outlet cell
                     const DataCell(Text('')), // Empty customer cell
                     DataCell(Container(
-                      padding:
-                          const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 8, vertical: 4),
                       decoration: BoxDecoration(
-                        color: Theme.of(context).colorScheme.primary.withOpacity(0.2),
+                        color: Theme.of(context)
+                            .colorScheme
+                            .primary
+                            .withOpacity(0.2),
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                         _salesHistory
-                              .fold<double>(
-                                0.0,
-                                (sum, sale) => sum + ((sale['quantity'] as num?)?.toDouble() ?? 0.0),
-                              )
-                              .toStringAsFixed(3),
+                        _salesHistory
+                            .fold<double>(
+                              0.0,
+                              (sum, sale) =>
+                                  sum +
+                                  ((sale['quantity'] as num?)?.toDouble() ??
+                                      0.0),
+                            )
+                            .toStringAsFixed(3),
                         style: TextStyle(
                           fontWeight: FontWeight.bold,
                           color: Theme.of(context).colorScheme.primary,
@@ -260,9 +266,11 @@ class _StockDetailDialogState extends State<StockDetailDialog> {
                     )),
                     DataCell(Text(
                       '₦${_salesHistory.fold<double>(
-                        0.0,
-                        (sum, sale) => sum + (sale['total_amount'] as num? ?? 0).toDouble(),
-                      ).toStringAsFixed(2)}',
+                            0.0,
+                            (sum, sale) =>
+                                sum +
+                                (sale['total_amount'] as num? ?? 0).toDouble(),
+                          ).toStringAsFixed(2)}',
                       style: TextStyle(
                         fontWeight: FontWeight.bold,
                         color: Theme.of(context).colorScheme.primary,

@@ -51,7 +51,7 @@ class DatabaseHelper {
     final database = await dbFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 12,
+        version: 13,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         onOpen: _onOpen,
@@ -287,6 +287,71 @@ class DatabaseHelper {
         print('Warning: Database migration v12 may not have completed fully');
       }
     }
+
+    if (oldVersion < 13) {
+      // Add stock count tables
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS stock_counts (
+          id TEXT PRIMARY KEY,
+          outlet_id TEXT NOT NULL,
+          count_date TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'in_progress',
+          created_by TEXT NOT NULL,
+          completed_at TEXT,
+          notes TEXT,
+          created_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0,
+          FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS stock_count_items (
+          id TEXT PRIMARY KEY,
+          stock_count_id TEXT NOT NULL,
+          product_id TEXT NOT NULL,
+          product_name TEXT NOT NULL,
+          theoretical_quantity REAL NOT NULL DEFAULT 0,
+          actual_quantity REAL NOT NULL DEFAULT 0,
+          variance REAL NOT NULL DEFAULT 0,
+          variance_percentage REAL NOT NULL DEFAULT 0,
+          cost_per_unit REAL NOT NULL DEFAULT 0,
+          value_impact REAL NOT NULL DEFAULT 0,
+          adjustment_reason TEXT,
+          notes TEXT,
+          created_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0,
+          FOREIGN KEY (stock_count_id) REFERENCES stock_counts (id),
+          FOREIGN KEY (product_id) REFERENCES products (id)
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS stock_adjustments (
+          id TEXT PRIMARY KEY,
+          product_id TEXT NOT NULL,
+          outlet_id TEXT NOT NULL,
+          product_name TEXT NOT NULL,
+          outlet_name TEXT NOT NULL,
+          adjustment_quantity REAL NOT NULL,
+          adjustment_type TEXT NOT NULL,
+          reason TEXT NOT NULL,
+          reason_details TEXT,
+          cost_per_unit REAL NOT NULL DEFAULT 0,
+          value_impact REAL NOT NULL DEFAULT 0,
+          created_by TEXT NOT NULL,
+          approved_by TEXT,
+          approved_at TEXT,
+          status TEXT NOT NULL DEFAULT 'pending',
+          stock_count_id TEXT,
+          created_at TEXT NOT NULL,
+          synced INTEGER DEFAULT 0,
+          FOREIGN KEY (product_id) REFERENCES products (id),
+          FOREIGN KEY (outlet_id) REFERENCES outlets (id),
+          FOREIGN KEY (stock_count_id) REFERENCES stock_counts (id)
+        )
+      ''');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -497,6 +562,69 @@ class DatabaseHelper {
         created_at TEXT NOT NULL
       )
     ''');
+
+    // Stock Count tables
+    await db.execute('''
+      CREATE TABLE stock_counts (
+        id TEXT PRIMARY KEY,
+        outlet_id TEXT NOT NULL,
+        count_date TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'in_progress',
+        created_by TEXT NOT NULL,
+        completed_at TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        synced INTEGER DEFAULT 0,
+        FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE stock_count_items (
+        id TEXT PRIMARY KEY,
+        stock_count_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        product_name TEXT NOT NULL,
+        theoretical_quantity REAL NOT NULL DEFAULT 0,
+        actual_quantity REAL NOT NULL DEFAULT 0,
+        variance REAL NOT NULL DEFAULT 0,
+        variance_percentage REAL NOT NULL DEFAULT 0,
+        cost_per_unit REAL NOT NULL DEFAULT 0,
+        value_impact REAL NOT NULL DEFAULT 0,
+        adjustment_reason TEXT,
+        notes TEXT,
+        created_at TEXT NOT NULL,
+        synced INTEGER DEFAULT 0,
+        FOREIGN KEY (stock_count_id) REFERENCES stock_counts (id),
+        FOREIGN KEY (product_id) REFERENCES products (id)
+      )
+    ''');
+
+    await db.execute('''
+      CREATE TABLE stock_adjustments (
+        id TEXT PRIMARY KEY,
+        product_id TEXT NOT NULL,
+        outlet_id TEXT NOT NULL,
+        product_name TEXT NOT NULL,
+        outlet_name TEXT NOT NULL,
+        adjustment_quantity REAL NOT NULL,
+        adjustment_type TEXT NOT NULL,
+        reason TEXT NOT NULL,
+        reason_details TEXT,
+        cost_per_unit REAL NOT NULL DEFAULT 0,
+        value_impact REAL NOT NULL DEFAULT 0,
+        created_by TEXT NOT NULL,
+        approved_by TEXT,
+        approved_at TEXT,
+        status TEXT NOT NULL DEFAULT 'pending',
+        stock_count_id TEXT,
+        created_at TEXT NOT NULL,
+        synced INTEGER DEFAULT 0,
+        FOREIGN KEY (product_id) REFERENCES products (id),
+        FOREIGN KEY (outlet_id) REFERENCES outlets (id),
+        FOREIGN KEY (stock_count_id) REFERENCES stock_counts (id)
+      )
+    ''');
   }
 
   Future<void> clearAllTables() async {
@@ -514,6 +642,9 @@ class DatabaseHelper {
       await txn.delete('product_distributions');
       await txn.delete('expenditures');
       await txn.delete('expenditure_categories');
+      await txn.delete('stock_count_items');
+      await txn.delete('stock_adjustments');
+      await txn.delete('stock_counts');
     });
   }
 
