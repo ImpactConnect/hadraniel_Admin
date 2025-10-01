@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/models/product_model.dart';
 import '../../core/services/sync_service.dart';
-import 'package:intl/intl.dart';
+// (import removed – intl not used in this file)
 
 class ProductDetailPopup extends StatelessWidget {
   final Product product;

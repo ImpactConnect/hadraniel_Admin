@@ -105,8 +105,10 @@ class _StockCountScreenState extends State<StockCountScreen>
       );
 
       // Load actual stocked-in and sold quantities
-      final stockedInQuantities = await _stockCountService.getStockedInQuantities(_selectedOutletId!);
-      final soldQuantities = await _stockCountService.getSoldQuantities(_selectedOutletId!);
+      final stockedInQuantities =
+          await _stockCountService.getStockedInQuantities(_selectedOutletId!);
+      final soldQuantities =
+          await _stockCountService.getSoldQuantities(_selectedOutletId!);
 
       setState(() {
         _currentStockCount = stockCount;
@@ -181,10 +183,12 @@ class _StockCountScreenState extends State<StockCountScreen>
     try {
       // Load existing items for this stock count
       final items = await _stockCountService.getStockCountItems(stockCount.id);
-      
+
       // Load actual stocked-in and sold quantities
-      final stockedInQuantities = await _stockCountService.getStockedInQuantities(stockCount.outletId);
-      final soldQuantities = await _stockCountService.getSoldQuantities(stockCount.outletId);
+      final stockedInQuantities =
+          await _stockCountService.getStockedInQuantities(stockCount.outletId);
+      final soldQuantities =
+          await _stockCountService.getSoldQuantities(stockCount.outletId);
 
       setState(() {
         _currentStockCount = stockCount;
@@ -206,9 +210,9 @@ class _StockCountScreenState extends State<StockCountScreen>
   Future<void> _viewStockCountDetails(StockCount stockCount) async {
     try {
       final items = await _stockCountService.getStockCountItems(stockCount.id);
-      
+
       if (!mounted) return;
-      
+
       showDialog(
         context: context,
         builder: (context) => _buildStockCountDetailsDialog(stockCount, items),
@@ -218,9 +222,10 @@ class _StockCountScreenState extends State<StockCountScreen>
     }
   }
 
-  Widget _buildStockCountDetailsDialog(StockCount stockCount, List<StockCountItem> items) {
+  Widget _buildStockCountDetailsDialog(
+      StockCount stockCount, List<StockCountItem> items) {
     final colorScheme = Theme.of(context).colorScheme;
-    
+
     return Dialog(
       child: Container(
         width: MediaQuery.of(context).size.width * 0.8,
@@ -254,7 +259,8 @@ class _StockCountScreenState extends State<StockCountScreen>
                 ),
                 const SizedBox(width: 16),
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
                   decoration: BoxDecoration(
                     color: _getStatusColor(stockCount.status).withOpacity(0.1),
                     borderRadius: BorderRadius.circular(16),
@@ -313,7 +319,7 @@ class _StockCountScreenState extends State<StockCountScreen>
               ],
             ),
             const SizedBox(height: 20),
-            
+
             // Summary Cards
             Row(
               children: [
@@ -329,7 +335,10 @@ class _StockCountScreenState extends State<StockCountScreen>
                 Expanded(
                   child: _buildSummaryCard(
                     'Items with Variance',
-                    items.where((item) => item.variance.abs() > 0.01).length.toString(),
+                    items
+                        .where((item) => item.variance.abs() > 0.01)
+                        .length
+                        .toString(),
                     Icons.warning,
                     Colors.orange,
                   ),
@@ -346,7 +355,7 @@ class _StockCountScreenState extends State<StockCountScreen>
               ],
             ),
             const SizedBox(height: 20),
-            
+
             // Items Table
             Expanded(
               child: Card(
@@ -429,14 +438,16 @@ class _StockCountScreenState extends State<StockCountScreen>
                         itemBuilder: (context, index) {
                           final item = items[index];
                           final hasVariance = item.variance.abs() > 0.01;
-                          
+
                           return Container(
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 12,
                             ),
                             decoration: BoxDecoration(
-                              color: hasVariance ? Colors.red.withOpacity(0.05) : null,
+                              color: hasVariance
+                                  ? Colors.red.withOpacity(0.05)
+                                  : null,
                               border: Border(
                                 bottom: BorderSide(
                                   color: Colors.grey[200]!,
@@ -476,9 +487,12 @@ class _StockCountScreenState extends State<StockCountScreen>
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       color: hasVariance
-                                          ? (item.variance > 0 ? Colors.green : Colors.red)
+                                          ? (item.variance > 0
+                                              ? Colors.green
+                                              : Colors.red)
                                           : null,
-                                      fontWeight: hasVariance ? FontWeight.bold : null,
+                                      fontWeight:
+                                          hasVariance ? FontWeight.bold : null,
                                     ),
                                   ),
                                 ),
@@ -489,9 +503,12 @@ class _StockCountScreenState extends State<StockCountScreen>
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       color: hasVariance
-                                          ? (item.valueImpact > 0 ? Colors.green : Colors.red)
+                                          ? (item.valueImpact > 0
+                                              ? Colors.green
+                                              : Colors.red)
                                           : null,
-                                      fontWeight: hasVariance ? FontWeight.bold : null,
+                                      fontWeight:
+                                          hasVariance ? FontWeight.bold : null,
                                     ),
                                   ),
                                 ),
@@ -505,7 +522,7 @@ class _StockCountScreenState extends State<StockCountScreen>
                 ),
               ),
             ),
-            
+
             // Bottom spacing
             const SizedBox(height: 16),
           ],
@@ -514,7 +531,8 @@ class _StockCountScreenState extends State<StockCountScreen>
     );
   }
 
-  Widget _buildSummaryCard(String title, String value, IconData icon, Color color) {
+  Widget _buildSummaryCard(
+      String title, String value, IconData icon, Color color) {
     return Card(
       elevation: 1,
       child: Padding(
@@ -565,7 +583,8 @@ class _StockCountScreenState extends State<StockCountScreen>
     );
   }
 
-  Future<void> _exportToCsv(StockCount stockCount, List<StockCountItem> items) async {
+  Future<void> _exportToCsv(
+      StockCount stockCount, List<StockCountItem> items) async {
     try {
       // Prepare CSV data
       List<List<dynamic>> csvData = [
@@ -601,7 +620,8 @@ class _StockCountScreenState extends State<StockCountScreen>
       }
 
       // Create file
-      final fileName = 'stock_count_${stockCount.id.substring(0, 8)}_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
+      final fileName =
+          'stock_count_${stockCount.id.substring(0, 8)}_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.csv';
       final file = File('${directory.path}/$fileName');
       await file.writeAsString(csvString);
 
@@ -611,14 +631,17 @@ class _StockCountScreenState extends State<StockCountScreen>
     }
   }
 
-  Future<void> _exportToPdf(StockCount stockCount, List<StockCountItem> items) async {
+  Future<void> _exportToPdf(
+      StockCount stockCount, List<StockCountItem> items) async {
     try {
       final pdf = pw.Document();
-      
+
       // Calculate summary data
       final totalItems = items.length;
-      final itemsWithVariance = items.where((item) => item.variance.abs() > 0.01).length;
-      final totalValueImpact = items.fold(0.0, (sum, item) => sum + item.valueImpact.abs());
+      final itemsWithVariance =
+          items.where((item) => item.variance.abs() > 0.01).length;
+      final totalValueImpact =
+          items.fold(0.0, (sum, item) => sum + item.valueImpact.abs());
 
       pdf.addPage(
         pw.MultiPage(
@@ -665,13 +688,14 @@ class _StockCountScreenState extends State<StockCountScreen>
                 ),
               ),
               pw.SizedBox(height: 20),
-              
+
               // Summary Section
               pw.Container(
                 padding: const pw.EdgeInsets.all(16),
                 decoration: pw.BoxDecoration(
                   border: pw.Border.all(color: PdfColors.grey300),
-                  borderRadius: const pw.BorderRadius.all(pw.Radius.circular(8)),
+                  borderRadius:
+                      const pw.BorderRadius.all(pw.Radius.circular(8)),
                 ),
                 child: pw.Column(
                   crossAxisAlignment: pw.CrossAxisAlignment.start,
@@ -729,7 +753,7 @@ class _StockCountScreenState extends State<StockCountScreen>
                 ),
               ),
               pw.SizedBox(height: 20),
-              
+
               // Items Table
               pw.Text(
                 'Stock Count Details',
@@ -854,7 +878,8 @@ class _StockCountScreenState extends State<StockCountScreen>
       }
 
       // Save PDF file
-      final fileName = 'stock_count_${stockCount.id.substring(0, 8)}_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
+      final fileName =
+          'stock_count_${stockCount.id.substring(0, 8)}_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}.pdf';
       final file = File('${directory.path}/$fileName');
       await file.writeAsBytes(await pdf.save());
 
@@ -1052,12 +1077,12 @@ class _StockCountScreenState extends State<StockCountScreen>
                           trailing: Icon(Icons.chevron_right,
                               color: Colors.grey[400]),
                           onTap: () {
-            if (stockCount.status == 'in_progress') {
-              _resumeStockCount(stockCount);
-            } else {
-              _viewStockCountDetails(stockCount);
-            }
-          },
+                            if (stockCount.status == 'in_progress') {
+                              _resumeStockCount(stockCount);
+                            } else {
+                              _viewStockCountDetails(stockCount);
+                            }
+                          },
                         );
                       },
                     ),
@@ -1149,7 +1174,10 @@ class _StockCountScreenState extends State<StockCountScreen>
                   Container(
                     padding: const EdgeInsets.all(16),
                     decoration: BoxDecoration(
-                      color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                      color: Theme.of(context)
+                          .colorScheme
+                          .primary
+                          .withOpacity(0.1),
                       borderRadius: const BorderRadius.only(
                         topLeft: Radius.circular(12),
                         topRight: Radius.circular(12),
@@ -1259,7 +1287,8 @@ class _StockCountScreenState extends State<StockCountScreen>
                                           color: item.isPositiveVariance
                                               ? Colors.green[100]
                                               : Colors.red[100],
-                                          borderRadius: BorderRadius.circular(8),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
                                         ),
                                         child: Text(
                                           item.varianceStatus,
@@ -1279,7 +1308,8 @@ class _StockCountScreenState extends State<StockCountScreen>
                               Expanded(
                                 flex: 2,
                                 child: Text(
-                                  (_stockedInQuantities[item.productId] ?? 0.0).toStringAsFixed(3),
+                                  (_stockedInQuantities[item.productId] ?? 0.0)
+                                      .toStringAsFixed(3),
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w500,
@@ -1290,7 +1320,8 @@ class _StockCountScreenState extends State<StockCountScreen>
                               Expanded(
                                 flex: 2,
                                 child: Text(
-                                  (_soldQuantities[item.productId] ?? 0.0).toStringAsFixed(3),
+                                  (_soldQuantities[item.productId] ?? 0.0)
+                                      .toStringAsFixed(3),
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(
                                     fontWeight: FontWeight.w500,
@@ -1301,14 +1332,17 @@ class _StockCountScreenState extends State<StockCountScreen>
                               Expanded(
                                 flex: 2,
                                 child: Padding(
-                                  padding: const EdgeInsets.symmetric(horizontal: 8),
+                                  padding:
+                                      const EdgeInsets.symmetric(horizontal: 8),
                                   child: TextFormField(
-                                    initialValue: item.actualQuantity.toString(),
+                                    initialValue:
+                                        item.actualQuantity.toString(),
                                     keyboardType: TextInputType.number,
                                     textAlign: TextAlign.center,
                                     decoration: InputDecoration(
                                       isDense: true,
-                                      contentPadding: const EdgeInsets.symmetric(
+                                      contentPadding:
+                                          const EdgeInsets.symmetric(
                                         horizontal: 8,
                                         vertical: 8,
                                       ),
@@ -1318,12 +1352,15 @@ class _StockCountScreenState extends State<StockCountScreen>
                                       focusedBorder: OutlineInputBorder(
                                         borderRadius: BorderRadius.circular(6),
                                         borderSide: BorderSide(
-                                          color: Theme.of(context).colorScheme.primary,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .primary,
                                         ),
                                       ),
                                     ),
                                     onChanged: (value) {
-                                      final quantity = double.tryParse(value) ?? 0.0;
+                                      final quantity =
+                                          double.tryParse(value) ?? 0.0;
                                       _updateItemQuantity(item.id, quantity);
                                     },
                                   ),

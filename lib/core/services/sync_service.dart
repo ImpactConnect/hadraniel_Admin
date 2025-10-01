@@ -628,7 +628,7 @@ class SyncService {
 
       // Get all local outlets
       final localOutlets = await db.query('outlets');
-      
+
       print('Found ${localOutlets.length} local outlets to sync to cloud');
 
       for (var outletMap in localOutlets) {
@@ -644,13 +644,10 @@ class SyncService {
 
           if (existingCloudOutlet != null) {
             // Outlet exists in cloud, update it
-            await supabase
-                .from('outlets')
-                .update({
-                  'name': outlet.name,
-                  'location': outlet.location,
-                })
-                .eq('id', outlet.id);
+            await supabase.from('outlets').update({
+              'name': outlet.name,
+              'location': outlet.location,
+            }).eq('id', outlet.id);
             print('Updated existing outlet ${outlet.id} in cloud');
           } else {
             // Outlet doesn't exist in cloud, insert it
@@ -680,13 +677,13 @@ class SyncService {
   Future<void> insertOrUpdateOutlet(Outlet outlet) async {
     try {
       final db = await _dbHelper.database;
-      
+
       await db.insert(
         'outlets',
         outlet.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      
+
       print('Successfully inserted/updated outlet: ${outlet.name}');
     } catch (e) {
       print('Error inserting/updating outlet: $e');
@@ -722,7 +719,7 @@ class SyncService {
   Future<void> updateProduct(Product product) async {
     try {
       final db = await _dbHelper.database;
-      
+
       // Update the existing product record with the same ID
       final updatedProduct = Product(
         id: product.id, // Keep the same ID
@@ -730,7 +727,8 @@ class SyncService {
         quantity: product.quantity,
         unit: product.unit,
         costPerUnit: product.costPerUnit,
-        totalCost: product.quantity * product.costPerUnit, // Recalculate total cost
+        totalCost:
+            product.quantity * product.costPerUnit, // Recalculate total cost
         dateAdded: product.dateAdded, // Keep original date added
         lastUpdated: DateTime.now(), // Update the last updated timestamp
         description: product.description,
@@ -1372,12 +1370,12 @@ class SyncService {
 
       // Sync user and outlet data
       await syncProfilesToLocalDb();
-      
+
       // Sync outlets both ways - first push local outlets to cloud, then pull from cloud
       final outletsSyncedToCloud = await syncOutletsToCloud();
       syncResults['outlets'] = await syncOutletsToLocalDb();
       syncResults['outlets']!['uploaded_to_cloud'] = outletsSyncedToCloud;
-      
+
       syncResults['reps'] = await syncRepsToLocalDb();
       await syncCustomersToLocalDb();
 
@@ -1656,31 +1654,33 @@ class SyncService {
         for (var stockData in stockBalances) {
           final outletId = stockData['outlet_id'];
           final productId = stockData['product_id'];
-          
+
           // Validate that outlet exists
           final outletExists = await txn.query(
             'outlets',
             where: 'id = ?',
             whereArgs: [outletId],
           );
-          
+
           // Validate that product exists
           final productExists = await txn.query(
             'products',
             where: 'id = ?',
             whereArgs: [productId],
           );
-          
+
           if (outletExists.isEmpty) {
-            print('Warning: Skipping stock balance ${stockData['id']} - outlet $outletId does not exist in local database');
+            print(
+                'Warning: Skipping stock balance ${stockData['id']} - outlet $outletId does not exist in local database');
             continue;
           }
-          
+
           if (productExists.isEmpty) {
-            print('Warning: Skipping stock balance ${stockData['id']} - product $productId does not exist in local database');
+            print(
+                'Warning: Skipping stock balance ${stockData['id']} - product $productId does not exist in local database');
             continue;
           }
-          
+
           // Insert only if both foreign keys are valid
           await txn.insert(
               'stock_balances',

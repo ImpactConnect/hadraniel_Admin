@@ -174,7 +174,8 @@ class _AddProductDialogState extends State<AddProductDialog> {
                               ),
                               filled: true,
                               fillColor: Colors.grey[100],
-                              suffixIcon: Icon(Icons.lock, color: Colors.grey[600]),
+                              suffixIcon:
+                                  Icon(Icons.lock, color: Colors.grey[600]),
                             ),
                             enabled: false, // Make it read-only
                           )
@@ -184,7 +185,8 @@ class _AddProductDialogState extends State<AddProductDialog> {
                             optionsBuilder:
                                 (TextEditingValue textEditingValue) async {
                               // Get product names with balance
-                              final productNames = await _getPreloadedProductNames();
+                              final productNames =
+                                  await _getPreloadedProductNames();
 
                               if (textEditingValue.text.isEmpty) {
                                 return ['Add New Product', ...productNames];
@@ -247,8 +249,9 @@ class _AddProductDialogState extends State<AddProductDialog> {
                                   _productNameController.text = value;
                                   productName = value;
                                 },
-                                validator: (value) =>
-                                    value?.isEmpty ?? true ? 'Required field' : null,
+                                validator: (value) => value?.isEmpty ?? true
+                                    ? 'Required field'
+                                    : null,
                               );
                             },
                           ),
@@ -266,7 +269,8 @@ class _AddProductDialogState extends State<AddProductDialog> {
                               ),
                               filled: true,
                               fillColor: Colors.grey[100],
-                              suffixIcon: Icon(Icons.lock, color: Colors.grey[600]),
+                              suffixIcon:
+                                  Icon(Icons.lock, color: Colors.grey[600]),
                             ),
                             enabled: false, // Make it read-only
                           )
@@ -283,30 +287,41 @@ class _AddProductDialogState extends State<AddProductDialog> {
                             ),
                             items: const [
                               DropdownMenuItem(value: 'Kg', child: Text('Kg')),
-                              DropdownMenuItem(value: 'Pcs', child: Text('Pcs')),
+                              DropdownMenuItem(
+                                  value: 'Pcs', child: Text('Pcs')),
                               DropdownMenuItem(
                                   value: 'Carton', child: Text('Carton')),
-                              DropdownMenuItem(value: 'Paint', child: Text('Paint')),
-                              DropdownMenuItem(value: 'Cup', child: Text('Cup')),
-                              DropdownMenuItem(value: 'Ltr', child: Text('Ltr')),
-                              DropdownMenuItem(value: 'Box', child: Text('Box')),
-                              DropdownMenuItem(value: 'Roll', child: Text('Roll')),
-                              DropdownMenuItem(value: 'Bag', child: Text('Bag')),
+                              DropdownMenuItem(
+                                  value: 'Paint', child: Text('Paint')),
+                              DropdownMenuItem(
+                                  value: 'Cup', child: Text('Cup')),
+                              DropdownMenuItem(
+                                  value: 'Ltr', child: Text('Ltr')),
+                              DropdownMenuItem(
+                                  value: 'Box', child: Text('Box')),
+                              DropdownMenuItem(
+                                  value: 'Roll', child: Text('Roll')),
+                              DropdownMenuItem(
+                                  value: 'Bag', child: Text('Bag')),
                               DropdownMenuItem(
                                   value: 'Gallon', child: Text('Gallon')),
-                              DropdownMenuItem(value: 'Mudu', child: Text('Mudu')),
-                              DropdownMenuItem(value: 'Tin', child: Text('Tin')),
+                              DropdownMenuItem(
+                                  value: 'Mudu', child: Text('Mudu')),
+                              DropdownMenuItem(
+                                  value: 'Tin', child: Text('Tin')),
                               DropdownMenuItem(
                                   value: 'Sachet', child: Text('Sachet')),
-                              DropdownMenuItem(value: 'Bowl', child: Text('Bowl')),
+                              DropdownMenuItem(
+                                  value: 'Bowl', child: Text('Bowl')),
                               DropdownMenuItem(
                                   value: 'Bundle', child: Text('Bundle')),
                             ],
                             onChanged: (value) {
                               setState(() => unit = value ?? 'Kg');
                             },
-                            validator: (value) =>
-                                value?.isEmpty ?? true ? 'Required field' : null,
+                            validator: (value) => value?.isEmpty ?? true
+                                ? 'Required field'
+                                : null,
                           ),
                   ),
                   SizedBox(
@@ -322,8 +337,10 @@ class _AddProductDialogState extends State<AddProductDialog> {
                               ),
                               filled: true,
                               fillColor: Colors.grey[100],
-                              suffixIcon: Icon(Icons.lock, color: Colors.grey[600]),
-                              helperText: 'Quantity cannot be changed when editing',
+                              suffixIcon:
+                                  Icon(Icons.lock, color: Colors.grey[600]),
+                              helperText:
+                                  'Quantity cannot be changed when editing',
                             ),
                             enabled: false, // Make it read-only
                           )
@@ -344,7 +361,8 @@ class _AddProductDialogState extends State<AddProductDialog> {
                             ),
                             keyboardType: TextInputType.number,
                             validator: (value) {
-                              if (value?.isEmpty ?? true) return 'Required field';
+                              if (value?.isEmpty ?? true)
+                                return 'Required field';
                               if (double.tryParse(value!) == null)
                                 return 'Invalid number';
 
@@ -361,7 +379,8 @@ class _AddProductDialogState extends State<AddProductDialog> {
                                 if (requestedQuantity > originalQuantity) {
                                   final additionalQuantityNeeded =
                                       requestedQuantity - originalQuantity;
-                                  if (additionalQuantityNeeded > availableBalance) {
+                                  if (additionalQuantityNeeded >
+                                      availableBalance) {
                                     return 'Exceeds available balance of ${_formatBalance(availableBalance)} ${unit}';
                                   }
                                 }
@@ -424,7 +443,8 @@ class _AddProductDialogState extends State<AddProductDialog> {
                             ? // Read-only field for editing existing products
                             TextFormField(
                                 initialValue: outlets
-                                    .firstWhere((outlet) => outlet.id == outletId,
+                                    .firstWhere(
+                                        (outlet) => outlet.id == outletId,
                                         orElse: () => outlets.first)
                                     .name,
                                 decoration: InputDecoration(
@@ -434,8 +454,10 @@ class _AddProductDialogState extends State<AddProductDialog> {
                                   ),
                                   filled: true,
                                   fillColor: Colors.grey[100],
-                                  suffixIcon: Icon(Icons.lock, color: Colors.grey[600]),
-                                  helperText: 'Outlet cannot be changed when editing',
+                                  suffixIcon:
+                                      Icon(Icons.lock, color: Colors.grey[600]),
+                                  helperText:
+                                      'Outlet cannot be changed when editing',
                                 ),
                                 enabled: false, // Make it read-only
                               )
@@ -460,8 +482,9 @@ class _AddProductDialogState extends State<AddProductDialog> {
                                     .toList(),
                                 onChanged: (value) =>
                                     setState(() => outletId = value ?? ''),
-                                validator: (value) =>
-                                    value?.isEmpty ?? true ? 'Required field' : null,
+                                validator: (value) => value?.isEmpty ?? true
+                                    ? 'Required field'
+                                    : null,
                               );
                       },
                     ),

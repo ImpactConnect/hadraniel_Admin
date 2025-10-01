@@ -63,7 +63,16 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
     'Box',
     'Carton',
     '1/2 Carton',
-    'Bag'
+    'Bag',
+    'Mudu',
+    'Roll',
+    'Tin',
+    'Gallon',
+    'Slate',
+    'Paint',
+    'Sachet',
+    'Bowl',
+    'Bundle'
   ];
 
   // List of predefined product names
