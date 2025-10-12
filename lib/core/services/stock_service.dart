@@ -64,9 +64,8 @@ class StockService {
       whereArgs.add(productId);
     }
 
-    final String whereClause = whereConditions.isNotEmpty
-        ? whereConditions.join(' AND ')
-        : '';
+    final String whereClause =
+        whereConditions.isNotEmpty ? whereConditions.join(' AND ') : '';
 
     final List<Map<String, dynamic>> maps = await db.query(
       'stock_balances',
@@ -74,9 +73,8 @@ class StockService {
       whereArgs: whereArgs.isEmpty ? null : whereArgs,
     );
 
-    final stockBalances = maps
-        .map((map) => StockBalance.fromJson(map))
-        .toList();
+    final stockBalances =
+        maps.map((map) => StockBalance.fromJson(map)).toList();
 
     // Calculate values using product costs
     final products = await _syncService.getAllLocalProducts();

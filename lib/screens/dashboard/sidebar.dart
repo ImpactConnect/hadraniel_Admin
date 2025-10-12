@@ -97,6 +97,13 @@ class Sidebar extends StatelessWidget {
                   ),
                   _buildNavItem(
                     context: context,
+                    icon: Icons.campaign,
+                    title: 'Marketers',
+                    route: '/marketers',
+                    colorScheme: colorScheme,
+                  ),
+                  _buildNavItem(
+                    context: context,
                     icon: Icons.store,
                     title: 'Outlets',
                     route: '/outlets',

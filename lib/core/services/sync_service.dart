@@ -1,6 +1,7 @@
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/sync_logger.dart';
 import 'package:uuid/uuid.dart';
 import '../models/profile_model.dart';
 import '../models/outlet_model.dart';
@@ -370,6 +371,7 @@ class SyncService {
 
   Future<Map<String, int>> syncSalesToLocalDb() async {
     try {
+      await _logAuthContext('syncSalesToLocalDb');
       print('Syncing sales from cloud database...');
       print('Supabase client: ${supabase != null ? 'initialized' : 'null'}');
       print('Supabase URL: ${supabase.supabaseUrl}');
@@ -385,6 +387,7 @@ class SyncService {
           where: 'is_synced = ?',
           whereArgs: [0],
         );
+        print('[DEBUG] [syncSalesToLocalDb] Unsynced local sales: ${unsyncedSales.length}');
 
         // Push unsynced sales to Supabase
         for (var saleMap in unsyncedSales) {
@@ -557,6 +560,60 @@ class SyncService {
   final supabase = Supabase.instance.client;
   // DatabaseHelper instance is already declared at the top of the class
 
+  // Debug helpers
+  Future<void> _logAuthContext(String operation) async {
+    try {
+      final user = supabase.auth.currentUser;
+      print('[DEBUG] [$operation] Supabase URL: ${supabase.supabaseUrl}');
+      print('[DEBUG] [$operation] Authenticated: ${supabase.auth.currentSession != null}');
+      print('[DEBUG] [$operation] Current user id: ${user?.id ?? 'null'}');
+      if (user?.id != null) {
+        try {
+          final profile = await supabase
+              .from('profiles')
+              .select()
+              .eq('id', user!.id)
+              .maybeSingle();
+          final role = (profile is Map<String, dynamic>) ? profile['role'] : null;
+          final outletId = (profile is Map<String, dynamic>) ? profile['outlet_id'] : null;
+          print('[DEBUG] [$operation] Profile role: ${role ?? 'unknown'}, outlet_id: ${outletId ?? 'unknown'}');
+        } catch (e) {
+          print('[DEBUG] [$operation] Unable to read profile role: $e');
+        }
+      }
+    } catch (e) {
+      print('[DEBUG] [$operation] Auth context logging failed: $e');
+    }
+  }
+
+  Future<void> runSyncDiagnostics() async {
+    print('=== Sync Diagnostics Start ===');
+    await _logAuthContext('diagnostics');
+    try {
+      final db = await _dbHelper.database;
+      final localProducts = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM products')) ?? 0;
+      final localSaleItems = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM sale_items')) ?? 0;
+      final localStockBalances = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM stock_balances')) ?? 0;
+      print('[DEBUG] [diagnostics] Local counts -> products: $localProducts, sale_items: $localSaleItems, stock_balances: $localStockBalances');
+    } catch (e) {
+      print('[DEBUG] [diagnostics] Unable to read local counts: $e');
+    }
+    // Probe cloud accessibility per table
+    Future<void> probe(String table) async {
+      try {
+        final res = await supabase.from(table).select().limit(1);
+        final len = (res is List) ? res.length : 0;
+        print('[DEBUG] [diagnostics] Cloud probe "$table" ok, sample size: $len');
+      } catch (e) {
+        print('[DEBUG] [diagnostics] Cloud probe "$table" failed: $e');
+      }
+    }
+    await probe('products');
+    await probe('sale_items');
+    await probe('stock_balances');
+    print('=== Sync Diagnostics End ===');
+  }
+
   // Reset Database
   Future<void> resetDatabase() async {
     try {
@@ -628,7 +685,7 @@ class SyncService {
 
       // Get all local outlets
       final localOutlets = await db.query('outlets');
-      
+
       print('Found ${localOutlets.length} local outlets to sync to cloud');
 
       for (var outletMap in localOutlets) {
@@ -644,13 +701,10 @@ class SyncService {
 
           if (existingCloudOutlet != null) {
             // Outlet exists in cloud, update it
-            await supabase
-                .from('outlets')
-                .update({
-                  'name': outlet.name,
-                  'location': outlet.location,
-                })
-                .eq('id', outlet.id);
+            await supabase.from('outlets').update({
+              'name': outlet.name,
+              'location': outlet.location,
+            }).eq('id', outlet.id);
             print('Updated existing outlet ${outlet.id} in cloud');
           } else {
             // Outlet doesn't exist in cloud, insert it
@@ -680,13 +734,13 @@ class SyncService {
   Future<void> insertOrUpdateOutlet(Outlet outlet) async {
     try {
       final db = await _dbHelper.database;
-      
+
       await db.insert(
         'outlets',
         outlet.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
       );
-      
+
       print('Successfully inserted/updated outlet: ${outlet.name}');
     } catch (e) {
       print('Error inserting/updating outlet: $e');
@@ -722,7 +776,7 @@ class SyncService {
   Future<void> updateProduct(Product product) async {
     try {
       final db = await _dbHelper.database;
-      
+
       // Update the existing product record with the same ID
       final updatedProduct = Product(
         id: product.id, // Keep the same ID
@@ -730,7 +784,8 @@ class SyncService {
         quantity: product.quantity,
         unit: product.unit,
         costPerUnit: product.costPerUnit,
-        totalCost: product.quantity * product.costPerUnit, // Recalculate total cost
+        totalCost:
+            product.quantity * product.costPerUnit, // Recalculate total cost
         dateAdded: product.dateAdded, // Keep original date added
         lastUpdated: DateTime.now(), // Update the last updated timestamp
         description: product.description,
@@ -935,6 +990,11 @@ class SyncService {
     }
   }
 
+  // Alias method for getAllLocalOutlets to maintain compatibility
+  Future<List<Outlet>> getOutlets() async {
+    return getAllLocalOutlets();
+  }
+
   // Method removed as it was redundant with getOutletName
 
   // Synchronous version that uses the cache
@@ -1088,6 +1148,7 @@ class SyncService {
   // Separate method to push local products to cloud
   Future<int> syncProductsToCloud() async {
     try {
+      await _logAuthContext('syncProductsToCloud');
       final db = await _dbHelper.database;
       int syncedCount = 0;
 
@@ -1102,8 +1163,7 @@ class SyncService {
           whereArgs: [0],
         );
 
-        print(
-            'Found ${unsyncedProducts.length} unsynced products to push to cloud');
+        print('[DEBUG] [syncProductsToCloud] Found ${unsyncedProducts.length} unsynced local products');
 
         for (var productMap in unsyncedProducts) {
           final product = Product.fromMap(productMap);
@@ -1122,11 +1182,11 @@ class SyncService {
                   .from('products')
                   .update(product.toCloudMap())
                   .eq('id', product.id);
-              print('Updated existing product ${product.id} in cloud');
+              print('[DEBUG] [syncProductsToCloud] Updated product ${product.id} in cloud');
             } else {
               // Product doesn't exist in cloud, insert it
               await supabase.from('products').insert(product.toCloudMap());
-              print('Inserted new product ${product.id} to cloud');
+              print('[DEBUG] [syncProductsToCloud] Inserted new product ${product.id} to cloud');
             }
 
             // Mark as synced locally
@@ -1138,7 +1198,7 @@ class SyncService {
             );
             syncedCount++;
           } catch (e) {
-            print('Error syncing product ${product.id} to cloud: $e');
+            print('[DEBUG] [syncProductsToCloud] Error syncing product ${product.id} to cloud: $e');
             // Continue with other products instead of failing entire sync
           }
         }
@@ -1146,7 +1206,7 @@ class SyncService {
 
       return syncedCount;
     } catch (e) {
-      print('Error syncing products to cloud: $e');
+      print('[DEBUG] [syncProductsToCloud] Fatal error: $e');
       throw e;
     }
   }
@@ -1154,6 +1214,7 @@ class SyncService {
   // Separate method to fetch products from cloud to local (only when local data is missing)
   Future<int> fetchProductsFromCloud() async {
     try {
+      await _logAuthContext('fetchProductsFromCloud');
       final db = await _dbHelper.database;
       int fetchedCount = 0;
 
@@ -1165,9 +1226,16 @@ class SyncService {
       final localIds =
           localProductIds.map((row) => row['id'] as String).toSet();
 
+      print('[DEBUG] [fetchProductsFromCloud] Local product id count: ${localIds.length}');
       // Fetch all products from cloud
-      final response = await supabase.from('products').select();
-      print('Fetched ${(response as List).length} products from cloud');
+      List<dynamic> response;
+      try {
+        response = await supabase.from('products').select() as List<dynamic>;
+      } catch (e) {
+        print('[DEBUG] [fetchProductsFromCloud] Error selecting products from cloud: $e');
+        rethrow;
+      }
+      print('[DEBUG] [fetchProductsFromCloud] Fetched ${response.length} products from cloud');
 
       final cloudProducts = (response as List)
           .map((data) {
@@ -1191,8 +1259,7 @@ class SyncService {
           .where((product) => !localIds.contains(product.id))
           .toList();
 
-      print(
-          'Found ${missingProducts.length} missing products to fetch from cloud');
+      print('[DEBUG] [fetchProductsFromCloud] Missing locally: ${missingProducts.length} products');
 
       if (missingProducts.isNotEmpty) {
         await db.transaction((txn) async {
@@ -1217,7 +1284,7 @@ class SyncService {
             });
 
             fetchedCount++;
-            print('Fetched missing product ${product.id} from cloud');
+            print('[DEBUG] [fetchProductsFromCloud] Inserted missing product ${product.id} locally');
           }
         });
 
@@ -1234,9 +1301,10 @@ class SyncService {
         }
       }
 
+      print('[DEBUG] [fetchProductsFromCloud] Total inserted from cloud: $fetchedCount');
       return fetchedCount;
     } catch (e) {
-      print('Error fetching products from cloud: $e');
+      print('[DEBUG] [fetchProductsFromCloud] Fatal error: $e');
       throw e;
     }
   }
@@ -1244,7 +1312,7 @@ class SyncService {
   // Combined sync method that handles both directions intelligently
   Future<Map<String, int>> syncProductsToLocalDb() async {
     try {
-      print('Starting intelligent product sync...');
+      print('[DEBUG] [syncProductsToLocalDb] Starting product sync');
 
       // First, push any local changes to cloud
       final uploadedCount = await syncProductsToCloud();
@@ -1253,8 +1321,7 @@ class SyncService {
       final downloadedCount = await fetchProductsFromCloud();
 
       final totalSynced = uploadedCount + downloadedCount;
-      print(
-          'Product sync completed successfully - uploaded: $uploadedCount, downloaded: $downloadedCount');
+      print('[DEBUG] [syncProductsToLocalDb] Completed - uploaded: $uploadedCount, downloaded: $downloadedCount');
 
       return {
         'synced': totalSynced,
@@ -1262,7 +1329,7 @@ class SyncService {
         'downloaded': downloadedCount
       };
     } catch (e) {
-      print('Error in product sync: $e');
+      print('[DEBUG] [syncProductsToLocalDb] Fatal error: $e');
       throw e;
     }
   }
@@ -1362,22 +1429,36 @@ class SyncService {
     }
   }
 
+  // Alias method for getAllLocalProducts to maintain compatibility
+  Future<List<Product>> getAllProducts() async {
+    return getAllLocalProducts();
+  }
+
+  // Another alias method for getAllLocalProducts to maintain compatibility
+  Future<List<Product>> getProducts() async {
+    return getAllLocalProducts();
+  }
+
   // Sync All Data
   Future<Map<String, Map<String, int>>> syncAll() async {
     Map<String, Map<String, int>> syncResults = {};
 
     try {
+      // Capture all sync logs to file while keeping console output
+      return await SyncLogger.capture(() async {
+      // Initial diagnostics to understand environment and access
+      await runSyncDiagnostics();
       // Process any pending sync queue operations first (including deletions)
       await processSyncQueue();
 
       // Sync user and outlet data
       await syncProfilesToLocalDb();
-      
+
       // Sync outlets both ways - first push local outlets to cloud, then pull from cloud
       final outletsSyncedToCloud = await syncOutletsToCloud();
       syncResults['outlets'] = await syncOutletsToLocalDb();
       syncResults['outlets']!['uploaded_to_cloud'] = outletsSyncedToCloud;
-      
+
       syncResults['reps'] = await syncRepsToLocalDb();
       await syncCustomersToLocalDb();
 
@@ -1421,6 +1502,7 @@ class SyncService {
       await processSyncQueue();
 
       return syncResults;
+      }, prefix: 'all_tables');
     } catch (e) {
       print('Error in syncAll: $e');
       throw e;
@@ -1592,6 +1674,7 @@ class SyncService {
 
   Future<Map<String, int>> syncStockBalancesToLocalDb() async {
     try {
+      await _logAuthContext('syncStockBalancesToLocalDb');
       final db = await _dbHelper.database;
       int uploadedCount = 0;
       int downloadedCount = 0;
@@ -1603,6 +1686,7 @@ class SyncService {
           where: 'synced = ?',
           whereArgs: [0],
         );
+        print('[DEBUG] [syncStockBalancesToLocalDb] Unsynced local balances: ${unsyncedBalances.length}');
 
         // Push unsynced balances to Supabase
         for (var balanceMap in unsyncedBalances) {
@@ -1629,8 +1713,15 @@ class SyncService {
       });
 
       // Pull latest balances from Supabase
-      final response = await supabase.from('stock_balances').select();
-      final stockBalances = response as List<dynamic>;
+      List<dynamic> stockBalances;
+      try {
+        final response = await supabase.from('stock_balances').select();
+        stockBalances = response as List<dynamic>;
+      } catch (e) {
+        print('[DEBUG] [syncStockBalancesToLocalDb] Error selecting stock_balances from cloud: $e');
+        rethrow;
+      }
+      print('[DEBUG] [syncStockBalancesToLocalDb] Downloaded cloud balances: ${stockBalances.length}');
 
       // Update local database in a separate transaction
       await db.transaction((txn) async {
@@ -1656,31 +1747,33 @@ class SyncService {
         for (var stockData in stockBalances) {
           final outletId = stockData['outlet_id'];
           final productId = stockData['product_id'];
-          
+
           // Validate that outlet exists
           final outletExists = await txn.query(
             'outlets',
             where: 'id = ?',
             whereArgs: [outletId],
           );
-          
+
           // Validate that product exists
           final productExists = await txn.query(
             'products',
             where: 'id = ?',
             whereArgs: [productId],
           );
-          
+
           if (outletExists.isEmpty) {
-            print('Warning: Skipping stock balance ${stockData['id']} - outlet $outletId does not exist in local database');
+            print(
+                'Warning: Skipping stock balance ${stockData['id']} - outlet $outletId does not exist in local database');
             continue;
           }
-          
+
           if (productExists.isEmpty) {
-            print('Warning: Skipping stock balance ${stockData['id']} - product $productId does not exist in local database');
+            print(
+                'Warning: Skipping stock balance ${stockData['id']} - product $productId does not exist in local database');
             continue;
           }
-          
+
           // Insert only if both foreign keys are valid
           await txn.insert(
               'stock_balances',
@@ -1698,6 +1791,10 @@ class SyncService {
               conflictAlgorithm: ConflictAlgorithm.replace);
           downloadedCount++;
         }
+        final insertedCount = Sqflite.firstIntValue(
+              await txn.rawQuery('SELECT COUNT(*) FROM stock_balances')) ??
+            0;
+        print('[DEBUG] [syncStockBalancesToLocalDb] Inserted local balances: $insertedCount');
       });
 
       return {

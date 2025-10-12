@@ -625,6 +625,46 @@ class DatabaseHelper {
         FOREIGN KEY (stock_count_id) REFERENCES stock_counts (id)
       )
     ''');
+
+    // Marketers table
+    await db.execute('''
+      CREATE TABLE marketers (
+        id TEXT PRIMARY KEY,
+        full_name TEXT NOT NULL,
+        email TEXT NOT NULL,
+        phone TEXT,
+        outlet_id TEXT NOT NULL,
+        status TEXT DEFAULT 'active',
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        is_synced INTEGER DEFAULT 0,
+        FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+      )
+    ''');
+
+    // Marketer Targets table
+    await db.execute('''
+      CREATE TABLE marketer_targets (
+        id TEXT PRIMARY KEY,
+        marketer_id TEXT NOT NULL,
+        product_id TEXT NOT NULL,
+        outlet_id TEXT NOT NULL,
+        target_quantity REAL,
+        target_revenue REAL,
+        target_type TEXT NOT NULL DEFAULT 'quantity',
+        start_date TEXT NOT NULL,
+        end_date TEXT NOT NULL,
+        current_quantity REAL DEFAULT 0,
+        current_revenue REAL DEFAULT 0,
+        status TEXT DEFAULT 'active',
+        created_at TEXT NOT NULL,
+        updated_at TEXT,
+        is_synced INTEGER DEFAULT 0,
+        FOREIGN KEY (marketer_id) REFERENCES marketers (id),
+        FOREIGN KEY (product_id) REFERENCES products (id),
+        FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+      )
+    ''');
   }
 
   Future<void> clearAllTables() async {
@@ -645,6 +685,8 @@ class DatabaseHelper {
       await txn.delete('stock_count_items');
       await txn.delete('stock_adjustments');
       await txn.delete('stock_counts');
+      await txn.delete('marketer_targets');
+      await txn.delete('marketers');
     });
   }
 

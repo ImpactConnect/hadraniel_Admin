@@ -28,9 +28,8 @@ class Product {
   });
 
   factory Product.fromMap(Map<String, dynamic> map) {
-    final quantity = map['quantity'] != null
-        ? (map['quantity'] as num).toDouble()
-        : 0.0;
+    final quantity =
+        map['quantity'] != null ? (map['quantity'] as num).toDouble() : 0.0;
     final costPerUnit = map['cost_per_unit'] != null
         ? (map['cost_per_unit'] as num).toDouble()
         : 0.0;
@@ -53,7 +52,16 @@ class Product {
       createdAt: map['created_at'] != null
           ? DateTime.parse(map['created_at'] as String)
           : DateTime.now(),
-      isSynced: (map['is_synced'] as int? ?? 0) == 1,
+      isSynced: (() {
+        final v = map['is_synced'];
+        if (v is bool) return v;
+        if (v is int) return v == 1;
+        if (v is String) {
+          final s = v.toLowerCase();
+          return s == 'true' || s == '1';
+        }
+        return false;
+      })(),
     );
   }
 
