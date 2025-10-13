@@ -574,6 +574,7 @@ class _MarketersScreenState extends State<MarketersScreen> {
                     onChanged: (value) {
                       setState(() => _selectedProductId = value);
                     },
+                    isExpanded: true,
                   ),
                 ),
                 const SizedBox(width: 16),
@@ -605,6 +606,7 @@ class _MarketersScreenState extends State<MarketersScreen> {
                     onChanged: (value) {
                       setState(() => _selectedMarketerId = value);
                     },
+                    isExpanded: true,
                   ),
                 ),
               ],

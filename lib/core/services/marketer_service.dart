@@ -7,6 +7,23 @@ import '../database/database_helper.dart';
 class MarketerService {
   final supabase = Supabase.instance.client;
   final DatabaseHelper _dbHelper = DatabaseHelper();
+  final bool _cloudDisabled = true;
+
+  Future<void> _verifyMarketerTables() async {
+    try {
+      await supabase.from('marketers').select().limit(1);
+      await supabase.from('marketer_targets').select().limit(1);
+    } catch (e) {
+      final msg = e.toString();
+      if (msg.contains('404') || msg.contains('Not Found')) {
+        print(
+            'Marketer tables missing or inaccessible. See supabase/migrations/20250103000000_create_marketer_tables.sql');
+        throw Exception(
+            'Cloud tables not found: marketers/marketer_targets. Please run migration supabase/migrations/20250103000000_create_marketer_tables.sql in Supabase SQL or use `supabase db push`.');
+      }
+      rethrow;
+    }
+  }
 
   // MARKETER CRUD OPERATIONS
 
@@ -91,8 +108,10 @@ class MarketerService {
       // Add to local database first
       await addMarketerLocally(marketer);
 
-      // Sync to cloud
-      await syncMarketerToCloud(marketer);
+      // Cloud disabled for offline-only mode
+      if (!_cloudDisabled) {
+        await syncMarketerToCloud(marketer);
+      }
 
       return marketer;
     } catch (e) {
@@ -110,8 +129,10 @@ class MarketerService {
       // Update locally
       await addMarketerLocally(updatedMarketer);
 
-      // Sync to cloud
-      await syncMarketerToCloud(updatedMarketer);
+      // Cloud disabled for offline-only mode
+      if (!_cloudDisabled) {
+        await syncMarketerToCloud(updatedMarketer);
+      }
 
       return true;
     } catch (e) {
@@ -122,8 +143,10 @@ class MarketerService {
 
   Future<bool> deleteMarketer(String id) async {
     try {
-      // Delete from cloud
-      await supabase.from('marketers').delete().eq('id', id);
+      // Cloud disabled for offline-only mode
+      if (!_cloudDisabled) {
+        await supabase.from('marketers').delete().eq('id', id);
+      }
 
       // Delete from local database
       final db = await _dbHelper.database;
@@ -222,8 +245,10 @@ class MarketerService {
       // Add to local database first
       await addMarketerTargetLocally(target);
 
-      // Sync to cloud
-      await syncMarketerTargetToCloud(target);
+      // Cloud disabled for offline-only mode
+      if (!_cloudDisabled) {
+        await syncMarketerTargetToCloud(target);
+      }
 
       return target;
     } catch (e) {
@@ -241,8 +266,10 @@ class MarketerService {
       // Update locally
       await addMarketerTargetLocally(updatedTarget);
 
-      // Sync to cloud
-      await syncMarketerTargetToCloud(updatedTarget);
+      // Cloud disabled for offline-only mode
+      if (!_cloudDisabled) {
+        await syncMarketerTargetToCloud(updatedTarget);
+      }
 
       return true;
     } catch (e) {
@@ -253,8 +280,10 @@ class MarketerService {
 
   Future<bool> deleteMarketerTarget(String id) async {
     try {
-      // Delete from cloud
-      await supabase.from('marketer_targets').delete().eq('id', id);
+      // Cloud disabled for offline-only mode
+      if (!_cloudDisabled) {
+        await supabase.from('marketer_targets').delete().eq('id', id);
+      }
 
       // Delete from local database
       final db = await _dbHelper.database;
@@ -488,6 +517,10 @@ class MarketerService {
 
   Future<void> syncMarketerToCloud(Marketer marketer) async {
     try {
+      if (_cloudDisabled) {
+        return;
+      }
+      await _verifyMarketerTables();
       // Check if user is authenticated
       final user = supabase.auth.currentUser;
       if (user == null) {
@@ -522,6 +555,10 @@ class MarketerService {
 
   Future<void> syncMarketerTargetToCloud(MarketerTarget target) async {
     try {
+      if (_cloudDisabled) {
+        return;
+      }
+      await _verifyMarketerTables();
       await supabase.from('marketer_targets').upsert(target.toCloudMap());
     } catch (e) {
       print('Error syncing marketer target to cloud: $e');
@@ -531,6 +568,9 @@ class MarketerService {
 
   Future<void> syncMarketersToCloud() async {
     try {
+      if (_cloudDisabled) {
+        return;
+      }
       final marketers = await getAllMarketers();
       for (var marketer in marketers) {
         await syncMarketerToCloud(marketer);
@@ -543,6 +583,10 @@ class MarketerService {
 
   Future<void> fetchMarketersFromCloud() async {
     try {
+      if (_cloudDisabled) {
+        return;
+      }
+      await _verifyMarketerTables();
       final response = await supabase.from('marketers').select();
       final marketers =
           (response as List).map((data) => Marketer.fromMap(data)).toList();
@@ -568,6 +612,10 @@ class MarketerService {
 
   Future<void> fetchMarketerTargetsFromCloud() async {
     try {
+      if (_cloudDisabled) {
+        return;
+      }
+      await _verifyMarketerTables();
       final response = await supabase.from('marketer_targets').select();
       final targets = (response as List)
           .map((data) => MarketerTarget.fromMap(data))
@@ -594,10 +642,10 @@ class MarketerService {
 
   Future<void> fullSync() async {
     try {
-      // Sync to cloud first
+      if (_cloudDisabled) {
+        return;
+      }
       await syncMarketersToCloud();
-
-      // Then fetch from cloud to ensure consistency
       await fetchMarketersFromCloud();
       await fetchMarketerTargetsFromCloud();
     } catch (e) {

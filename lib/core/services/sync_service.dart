@@ -387,7 +387,8 @@ class SyncService {
           where: 'is_synced = ?',
           whereArgs: [0],
         );
-        print('[DEBUG] [syncSalesToLocalDb] Unsynced local sales: ${unsyncedSales.length}');
+        print(
+            '[DEBUG] [syncSalesToLocalDb] Unsynced local sales: ${unsyncedSales.length}');
 
         // Push unsynced sales to Supabase
         for (var saleMap in unsyncedSales) {
@@ -565,7 +566,8 @@ class SyncService {
     try {
       final user = supabase.auth.currentUser;
       print('[DEBUG] [$operation] Supabase URL: ${supabase.supabaseUrl}');
-      print('[DEBUG] [$operation] Authenticated: ${supabase.auth.currentSession != null}');
+      print(
+          '[DEBUG] [$operation] Authenticated: ${supabase.auth.currentSession != null}');
       print('[DEBUG] [$operation] Current user id: ${user?.id ?? 'null'}');
       if (user?.id != null) {
         try {
@@ -574,9 +576,12 @@ class SyncService {
               .select()
               .eq('id', user!.id)
               .maybeSingle();
-          final role = (profile is Map<String, dynamic>) ? profile['role'] : null;
-          final outletId = (profile is Map<String, dynamic>) ? profile['outlet_id'] : null;
-          print('[DEBUG] [$operation] Profile role: ${role ?? 'unknown'}, outlet_id: ${outletId ?? 'unknown'}');
+          final role =
+              (profile is Map<String, dynamic>) ? profile['role'] : null;
+          final outletId =
+              (profile is Map<String, dynamic>) ? profile['outlet_id'] : null;
+          print(
+              '[DEBUG] [$operation] Profile role: ${role ?? 'unknown'}, outlet_id: ${outletId ?? 'unknown'}');
         } catch (e) {
           print('[DEBUG] [$operation] Unable to read profile role: $e');
         }
@@ -591,10 +596,17 @@ class SyncService {
     await _logAuthContext('diagnostics');
     try {
       final db = await _dbHelper.database;
-      final localProducts = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM products')) ?? 0;
-      final localSaleItems = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM sale_items')) ?? 0;
-      final localStockBalances = Sqflite.firstIntValue(await db.rawQuery('SELECT COUNT(*) FROM stock_balances')) ?? 0;
-      print('[DEBUG] [diagnostics] Local counts -> products: $localProducts, sale_items: $localSaleItems, stock_balances: $localStockBalances');
+      final localProducts = Sqflite.firstIntValue(
+              await db.rawQuery('SELECT COUNT(*) FROM products')) ??
+          0;
+      final localSaleItems = Sqflite.firstIntValue(
+              await db.rawQuery('SELECT COUNT(*) FROM sale_items')) ??
+          0;
+      final localStockBalances = Sqflite.firstIntValue(
+              await db.rawQuery('SELECT COUNT(*) FROM stock_balances')) ??
+          0;
+      print(
+          '[DEBUG] [diagnostics] Local counts -> products: $localProducts, sale_items: $localSaleItems, stock_balances: $localStockBalances');
     } catch (e) {
       print('[DEBUG] [diagnostics] Unable to read local counts: $e');
     }
@@ -603,11 +615,13 @@ class SyncService {
       try {
         final res = await supabase.from(table).select().limit(1);
         final len = (res is List) ? res.length : 0;
-        print('[DEBUG] [diagnostics] Cloud probe "$table" ok, sample size: $len');
+        print(
+            '[DEBUG] [diagnostics] Cloud probe "$table" ok, sample size: $len');
       } catch (e) {
         print('[DEBUG] [diagnostics] Cloud probe "$table" failed: $e');
       }
     }
+
     await probe('products');
     await probe('sale_items');
     await probe('stock_balances');
@@ -1163,7 +1177,8 @@ class SyncService {
           whereArgs: [0],
         );
 
-        print('[DEBUG] [syncProductsToCloud] Found ${unsyncedProducts.length} unsynced local products');
+        print(
+            '[DEBUG] [syncProductsToCloud] Found ${unsyncedProducts.length} unsynced local products');
 
         for (var productMap in unsyncedProducts) {
           final product = Product.fromMap(productMap);
@@ -1182,11 +1197,13 @@ class SyncService {
                   .from('products')
                   .update(product.toCloudMap())
                   .eq('id', product.id);
-              print('[DEBUG] [syncProductsToCloud] Updated product ${product.id} in cloud');
+              print(
+                  '[DEBUG] [syncProductsToCloud] Updated product ${product.id} in cloud');
             } else {
               // Product doesn't exist in cloud, insert it
               await supabase.from('products').insert(product.toCloudMap());
-              print('[DEBUG] [syncProductsToCloud] Inserted new product ${product.id} to cloud');
+              print(
+                  '[DEBUG] [syncProductsToCloud] Inserted new product ${product.id} to cloud');
             }
 
             // Mark as synced locally
@@ -1198,7 +1215,8 @@ class SyncService {
             );
             syncedCount++;
           } catch (e) {
-            print('[DEBUG] [syncProductsToCloud] Error syncing product ${product.id} to cloud: $e');
+            print(
+                '[DEBUG] [syncProductsToCloud] Error syncing product ${product.id} to cloud: $e');
             // Continue with other products instead of failing entire sync
           }
         }
@@ -1226,16 +1244,19 @@ class SyncService {
       final localIds =
           localProductIds.map((row) => row['id'] as String).toSet();
 
-      print('[DEBUG] [fetchProductsFromCloud] Local product id count: ${localIds.length}');
+      print(
+          '[DEBUG] [fetchProductsFromCloud] Local product id count: ${localIds.length}');
       // Fetch all products from cloud
       List<dynamic> response;
       try {
         response = await supabase.from('products').select() as List<dynamic>;
       } catch (e) {
-        print('[DEBUG] [fetchProductsFromCloud] Error selecting products from cloud: $e');
+        print(
+            '[DEBUG] [fetchProductsFromCloud] Error selecting products from cloud: $e');
         rethrow;
       }
-      print('[DEBUG] [fetchProductsFromCloud] Fetched ${response.length} products from cloud');
+      print(
+          '[DEBUG] [fetchProductsFromCloud] Fetched ${response.length} products from cloud');
 
       final cloudProducts = (response as List)
           .map((data) {
@@ -1259,7 +1280,8 @@ class SyncService {
           .where((product) => !localIds.contains(product.id))
           .toList();
 
-      print('[DEBUG] [fetchProductsFromCloud] Missing locally: ${missingProducts.length} products');
+      print(
+          '[DEBUG] [fetchProductsFromCloud] Missing locally: ${missingProducts.length} products');
 
       if (missingProducts.isNotEmpty) {
         await db.transaction((txn) async {
@@ -1284,7 +1306,8 @@ class SyncService {
             });
 
             fetchedCount++;
-            print('[DEBUG] [fetchProductsFromCloud] Inserted missing product ${product.id} locally');
+            print(
+                '[DEBUG] [fetchProductsFromCloud] Inserted missing product ${product.id} locally');
           }
         });
 
@@ -1301,7 +1324,8 @@ class SyncService {
         }
       }
 
-      print('[DEBUG] [fetchProductsFromCloud] Total inserted from cloud: $fetchedCount');
+      print(
+          '[DEBUG] [fetchProductsFromCloud] Total inserted from cloud: $fetchedCount');
       return fetchedCount;
     } catch (e) {
       print('[DEBUG] [fetchProductsFromCloud] Fatal error: $e');
@@ -1321,7 +1345,8 @@ class SyncService {
       final downloadedCount = await fetchProductsFromCloud();
 
       final totalSynced = uploadedCount + downloadedCount;
-      print('[DEBUG] [syncProductsToLocalDb] Completed - uploaded: $uploadedCount, downloaded: $downloadedCount');
+      print(
+          '[DEBUG] [syncProductsToLocalDb] Completed - uploaded: $uploadedCount, downloaded: $downloadedCount');
 
       return {
         'synced': totalSynced,
@@ -1446,62 +1471,62 @@ class SyncService {
     try {
       // Capture all sync logs to file while keeping console output
       return await SyncLogger.capture(() async {
-      // Initial diagnostics to understand environment and access
-      await runSyncDiagnostics();
-      // Process any pending sync queue operations first (including deletions)
-      await processSyncQueue();
+        // Initial diagnostics to understand environment and access
+        await runSyncDiagnostics();
+        // Process any pending sync queue operations first (including deletions)
+        await processSyncQueue();
 
-      // Sync user and outlet data
-      await syncProfilesToLocalDb();
+        // Sync user and outlet data
+        await syncProfilesToLocalDb();
 
-      // Sync outlets both ways - first push local outlets to cloud, then pull from cloud
-      final outletsSyncedToCloud = await syncOutletsToCloud();
-      syncResults['outlets'] = await syncOutletsToLocalDb();
-      syncResults['outlets']!['uploaded_to_cloud'] = outletsSyncedToCloud;
+        // Sync outlets both ways - first push local outlets to cloud, then pull from cloud
+        final outletsSyncedToCloud = await syncOutletsToCloud();
+        syncResults['outlets'] = await syncOutletsToLocalDb();
+        syncResults['outlets']!['uploaded_to_cloud'] = outletsSyncedToCloud;
 
-      syncResults['reps'] = await syncRepsToLocalDb();
-      await syncCustomersToLocalDb();
+        syncResults['reps'] = await syncRepsToLocalDb();
+        await syncCustomersToLocalDb();
 
-      // Sync product data with proper transaction handling
-      syncResults['products'] = await syncProductsToLocalDb();
+        // Sync product data with proper transaction handling
+        syncResults['products'] = await syncProductsToLocalDb();
 
-      // Sync sales data with proper transaction handling
-      syncResults['sales'] = await syncSalesToLocalDb();
+        // Sync sales data with proper transaction handling
+        syncResults['sales'] = await syncSalesToLocalDb();
 
-      // Sync stock-related data
-      syncResults['stock_balances'] = await syncStockBalancesToLocalDb();
+        // Sync stock-related data
+        syncResults['stock_balances'] = await syncStockBalancesToLocalDb();
 
-      // Sync product distributions with error handling for missing table
-      try {
-        await syncProductDistributionsFromServer();
-        await syncProductDistributionsToServer();
-      } catch (e) {
-        if (e.toString().contains(
-            'relation "public.product_distributions" does not exist')) {
-          print(
-              'Warning: product_distributions table does not exist in cloud database. Skipping sync.');
-          print(
-              'Please run the migration: supabase/migrations/20240101000000_create_product_distributions_table.sql');
-        } else {
-          print('Error syncing product distributions: $e');
-          // Re-throw other errors
-          rethrow;
+        // Sync product distributions with error handling for missing table
+        try {
+          await syncProductDistributionsFromServer();
+          await syncProductDistributionsToServer();
+        } catch (e) {
+          if (e.toString().contains(
+              'relation "public.product_distributions" does not exist')) {
+            print(
+                'Warning: product_distributions table does not exist in cloud database. Skipping sync.');
+            print(
+                'Please run the migration: supabase/migrations/20240101000000_create_product_distributions_table.sql');
+          } else {
+            print('Error syncing product distributions: $e');
+            // Re-throw other errors
+            rethrow;
+          }
         }
-      }
 
-      // Sync stock intake data
-      syncResults['stock_intake'] = await syncStockIntakesToLocalDb();
+        // Sync stock intake data
+        syncResults['stock_intake'] = await syncStockIntakesToLocalDb();
 
-      // Sync intake balances
-      syncResults['intake_balances'] = await syncIntakeBalancesToLocalDb();
+        // Sync intake balances
+        syncResults['intake_balances'] = await syncIntakeBalancesToLocalDb();
 
-      // Sync expenditures data
-      syncResults['expenditures'] = await syncExpendituresToLocalDb();
+        // Sync expenditures data
+        syncResults['expenditures'] = await syncExpendituresToLocalDb();
 
-      // Process any remaining sync queue operations after all syncs
-      await processSyncQueue();
+        // Process any remaining sync queue operations after all syncs
+        await processSyncQueue();
 
-      return syncResults;
+        return syncResults;
       }, prefix: 'all_tables');
     } catch (e) {
       print('Error in syncAll: $e');
@@ -1686,7 +1711,8 @@ class SyncService {
           where: 'synced = ?',
           whereArgs: [0],
         );
-        print('[DEBUG] [syncStockBalancesToLocalDb] Unsynced local balances: ${unsyncedBalances.length}');
+        print(
+            '[DEBUG] [syncStockBalancesToLocalDb] Unsynced local balances: ${unsyncedBalances.length}');
 
         // Push unsynced balances to Supabase
         for (var balanceMap in unsyncedBalances) {
@@ -1718,10 +1744,12 @@ class SyncService {
         final response = await supabase.from('stock_balances').select();
         stockBalances = response as List<dynamic>;
       } catch (e) {
-        print('[DEBUG] [syncStockBalancesToLocalDb] Error selecting stock_balances from cloud: $e');
+        print(
+            '[DEBUG] [syncStockBalancesToLocalDb] Error selecting stock_balances from cloud: $e');
         rethrow;
       }
-      print('[DEBUG] [syncStockBalancesToLocalDb] Downloaded cloud balances: ${stockBalances.length}');
+      print(
+          '[DEBUG] [syncStockBalancesToLocalDb] Downloaded cloud balances: ${stockBalances.length}');
 
       // Update local database in a separate transaction
       await db.transaction((txn) async {
@@ -1792,9 +1820,10 @@ class SyncService {
           downloadedCount++;
         }
         final insertedCount = Sqflite.firstIntValue(
-              await txn.rawQuery('SELECT COUNT(*) FROM stock_balances')) ??
+                await txn.rawQuery('SELECT COUNT(*) FROM stock_balances')) ??
             0;
-        print('[DEBUG] [syncStockBalancesToLocalDb] Inserted local balances: $insertedCount');
+        print(
+            '[DEBUG] [syncStockBalancesToLocalDb] Inserted local balances: $insertedCount');
       });
 
       return {

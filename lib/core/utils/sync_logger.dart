@@ -5,7 +5,8 @@ class SyncLogger {
   /// Captures all `print` output during [action] into a timestamped log file
   /// under `sync_logs/` and also forwards prints to the console.
   /// Returns the result of [action].
-  static Future<T> capture<T>(Future<T> Function() action, {String? prefix}) async {
+  static Future<T> capture<T>(Future<T> Function() action,
+      {String? prefix}) async {
     final now = DateTime.now();
     final ts = _fmtTs(now);
     final dir = Directory('sync_logs');
@@ -32,7 +33,8 @@ class SyncLogger {
       final result = await runZoned<Future<T>>(() async {
         try {
           final r = await action();
-          await _close('Status: success at ${DateTime.now().toIso8601String()}');
+          await _close(
+              'Status: success at ${DateTime.now().toIso8601String()}');
           return r;
         } catch (e, st) {
           sink.writeln('[ERROR] $e');
