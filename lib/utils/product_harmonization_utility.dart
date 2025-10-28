@@ -43,8 +43,7 @@ class ProductHarmonizationUtility {
         if (duplicateProducts.length > 1) {
           await _mergeDuplicateProducts(duplicateProducts);
           duplicatesResolved++;
-          processedProducts.add(
-              '$productName (${await _syncService.getOutletName(outletId)})');
+          processedProducts.add('$productName (${await _syncService.getOutletName(outletId)})');
         }
       }
 
@@ -67,28 +66,27 @@ class ProductHarmonizationUtility {
   }
 
   /// Merge multiple duplicate products into one
-  Future<void> _mergeDuplicateProducts(
-      List<Map<String, dynamic>> duplicateProducts) async {
+  Future<void> _mergeDuplicateProducts(List<Map<String, dynamic>> duplicateProducts) async {
     if (duplicateProducts.length <= 1) return;
 
     final db = await _dbHelper.database;
-
+    
     await db.transaction((txn) async {
       // Use the first (oldest) product as the primary one
       final primaryProductMap = duplicateProducts.first;
       final primaryProduct = Product.fromMap(primaryProductMap);
-
+      
       // Calculate merged values from all duplicates
       double totalQuantity = 0;
       double totalCost = 0;
       String? mergedDescription;
       DateTime? latestUpdate;
-
+      
       for (final productMap in duplicateProducts) {
         final product = Product.fromMap(productMap);
         totalQuantity += product.quantity;
         totalCost += product.totalCost;
-
+        
         // Merge descriptions
         if (product.description != null && product.description!.isNotEmpty) {
           if (mergedDescription == null || mergedDescription.isEmpty) {
@@ -97,20 +95,18 @@ class ProductHarmonizationUtility {
             mergedDescription += '; ${product.description}';
           }
         }
-
+        
         // Track latest update
         if (product.lastUpdated != null) {
-          if (latestUpdate == null ||
-              product.lastUpdated!.isAfter(latestUpdate)) {
+          if (latestUpdate == null || product.lastUpdated!.isAfter(latestUpdate)) {
             latestUpdate = product.lastUpdated;
           }
         }
       }
-
+      
       // Calculate average cost per unit
-      final averageCostPerUnit =
-          totalQuantity > 0 ? totalCost / totalQuantity : 0.0;
-
+      final averageCostPerUnit = totalQuantity > 0 ? totalCost / totalQuantity : 0.0;
+      
       // Update the primary product with merged data
       final mergedProduct = Product(
         id: primaryProduct.id,
@@ -126,7 +122,7 @@ class ProductHarmonizationUtility {
         createdAt: primaryProduct.createdAt,
         isSynced: false, // Mark for sync
       );
-
+      
       // Update the primary product
       await txn.update(
         'products',
@@ -134,11 +130,11 @@ class ProductHarmonizationUtility {
         where: 'id = ?',
         whereArgs: [primaryProduct.id],
       );
-
+      
       // Update any references to the duplicate products in other tables
       for (int i = 1; i < duplicateProducts.length; i++) {
         final duplicateId = duplicateProducts[i]['id'] as String;
-
+        
         // Update sale_items references
         await txn.update(
           'sale_items',
@@ -146,7 +142,7 @@ class ProductHarmonizationUtility {
           where: 'product_id = ?',
           whereArgs: [duplicateId],
         );
-
+        
         // Update stock_balances references
         await txn.update(
           'stock_balances',
@@ -154,7 +150,7 @@ class ProductHarmonizationUtility {
           where: 'product_id = ?',
           whereArgs: [duplicateId],
         );
-
+        
         // Delete the duplicate product
         await txn.delete(
           'products',
@@ -169,7 +165,7 @@ class ProductHarmonizationUtility {
   Future<Map<String, dynamic>> getDuplicateProductsReport() async {
     try {
       final db = await _dbHelper.database;
-
+      
       final List<Map<String, dynamic>> duplicateGroups = await db.rawQuery('''
         SELECT 
           product_name, 
@@ -184,13 +180,12 @@ class ProductHarmonizationUtility {
       ''');
 
       List<Map<String, dynamic>> detailedReport = [];
-
+      
       for (final group in duplicateGroups) {
         final productName = group['product_name'] as String;
         final outletId = group['outlet_id'] as String;
-        final outletName =
-            await _syncService.getOutletName(outletId) ?? 'Unknown';
-
+        final outletName = await _syncService.getOutletName(outletId) ?? 'Unknown';
+        
         detailedReport.add({
           'productName': productName,
           'outletName': outletName,

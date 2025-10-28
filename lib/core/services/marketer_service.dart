@@ -27,10 +27,11 @@ class MarketerService {
 
   // MARKETER CRUD OPERATIONS
 
-  Future<void> addMarketerLocally(Marketer marketer) async {
+  Future<void> addMarketerLocally(Marketer marketer,
+      {DatabaseExecutor? exec}) async {
     try {
-      final db = await _dbHelper.database;
-      await db.insert(
+      final executor = exec ?? await _dbHelper.database;
+      await executor.insert(
         'marketers',
         marketer.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -120,14 +121,15 @@ class MarketerService {
     }
   }
 
-  Future<bool> updateMarketer(Marketer marketer) async {
+  Future<bool> updateMarketer(Marketer marketer,
+      {DatabaseExecutor? exec}) async {
     try {
       final updatedMarketer = marketer.copyWith(
         updatedAt: DateTime.now(),
       );
 
       // Update locally
-      await addMarketerLocally(updatedMarketer);
+      await addMarketerLocally(updatedMarketer, exec: exec);
 
       // Cloud disabled for offline-only mode
       if (!_cloudDisabled) {
@@ -167,10 +169,11 @@ class MarketerService {
 
   // MARKETER TARGET CRUD OPERATIONS
 
-  Future<void> addMarketerTargetLocally(MarketerTarget target) async {
+  Future<void> addMarketerTargetLocally(MarketerTarget target,
+      {DatabaseExecutor? exec}) async {
     try {
-      final db = await _dbHelper.database;
-      await db.insert(
+      final executor = exec ?? await _dbHelper.database;
+      await executor.insert(
         'marketer_targets',
         target.toMap(),
         conflictAlgorithm: ConflictAlgorithm.replace,
@@ -257,14 +260,15 @@ class MarketerService {
     }
   }
 
-  Future<bool> updateMarketerTarget(MarketerTarget target) async {
+  Future<bool> updateMarketerTarget(MarketerTarget target,
+      {DatabaseExecutor? exec}) async {
     try {
       final updatedTarget = target.copyWith(
         updatedAt: DateTime.now(),
       );
 
       // Update locally
-      await addMarketerTargetLocally(updatedTarget);
+      await addMarketerTargetLocally(updatedTarget, exec: exec);
 
       // Cloud disabled for offline-only mode
       if (!_cloudDisabled) {

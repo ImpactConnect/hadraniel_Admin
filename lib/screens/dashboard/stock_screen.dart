@@ -897,7 +897,6 @@ class _StockScreenState extends State<StockScreen> {
                                         horizontal: 12,
                                       ),
                                     ),
-                                    isExpanded: true,
                                     items: [
                                       const DropdownMenuItem(
                                         value: null,
@@ -934,7 +933,6 @@ class _StockScreenState extends State<StockScreen> {
                                         horizontal: 12,
                                       ),
                                     ),
-                                    isExpanded: true,
                                     items: [
                                       const DropdownMenuItem(
                                         value: null,

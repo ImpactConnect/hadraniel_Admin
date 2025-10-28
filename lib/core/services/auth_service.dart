@@ -64,8 +64,11 @@ class AuthService {
 
       // If online and profile not found locally, try to fetch from Supabase
       if (profile == null && supabase.auth.currentSession != null) {
-        final response =
-            await supabase.from('profiles').select().eq('id', userId).single();
+        final response = await supabase
+            .from('profiles')
+            .select()
+            .eq('id', userId)
+            .single();
 
         if (response != null) {
           profile = Profile.fromMap(response);

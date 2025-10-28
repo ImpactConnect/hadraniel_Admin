@@ -235,7 +235,6 @@ class _MyAppState extends State<MyApp> {
         '/login': (context) => const LoginScreen(),
         '/dashboard': (context) => const DashboardScreen(),
         '/reps': (context) => const RepsScreen(),
-        '/marketers': (context) => const MarketersScreen(),
         '/outlets': (context) => const OutletsScreen(),
         '/products': (context) => const ProductsScreen(),
         '/sync': (context) => const SyncScreen(),
@@ -246,6 +245,7 @@ class _MyAppState extends State<MyApp> {
         '/expenditures': (context) => const ExpendituresScreen(),
         '/customers': (context) => const CustomersScreen(),
         '/settings': (context) => const SettingsScreen(),
+        '/marketers': (context) => const MarketersScreen(),
       },
       debugShowCheckedModeBanner: false,
     );

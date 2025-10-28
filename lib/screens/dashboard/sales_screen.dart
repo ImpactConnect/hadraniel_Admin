@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'dart:convert';
 import 'dart:io';
 import 'package:path_provider/path_provider.dart';
 import 'package:csv/csv.dart';
@@ -13,6 +14,7 @@ import '../../core/services/sync_service.dart';
 import '../../core/models/outlet_model.dart';
 import '../../core/models/rep_model.dart';
 import '../../core/models/product_model.dart';
+import '../../core/models/deleted_sale_model.dart';
 import '../../core/database/database_helper.dart';
 
 class SalesScreen extends StatefulWidget {
@@ -295,6 +297,11 @@ class _SalesScreenState extends State<SalesScreen> {
               ),
             ),
           ],
+        ),
+        IconButton(
+          icon: const Icon(Icons.delete_sweep),
+          onPressed: _showDeletedSalesDialog,
+          tooltip: 'Deleted Sales',
         ),
         IconButton(
           icon: const Icon(Icons.refresh),
@@ -1857,5 +1864,357 @@ class _SalesScreenState extends State<SalesScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
       child: Text(text),
     );
+  }
+
+  Future<void> _showDeletedSalesDialog() async {
+    try {
+      // Pull latest from cloud then read local
+      await _syncService.syncDeletedSalesFromServer(
+          outletId: _selectedOutletId);
+      final deletedSales = await _syncService.getAllLocalDeletedSales(
+          outletId: _selectedOutletId);
+
+      if (!mounted) return;
+
+      final currencyFormat = NumberFormat.currency(symbol: '₦');
+      final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
+
+      showDialog(
+        context: context,
+        builder: (context) => Dialog(
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+          child: Container(
+            width: MediaQuery.of(context).size.width * 0.7,
+            height: MediaQuery.of(context).size.height * 0.8,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(16),
+              color: Colors.white,
+            ),
+            child: Column(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).primaryColor,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(16),
+                      topRight: Radius.circular(16),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.delete_sweep, color: Colors.white),
+                      const SizedBox(width: 12),
+                      const Text(
+                        'Deleted Sales History',
+                        style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold),
+                      ),
+                      const Spacer(),
+                      IconButton(
+                        onPressed: () => Navigator.of(context).pop(),
+                        icon: const Icon(Icons.close, color: Colors.white),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: deletedSales.isEmpty
+                      ? const Center(child: Text('No deleted sales records'))
+                      : Column(
+                          children: [
+                            // Fixed Header row
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 16, vertical: 12),
+                              decoration: BoxDecoration(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .primary
+                                    .withOpacity(0.08),
+                                border: Border(
+                                  bottom: BorderSide(
+                                      color: Colors.grey.shade300, width: 2),
+                                ),
+                              ),
+                              child: Row(
+                                children: const [
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      'Item Name',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      'Sales Date',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      'Reason',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      'Delete Date',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      'Amount Refund',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                  Expanded(
+                                    flex: 2,
+                                    child: Text(
+                                      'Sales Rep',
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                          fontWeight: FontWeight.bold),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            // Scrollable Body rows
+                            Expanded(
+                              child: Builder(
+                                builder: (context) {
+                                  final currencyFormat =
+                                      NumberFormat.currency(symbol: '#');
+                                  final dateFmt =
+                                      DateFormat("yyyy-MM-dd HH:mm");
+
+                                  String _extractFirstItemName(String jsonStr) {
+                                    try {
+                                      final data = jsonDecode(jsonStr);
+                                      if (data is List && data.isNotEmpty) {
+                                        final item = data.first;
+                                        if (item is Map) {
+                                          final name = item['product_name'] ??
+                                              item['name'] ??
+                                              item['item_name'];
+                                          if (name != null &&
+                                              name.toString().isNotEmpty)
+                                            return name.toString();
+                                        }
+                                        return item.toString();
+                                      }
+                                      if (data is Map &&
+                                          data['items'] is List &&
+                                          (data['items'] as List).isNotEmpty) {
+                                        final item =
+                                            (data['items'] as List).first;
+                                        if (item is Map) {
+                                          final name = item['product_name'] ??
+                                              item['name'] ??
+                                              item['item_name'];
+                                          if (name != null &&
+                                              name.toString().isNotEmpty)
+                                            return name.toString();
+                                        }
+                                        return item.toString();
+                                      }
+                                    } catch (_) {}
+                                    return 'Unknown';
+                                  }
+
+                                  return FutureBuilder<Map<String, String>>(
+                                    future: () async {
+                                      final map = <String, String>{};
+                                      for (final ds in deletedSales) {
+                                        final repId = ds.repId;
+                                        if (repId != null &&
+                                            !map.containsKey(repId)) {
+                                          map[repId] = await _syncService
+                                              .getRepName(repId);
+                                        }
+                                      }
+                                      return map;
+                                    }(),
+                                    builder: (context, snapshot) {
+                                      final repNames =
+                                          snapshot.data ?? const {};
+                                      return SingleChildScrollView(
+                                        child: Column(
+                                          children: deletedSales.map((ds) {
+                                            final itemName =
+                                                _extractFirstItemName(
+                                                    ds.deletedItemsJson);
+                                            final salesDate =
+                                                ds.originalSaleDate != null
+                                                    ? dateFmt.format(
+                                                        ds.originalSaleDate!)
+                                                    : 'Unknown';
+                                            final deleteDate =
+                                                dateFmt.format(ds.deletedAt);
+                                            final refundText = currencyFormat
+                                                .format(ds.refundAmount);
+                                            final repName = ds.repId != null
+                                                ? (repNames[ds.repId!] ??
+                                                    'Loading...')
+                                                : 'N/A';
+
+                                            return Container(
+                                              decoration: BoxDecoration(
+                                                border: Border(
+                                                  bottom: BorderSide(
+                                                      color: Colors.grey
+                                                          .withOpacity(0.2),
+                                                      width: 1),
+                                                ),
+                                              ),
+                                              child: IntrinsicHeight(
+                                                child: Row(
+                                                  crossAxisAlignment:
+                                                      CrossAxisAlignment
+                                                          .stretch,
+                                                  children: [
+                                                    Expanded(
+                                                      flex: 2,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .all(12),
+                                                        child: Text(
+                                                          itemName,
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                          softWrap: true,
+                                                          overflow: TextOverflow
+                                                              .visible,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Expanded(
+                                                      flex: 2,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .all(12),
+                                                        child: Text(
+                                                          salesDate,
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                          softWrap: true,
+                                                          overflow: TextOverflow
+                                                              .visible,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Expanded(
+                                                      flex: 2,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .all(12),
+                                                        child: Text(
+                                                          ds.reason ?? 'none',
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                          softWrap: true,
+                                                          overflow: TextOverflow
+                                                              .visible,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Expanded(
+                                                      flex: 2,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .all(12),
+                                                        child: Text(
+                                                          deleteDate,
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                          softWrap: true,
+                                                          overflow: TextOverflow
+                                                              .visible,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Expanded(
+                                                      flex: 2,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .all(12),
+                                                        child: Text(
+                                                          refundText,
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                          softWrap: true,
+                                                          overflow: TextOverflow
+                                                              .visible,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                    Expanded(
+                                                      flex: 2,
+                                                      child: Container(
+                                                        padding:
+                                                            const EdgeInsets
+                                                                .all(12),
+                                                        child: Text(
+                                                          repName,
+                                                          textAlign:
+                                                              TextAlign.center,
+                                                          softWrap: true,
+                                                          overflow: TextOverflow
+                                                              .visible,
+                                                        ),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ),
+                                            );
+                                          }).toList(),
+                                        ),
+                                      );
+                                    },
+                                  );
+                                },
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to load deleted sales: $e')),
+        );
+      }
+    }
   }
 }

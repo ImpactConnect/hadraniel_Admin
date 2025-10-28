@@ -4,6 +4,7 @@ import 'package:sqflite/sqflite.dart';
 import 'package:path/path.dart';
 import 'database_migration_v11.dart';
 import 'database_migration_v12.dart';
+import 'database_migration_v15.dart';
 
 class DatabaseHelper {
   static final DatabaseHelper _instance = DatabaseHelper._internal();
@@ -51,7 +52,7 @@ class DatabaseHelper {
     final database = await dbFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 13,
+        version: 15,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         onOpen: _onOpen,
@@ -352,6 +353,58 @@ class DatabaseHelper {
         )
       ''');
     }
+
+    if (oldVersion < 14) {
+      // Add marketers and marketer_targets tables for upgrades
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS marketers (
+          id TEXT PRIMARY KEY,
+          full_name TEXT NOT NULL,
+          email TEXT NOT NULL,
+          phone TEXT,
+          outlet_id TEXT NOT NULL,
+          status TEXT NOT NULL DEFAULT 'active',
+          created_at TEXT,
+          updated_at TEXT,
+          FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+        )
+      ''');
+
+      await db.execute('''
+        CREATE TABLE IF NOT EXISTS marketer_targets (
+          id TEXT PRIMARY KEY,
+          marketer_id TEXT NOT NULL,
+          product_id TEXT NOT NULL,
+          outlet_id TEXT NOT NULL,
+          target_quantity REAL,
+          target_revenue REAL,
+          target_type TEXT NOT NULL DEFAULT 'quantity',
+          start_date TEXT NOT NULL,
+          end_date TEXT NOT NULL,
+          current_quantity REAL NOT NULL DEFAULT 0,
+          current_revenue REAL NOT NULL DEFAULT 0,
+          status TEXT NOT NULL DEFAULT 'active',
+          created_at TEXT,
+          updated_at TEXT,
+          FOREIGN KEY (marketer_id) REFERENCES marketers (id),
+          FOREIGN KEY (product_id) REFERENCES products (id),
+          FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+        )
+      ''');
+    }
+
+    if (oldVersion < 15) {
+      // Apply marketer-related performance indexes
+      await DatabaseMigrationV15.applyMigration(db);
+
+      // Verify migration was successful
+      final migrationSuccess = await DatabaseMigrationV15.verifyMigration(db);
+      if (migrationSuccess) {
+        print('Database migration v15 completed successfully');
+      } else {
+        print('Warning: Database migration v15 may not have completed fully');
+      }
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -625,7 +678,6 @@ class DatabaseHelper {
         FOREIGN KEY (stock_count_id) REFERENCES stock_counts (id)
       )
     ''');
-
     // Marketers table
     await db.execute('''
       CREATE TABLE marketers (
@@ -634,10 +686,9 @@ class DatabaseHelper {
         email TEXT NOT NULL,
         phone TEXT,
         outlet_id TEXT NOT NULL,
-        status TEXT DEFAULT 'active',
-        created_at TEXT NOT NULL,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT,
         updated_at TEXT,
-        is_synced INTEGER DEFAULT 0,
         FOREIGN KEY (outlet_id) REFERENCES outlets (id)
       )
     ''');
@@ -654,17 +705,40 @@ class DatabaseHelper {
         target_type TEXT NOT NULL DEFAULT 'quantity',
         start_date TEXT NOT NULL,
         end_date TEXT NOT NULL,
-        current_quantity REAL DEFAULT 0,
-        current_revenue REAL DEFAULT 0,
-        status TEXT DEFAULT 'active',
-        created_at TEXT NOT NULL,
+        current_quantity REAL NOT NULL DEFAULT 0,
+        current_revenue REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'active',
+        created_at TEXT,
         updated_at TEXT,
-        is_synced INTEGER DEFAULT 0,
         FOREIGN KEY (marketer_id) REFERENCES marketers (id),
         FOREIGN KEY (product_id) REFERENCES products (id),
         FOREIGN KEY (outlet_id) REFERENCES outlets (id)
       )
     ''');
+
+    // Performance indexes for fresh installs (v15)
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_marketers_outlet_id ON marketers(outlet_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_marketers_status ON marketers(status)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_marketers_created_at ON marketers(created_at)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_marketers_outlet_status ON marketers(outlet_id, status)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_marketer_targets_marketer_id ON marketer_targets(marketer_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_marketer_targets_product_id ON marketer_targets(product_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_marketer_targets_outlet_id ON marketer_targets(outlet_id)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_marketer_targets_status ON marketer_targets(status)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_marketer_targets_created_at ON marketer_targets(created_at)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_marketer_targets_period ON marketer_targets(start_date, end_date)');
+    await db.execute(
+        'CREATE INDEX IF NOT EXISTS idx_marketer_targets_marketer_product ON marketer_targets(marketer_id, product_id)');
   }
 
   Future<void> clearAllTables() async {
@@ -685,8 +759,6 @@ class DatabaseHelper {
       await txn.delete('stock_count_items');
       await txn.delete('stock_adjustments');
       await txn.delete('stock_counts');
-      await txn.delete('marketer_targets');
-      await txn.delete('marketers');
     });
   }
 
