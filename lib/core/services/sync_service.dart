@@ -467,20 +467,47 @@ class SyncService {
           }
         }
       });
-
-      // Fetch all sales and sale_items from cloud
+      // 1. Fetch sales first (newest 10,000)
       final salesResponse = await supabase
           .from('sales')
           .select()
-          .order('created_at', ascending: false);
+          .order('created_at', ascending: false)
+          .limit(100000);
       print('Raw sales response: $salesResponse');
       final sales = salesResponse as List<dynamic>;
       print('Found ${sales.length} sales in cloud database');
 
-      final saleItemsResponse = await supabase.from('sale_items').select();
-      print('Raw sale_items response: $saleItemsResponse');
-      final saleItems = saleItemsResponse as List<dynamic>;
-      print('Found ${saleItems.length} sale items in cloud database');
+      // 2. Extract Sale IDs
+      final saleIds = sales.map((s) => s['id'] as String).toList();
+      
+      // 3. Fetch Sale Items for these sales in batches
+      // This ensures we get the items SPECIFICALLY for the sales we just fetched
+      List<dynamic> saleItems = [];
+      if (saleIds.isNotEmpty) {
+        print('Fetching items for ${saleIds.length} sales...');
+        
+        // Split into chunks of 100 to avoid URL length limits
+        final int batchSize = 100;
+        for (var i = 0; i < saleIds.length; i += batchSize) {
+          final end = (i + batchSize < saleIds.length) ? i + batchSize : saleIds.length;
+          final batchIds = saleIds.sublist(i, end);
+          
+          try {
+            final batchResponse = await supabase
+                .from('sale_items')
+                .select()
+                .in_('sale_id', batchIds);
+                
+            final batchItems = batchResponse as List<dynamic>;
+            saleItems.addAll(batchItems);
+            print('Fetched ${batchItems.length} items for batch ${i ~/ batchSize + 1}');
+          } catch (e) {
+            print('Error fetching batch ${i ~/ batchSize + 1}: $e');
+            // Continue with next batch
+          }
+        }
+      }
+      print('Found total ${saleItems.length} sale items for the fetched sales');
 
       // CRITICAL: Use a single atomic transaction for both sales AND sale_items
       // This prevents orphaned sales and ensures data consistency
@@ -489,14 +516,6 @@ class SyncService {
       int skippedItems = 0;
       
       await db.transaction((txn) async {
-        // Get all existing product IDs for validation
-        final productResults = await txn.query('products', columns: ['id']);
-        final existingProductIds = productResults.map((row) => row['id'] as String).toSet();
-        print('\n===== DEBUG: PRODUCT VALIDATION =====');
-        print('Found ${existingProductIds.length} products in local database');
-        print('First 10 product IDs: ${existingProductIds.take(10).toList()}');
-        print('=====================================\n');
-
         // Clear existing data within the transaction
         await txn.delete('sale_items');
         await txn.delete('sales');
@@ -515,121 +534,11 @@ class SyncService {
         }
         print('Inserted $insertedSales sales');
 
-        // Then insert sale_items with product validation
-        Map<String, int> missingProducts = {};
-        Map<String, List<String>> salesAffectedByMissingProduct = {};
-        
-        // Pre-scan for missing products and insert placeholders
-        Set<String> productsToCreate = {};
-        for (final itemData in saleItems) {
-           final productId = itemData['product_id'] as String;
-           if (!existingProductIds.contains(productId)) {
-             productsToCreate.add(productId);
-           }
-        }
-
-        if (productsToCreate.isNotEmpty) {
-          print('Creating ${productsToCreate.length} placeholder products to satisfy FK constraints...');
-          for (final productId in productsToCreate) {
-             // Check if we have a name from the sale_item data
-             String placeholderName = 'Unknown Product';
-             // Try to find a name from the sale items that reference this product
-             final matchingItem = saleItems.firstWhere(
-               (item) => item['product_id'] == productId && item['product_name'] != null,
-               orElse: () => null,
-             );
-             
-             if (matchingItem != null) {
-               placeholderName = matchingItem['product_name'] as String;
-             }
-
-             try {
-               await txn.insert('products', {
-                 'id': productId,
-                 'product_name': placeholderName,
-                 'quantity': 0,
-                 'unit': 'N/A',
-                 'cost_per_unit': 0,
-                 'total_cost': 0,
-                 'date_added': DateTime.now().toIso8601String(),
-                 'outlet_id': 'placeholder', // Needs a valid UUID? No, outlet_id is FK? Let's check schema.
-                 // Schema says: FOREIGN KEY (outlet_id) REFERENCES outlets (id)
-                 // We need a valid outlet_id. Let's try to get one from the sales or use a dummy if possible.
-                 // Actually, let's check if we can get a valid outlet_id from the sale associated with this item.
-                 // But for now, let's see if we can skip outlet_id or if it's required.
-                 // Schema: outlet_id TEXT NOT NULL. It is required.
-                 // We need an existing outlet ID.
-                 'created_at': DateTime.now().toIso8601String(),
-                 'is_synced': 1
-               });
-               // Wait, inserting into products requires a valid outlet_id which is a FK.
-               // If we don't have a valid outlet_id, we can't insert a product.
-               // Let's fetch a valid outlet ID first.
-             } catch (e) {
-               print('Error creating placeholder product $productId: $e');
-             }
-          }
-          
-          // Re-fetch existing product IDs
-          final updatedProductResults = await txn.query('products', columns: ['id']);
-          existingProductIds.addAll(updatedProductResults.map((row) => row['id'] as String));
-        }
-        
-        // Create a map of saleId -> outletId for quick lookup
-        final saleOutletMap = {
-          for (var sale in sales) sale['id'] as String: sale['outlet_id'] as String
-        };
-
+        // Insert sale_items directly (FK constraint was removed in migration v17)
         for (final itemData in saleItems) {
           try {
             final saleItem = SaleItem.fromMap(itemData as Map<String, dynamic>);
             
-            // Debug log for product name
-            if (saleItem.productName == null) {
-               print('DEBUG: Item ${saleItem.id} has NULL product_name in incoming data');
-               print('Raw item data: $itemData');
-            }
-
-            // Handle missing product by creating placeholder
-            if (!existingProductIds.contains(saleItem.productId)) {
-               // Get outlet ID from the parent sale
-               final outletId = saleOutletMap[saleItem.saleId];
-               
-               if (outletId != null) {
-                 print('Creating placeholder for missing product: ${saleItem.productId} (Outlet: $outletId)');
-                 try {
-                   await txn.insert('products', {
-                     'id': saleItem.productId,
-                     'product_name': saleItem.productName ?? 'Unknown Product',
-                     'quantity': 0,
-                     'unit': 'N/A',
-                     'cost_per_unit': 0,
-                     'total_cost': 0,
-                     'date_added': DateTime.now().toIso8601String(),
-                     'outlet_id': outletId,
-                     'created_at': DateTime.now().toIso8601String(),
-                     'is_synced': 1
-                   });
-                   existingProductIds.add(saleItem.productId);
-                 } catch (e) {
-                   print('Failed to create placeholder product: $e');
-                 }
-               } else {
-                 print('Could not find outlet ID for sale ${saleItem.saleId}, cannot create placeholder product');
-               }
-            }
-
-            // Now check again
-            if (!existingProductIds.contains(saleItem.productId)) {
-              print(
-                '\n[SKIP] Sale Item ${saleItem.id}\n'
-                '  Product ID: ${saleItem.productId}\n'
-                '  REASON: Product not found and could not create placeholder'
-              );
-              skippedItems++;
-              continue; 
-            }
-
             await txn.insert(
               'sale_items',
               {...saleItem.toMap(), 'is_synced': 1},
@@ -641,28 +550,8 @@ class SyncService {
             skippedItems++;
           }
         }
-        print('Inserted $insertedItems sale items, skipped $skippedItems items');
-        
-        if (skippedItems > 0) {
-          print('\n===== MISSING PRODUCTS SUMMARY =====');
-          print('Total skipped items: $skippedItems');
-          print('Unique missing products: ${missingProducts.length}');
-          missingProducts.forEach((productId, count) {
-            print('  - Product $productId: $count items skipped, affecting ${salesAffectedByMissingProduct[productId]?.length ?? 0} sales');
-            print('    Affected sale IDs: ${salesAffectedByMissingProduct[productId]?.take(5).join(", ")}');
-          });
-          print('====================================\n');
-        }
+        print('Inserted $insertedItems sale items');
       });
-
-      if (skippedItems > 0) {
-        print(
-          '\n⚠️  CRITICAL WARNING ⚠️\n'
-          '$skippedItems sale_items were skipped due to missing products.\n'
-          'These sales will display "No Item" on the UI.\n'
-          'Action Required: Ensure products are synced from cloud database.\n'
-        );
-      }
 
       return {
         'synced': insertedSales + insertedItems,
@@ -685,7 +574,10 @@ class SyncService {
 
       List<dynamic> saleItems = [];
       try {
-        final response = await supabase.from('sale_items').select();
+        final response = await supabase
+            .from('sale_items')
+            .select()
+            .limit(100000);
         print('Raw sale_items response: $response');
         saleItems = response as List<dynamic>;
         print('Found ${saleItems.length} sale items in cloud database');
@@ -703,32 +595,16 @@ class SyncService {
       }
 
       final db = await _dbHelper.database;
-
-      // Get existing product IDs for validation
-      final productResults = await db.query('products', columns: ['id']);
-      final existingProductIds = productResults.map((row) => row['id'] as String).toSet();
-      print('Found ${existingProductIds.length} products for validation');
-
       int insertedCount = 0;
       int skippedCount = 0;
 
-      // Upsert remote sale items with product validation
+      // Upsert remote sale items directly (FK constraint removed)
       await db.transaction((txn) async {
         print('Upserting ${saleItems.length} sale items from cloud...');
         for (final itemData in saleItems) {
           try {
             final saleItem = SaleItem.fromMap(itemData as Map<String, dynamic>);
             
-            // CRITICAL: Validate that the product exists before inserting
-            if (!existingProductIds.contains(saleItem.productId)) {
-              print(
-                'WARNING: Skipping sale_item ${saleItem.id} - Product ${saleItem.productId} not found. '
-                'Sale ID: ${saleItem.saleId}'
-              );
-              skippedCount++;
-              continue; // Skip this item to prevent foreign key constraint failure
-            }
-
             await txn.insert(
               'sale_items',
               {...saleItem.toMap(), 'is_synced': 1},
@@ -737,20 +613,11 @@ class SyncService {
             insertedCount++;
           } catch (e) {
             print('Error upserting sale item ${itemData['id']}: $e');
-            print('Raw item data: $itemData');
             skippedCount++;
-            // Continue with next item
           }
         }
         print('Sale items upsert completed: $insertedCount inserted, $skippedCount skipped');
       });
-
-      if (skippedCount > 0) {
-        print(
-          'WARNING: $skippedCount sale items were skipped due to missing products. '
-          'Ensure products are synced before syncing sale items.'
-        );
-      }
     } catch (e) {
       print('Error syncing sale items: $e');
       rethrow;

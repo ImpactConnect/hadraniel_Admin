@@ -71,7 +71,7 @@ class DatabaseHelper {
     final database = await dbFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 16,
+        version: 17,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         onOpen: _onOpen,
@@ -436,6 +436,43 @@ class DatabaseHelper {
         print('Error adding product_name to sale_items: $e');
       }
     }
+
+    if (oldVersion < 17) {
+      // Remove foreign key constraint on sale_items
+      // 1. Rename existing table
+      await db.execute('ALTER TABLE sale_items RENAME TO sale_items_backup');
+
+      // 2. Create new table without FK constraint on product_id
+      await db.execute('''
+        CREATE TABLE sale_items (
+          id TEXT PRIMARY KEY,
+          sale_id TEXT NOT NULL,
+          product_id TEXT NOT NULL,
+          product_name TEXT,
+          quantity REAL NOT NULL,
+          unit_price REAL NOT NULL,
+          total_price REAL NOT NULL,
+          created_at TEXT,
+          is_synced INTEGER DEFAULT 0,
+          FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
+        )
+      ''');
+
+      // 3. Copy data from backup table
+      await db.execute('''
+        INSERT INTO sale_items (
+          id, sale_id, product_id, product_name, quantity, 
+          unit_price, total_price, created_at, is_synced
+        )
+        SELECT 
+          id, sale_id, product_id, product_name, quantity, 
+          unit_price, total_price, created_at, is_synced
+        FROM sale_items_backup
+      ''');
+
+      // 4. Drop backup table
+      await db.execute('DROP TABLE sale_items_backup');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -570,8 +607,7 @@ class DatabaseHelper {
         total_price REAL NOT NULL,
         created_at TEXT,
         is_synced INTEGER DEFAULT 0,
-        FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE,
-        FOREIGN KEY (product_id) REFERENCES products (id)
+        FOREIGN KEY (sale_id) REFERENCES sales (id) ON DELETE CASCADE
       )
     ''');
 
