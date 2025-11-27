@@ -5,12 +5,14 @@ class SaleItem {
   final double quantity;
   final double unitPrice;
   final double total; // Maps to total_price in the cloud DB
+  final String? productName;
   final DateTime? createdAt;
 
   SaleItem({
     required this.id,
     required this.saleId,
     required this.productId,
+    this.productName,
     required this.quantity,
     required this.unitPrice,
     required this.total,
@@ -22,6 +24,7 @@ class SaleItem {
       id: map['id'] as String,
       saleId: map['sale_id'] as String,
       productId: map['product_id'] as String,
+      productName: map['product_name'] as String?,
       quantity: (map['quantity'] as num).toDouble(),
       unitPrice: (map['unit_price'] as num).toDouble(),
       total: (map['total_price'] ?? map['total'] as num)
@@ -37,6 +40,7 @@ class SaleItem {
       'id': id,
       'sale_id': saleId,
       'product_id': productId,
+      'product_name': productName,
       'quantity': quantity,
       'unit_price': unitPrice,
       'total_price': total, // Updated to match database column name
@@ -60,6 +64,7 @@ class SaleItem {
     String? id,
     String? saleId,
     String? productId,
+    String? productName,
     double? quantity,
     double? unitPrice,
     double? total,
@@ -69,6 +74,7 @@ class SaleItem {
       id: id ?? this.id,
       saleId: saleId ?? this.saleId,
       productId: productId ?? this.productId,
+      productName: productName ?? this.productName,
       quantity: quantity ?? this.quantity,
       unitPrice: unitPrice ?? this.unitPrice,
       total: total ?? this.total,

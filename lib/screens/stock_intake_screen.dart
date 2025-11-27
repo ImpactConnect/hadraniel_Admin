@@ -324,37 +324,12 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       final stockIntakes = await _stockIntakeService.getAllIntakes();
       final intakeBalances = await _stockIntakeService.getAllIntakeBalances();
 
-      // If local database is empty, sync from Supabase
-      if (stockIntakes.isEmpty && intakeBalances.isEmpty) {
-        try {
-          await _syncService.syncStockIntakesToLocalDb();
-          // Note: syncStockIntakesToLocalDb() already handles intake balance calculation
-          // Reload data after syncing
-          final syncedStockIntakes = await _stockIntakeService.getAllIntakes();
-          final syncedIntakeBalances =
-              await _stockIntakeService.getAllIntakeBalances();
-
-          setState(() {
-            _stockIntakes = syncedStockIntakes;
-            _intakeBalances = syncedIntakeBalances;
-            _isLoading = false;
-          });
-        } catch (syncError) {
-          print('Error syncing from Supabase: $syncError');
-          // Still show local data even if sync fails
-          setState(() {
-            _stockIntakes = stockIntakes;
-            _intakeBalances = intakeBalances;
-            _isLoading = false;
-          });
-        }
-      } else {
-        setState(() {
-          _stockIntakes = stockIntakes;
-          _intakeBalances = intakeBalances;
-          _isLoading = false;
-        });
-      }
+      // Do not fetch from cloud; only display local data
+      setState(() {
+        _stockIntakes = stockIntakes;
+        _intakeBalances = intakeBalances;
+        _isLoading = false;
+      });
     } catch (e) {
       setState(() {
         _isLoading = false;

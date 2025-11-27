@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'package:archive/archive.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -40,6 +41,73 @@ class EnhancedSyncService {
       return backupPath;
     } catch (e) {
       print('Error creating database backup: $e');
+      rethrow;
+    }
+  }
+
+  /// Creates a zipped backup of the database in the user's Documents folder.
+  /// The zip file will be named with date and time for easy identification.
+  Future<String> createDatabaseBackupZipToDocuments() async {
+    try {
+      final dbPath = await _dbHelper.getDatabasePath();
+
+      // Close the database temporarily to ensure a consistent file state
+      await _dbHelper.closeDatabase();
+
+      final originalFile = File(dbPath);
+      if (!await originalFile.exists()) {
+        throw Exception('Database file not found at $dbPath');
+      }
+
+      // Determine the Documents folder path cross-platform
+      String documentsDirPath;
+      if (Platform.isWindows) {
+        final userProfile =
+            Platform.environment['USERPROFILE'] ?? Directory.current.path;
+        documentsDirPath = join(userProfile, 'Documents');
+      } else if (Platform.isLinux || Platform.isMacOS) {
+        final home = Platform.environment['HOME'] ?? Directory.current.path;
+        documentsDirPath = join(home, 'Documents');
+      } else {
+        // Fallback: use current working directory
+        documentsDirPath = Directory.current.path;
+      }
+
+      final backupDir =
+          Directory(join(documentsDirPath, 'Hadraniel_Admin_Backups'));
+      if (!await backupDir.exists()) {
+        await backupDir.create(recursive: true);
+      }
+
+      final now = DateTime.now();
+      final timestamp = '${now.year.toString().padLeft(4, '0')}'
+          '${now.month.toString().padLeft(2, '0')}'
+          '${now.day.toString().padLeft(2, '0')}_'
+          '${now.hour.toString().padLeft(2, '0')}'
+          '${now.minute.toString().padLeft(2, '0')}'
+          '${now.second.toString().padLeft(2, '0')}';
+      final zipFilePath =
+          join(backupDir.path, 'admin_app_backup_$timestamp.zip');
+
+      // Create zip archive containing the database file
+      final archive = Archive();
+      final dbBytes = await originalFile.readAsBytes();
+      archive.addFile(ArchiveFile(basename(dbPath), dbBytes.length, dbBytes));
+      final zipEncoder = ZipEncoder();
+      final zipData = zipEncoder.encode(archive);
+      if (zipData == null) {
+        throw Exception('Failed to encode zip archive');
+      }
+      final zipFile = File(zipFilePath);
+      await zipFile.writeAsBytes(zipData, flush: true);
+
+      // Reopen the database
+      await _dbHelper.reopenDatabase();
+
+      print('Zipped database backup created: $zipFilePath');
+      return zipFilePath;
+    } catch (e) {
+      print('Error creating zipped database backup: $e');
       rethrow;
     }
   }
@@ -409,9 +477,9 @@ class EnhancedSyncService {
       await syncProductsToLocalDbEnhanced();
       await syncSalesToLocalDbEnhanced();
 
-      // Sync other data with original methods
-      await _originalSyncService.syncStockBalancesToLocalDb();
-      await _originalSyncService.syncStockIntakesToLocalDb();
+      // Push-only for stock tables: no cloud fetch
+      await _originalSyncService.pushOnlyStockBalancesToCloud();
+      await _originalSyncService.pushOnlyStockIntakesToCloud();
       await _originalSyncService.syncExpendituresToLocalDb();
 
       // Process any remaining sync queue operations

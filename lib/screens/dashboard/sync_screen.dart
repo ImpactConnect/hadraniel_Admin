@@ -3,6 +3,7 @@ import 'package:intl/intl.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 import '../../core/services/sync_service.dart';
+import '../../core/services/enhanced_sync_service.dart';
 import '../../widgets/dashboard_layout.dart';
 
 enum SyncStatus { pending, syncing, completed, failed }
@@ -66,6 +67,7 @@ class SyncScreen extends StatefulWidget {
 
 class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
   final SyncService _syncService = SyncService();
+  final EnhancedSyncService _enhancedSyncService = EnhancedSyncService();
   bool _isSyncing = false;
   DateTime? _lastSyncTime;
   String? _syncError;
@@ -293,6 +295,86 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
     }
   }
 
+  Future<void> _syncAllWithBackupDialog() async {
+    if (_isSyncing) return;
+    setState(() {
+      _isSyncing = true;
+      _syncError = null;
+    });
+
+    String statusText = 'Creating database backup...';
+    bool isComplete = false;
+    bool started = false;
+
+    await showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            // Kick off the backup + sync flow exactly once
+            if (!started) {
+              started = true;
+              () async {
+                try {
+                  await _enhancedSyncService
+                      .createDatabaseBackupZipToDocuments();
+                  setDialogState(() {
+                    statusText = 'Sync operation started...';
+                  });
+                  await _syncAll();
+                  setDialogState(() {
+                    statusText = 'Sync complete';
+                  });
+                } catch (e) {
+                  setState(() {
+                    _syncError = e.toString();
+                  });
+                  setDialogState(() {
+                    statusText = 'Sync failed';
+                  });
+                } finally {
+                  isComplete = true;
+                }
+              }();
+            }
+
+            return AlertDialog(
+              title: const Text('Sync Status'),
+              content: Row(
+                children: [
+                  if (!(statusText == 'Sync complete' ||
+                      statusText == 'Sync failed'))
+                    const Padding(
+                      padding: EdgeInsets.only(right: 12),
+                      child: SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      ),
+                    ),
+                  Expanded(child: Text(statusText)),
+                ],
+              ),
+              actions: [
+                if (statusText == 'Sync complete' ||
+                    statusText == 'Sync failed')
+                  TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('OK'),
+                  ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    setState(() {
+      _isSyncing = false;
+    });
+  }
+
   Future<void> _resetDatabase() async {
     final confirmed = await showDialog<bool>(
       context: context,
@@ -387,7 +469,7 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
                 ],
               ),
               ElevatedButton.icon(
-                onPressed: _isSyncing ? null : _syncAll,
+                onPressed: _isSyncing ? null : _syncAllWithBackupDialog,
                 icon: _isSyncing
                     ? const SizedBox(
                         width: 16,

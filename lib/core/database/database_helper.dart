@@ -22,6 +22,25 @@ class DatabaseHelper {
     return _database!;
   }
 
+  // Expose helpers to safely close and reopen the database when needed (e.g., backups)
+  Future<void> closeDatabase() async {
+    if (_database != null) {
+      await _database!.close();
+      _database = null;
+      print('Database closed and reset to null');
+    }
+  }
+
+  Future<void> reopenDatabase() async {
+    await database; // Triggers lazy reinitialization
+    print('Database reopened');
+  }
+
+  Future<String> getDatabasePath() async {
+    final db = await database;
+    return db.path;
+  }
+
   Future<Database> _initDatabase() async {
     final dbFactory = Platform.isWindows || Platform.isLinux
         ? databaseFactoryFfi
@@ -52,7 +71,7 @@ class DatabaseHelper {
     final database = await dbFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 15,
+        version: 16,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         onOpen: _onOpen,
@@ -405,6 +424,18 @@ class DatabaseHelper {
         print('Warning: Database migration v15 may not have completed fully');
       }
     }
+
+
+    if (oldVersion < 16) {
+      // Add product_name to sale_items table
+      try {
+        await db.execute(
+            'ALTER TABLE sale_items ADD COLUMN product_name TEXT');
+      } catch (e) {
+        // Column might already exist, ignore error
+        print('Error adding product_name to sale_items: $e');
+      }
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -533,6 +564,7 @@ class DatabaseHelper {
         id TEXT PRIMARY KEY,
         sale_id TEXT NOT NULL,
         product_id TEXT NOT NULL,
+        product_name TEXT,
         quantity REAL NOT NULL,
         unit_price REAL NOT NULL,
         total_price REAL NOT NULL,

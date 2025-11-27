@@ -614,10 +614,11 @@ class OptimizedSyncService {
         results['sales'] = await syncSalesOptimized();
 
         // Use original service for other data (can be optimized later)
+        // Push-only for stock tables: no cloud fetch
         results['stock_balances'] =
-            await _originalSyncService.syncStockBalancesToLocalDb();
+            await _originalSyncService.pushOnlyStockBalancesToCloud();
         results['stock_intake'] =
-            await _originalSyncService.syncStockIntakesToLocalDb();
+            await _originalSyncService.pushOnlyStockIntakesToCloud();
         results['intake_balances'] =
             await _originalSyncService.syncIntakeBalancesToLocalDb();
         results['expenditures'] =

@@ -26,6 +26,7 @@ dependencies:
   sticky_headers: ^0.3.0
   calendar_date_picker2: ^0.5.5
   shared_preferences: ^2.2.2
+  archive: ^3.4.10
 
   cupertino_icons: ^1.0.8
 

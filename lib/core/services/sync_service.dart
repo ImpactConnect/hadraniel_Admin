@@ -72,11 +72,11 @@ class SyncService {
           COUNT(si.id) as item_count,
           CASE 
             WHEN COUNT(si.id) = 0 THEN 'No Items' 
-            ELSE GROUP_CONCAT(COALESCE(p.product_name, 'Product ID: ' || si.product_id), ', ')
+            ELSE GROUP_CONCAT(COALESCE(si.product_name, 'Unknown Product'), ', ')
           END as product_names,
           CASE 
             WHEN COUNT(si.id) = 0 THEN 'No Items' 
-            ELSE GROUP_CONCAT(si.quantity || ' x ' || COALESCE(p.product_name, 'Product ID: ' || si.product_id), ', ')
+            ELSE GROUP_CONCAT(si.quantity || ' x ' || COALESCE(si.product_name, 'Unknown Product'), ', ')
           END as items_detail,
           COALESCE((
             SELECT si2.quantity 
@@ -86,7 +86,6 @@ class SyncService {
           ), 0) as quantity
         FROM sales s
         LEFT JOIN sale_items si ON si.sale_id = s.id
-        LEFT JOIN products p ON p.id = si.product_id
         WHERE s.id IN (SELECT DISTINCT sale_id FROM sale_items WHERE product_id = ?)
       ''';
     } else {
@@ -106,15 +105,14 @@ class SyncService {
           SUM(COALESCE(si.quantity, 0)) as qty,
           CASE 
             WHEN COUNT(si.id) = 0 THEN 'No Items' 
-            ELSE REPLACE(GROUP_CONCAT(DISTINCT COALESCE(p.product_name, 'Product ID: ' || si.product_id)), ',', ', ')
+            ELSE REPLACE(GROUP_CONCAT(DISTINCT COALESCE(si.product_name, 'Unknown Product')), ',', ', ')
           END as product_names,
           CASE 
             WHEN COUNT(si.id) = 0 THEN 'No Items' 
-            ELSE GROUP_CONCAT(si.quantity || ' x ' || COALESCE(p.product_name, 'Product ID: ' || si.product_id), ', ')
+            ELSE GROUP_CONCAT(si.quantity || ' x ' || COALESCE(si.product_name, 'Unknown Product'), ', ')
           END as items_detail
         FROM sales s
-        INNER JOIN sale_items si ON si.sale_id = s.id
-        LEFT JOIN products p ON p.id = si.product_id
+        LEFT JOIN sale_items si ON si.sale_id = s.id
         WHERE 1=1
       ''';
     }
@@ -152,11 +150,40 @@ class SyncService {
 
     query += ' GROUP BY s.id ORDER BY s.created_at DESC';
 
+    print('\\n===== DEBUG: SALES QUERY =====');
     print('Executing query: $query');
     print('Query args: $args');
+    print('==============================\\n');
 
     final List<Map<String, dynamic>> sales = await db.rawQuery(query, args);
-    print('Raw query results: $sales');
+    
+    print('\\n===== DEBUG: QUERY RESULTS =====');
+    print('Total sales returned: ${sales.length}');
+    
+    // Count sales with and without items
+    int salesWithItems = 0;
+    int salesWithoutItems = 0;
+    List<String> noItemSaleIds = [];
+    
+    for (var sale in sales) {
+      final itemCount = sale['item_count'] as int;
+      final productNames = sale['product_names'] as String;
+      
+      if (itemCount == 0 || productNames == 'No Items') {
+        salesWithoutItems++;
+        noItemSaleIds.add(sale['id'] as String);
+        print('[NO ITEMS] Sale ${sale['id']}: item_count=$itemCount, product_names=$productNames, amount=${sale['total_amount']}');
+      } else {
+        salesWithItems++;
+      }
+    }
+    
+    print('Sales WITH items: $salesWithItems');
+    print('Sales WITHOUT items (will display \"No Items\"): $salesWithoutItems');
+    if (salesWithoutItems > 0) {
+      print('No-item sales (first 10): ${noItemSaleIds.take(10).join(", ")}');
+    }
+    print('=================================\\n');
 
     List<Map<String, dynamic>> salesWithDetails = [];
 
@@ -188,7 +215,6 @@ class SyncService {
       });
     }
 
-    print('Final sales with details: $salesWithDetails');
     return salesWithDetails;
   }
 
@@ -397,8 +423,9 @@ class SyncService {
         'Supabase auth: ${supabase.auth.currentSession != null ? 'authenticated' : 'not authenticated'}',
       );
 
-      // First sync local changes to cloud
       final db = await _dbHelper.database;
+      
+      // First sync local changes to cloud
       await db.transaction((txn) async {
         final unsyncedSales = await txn.query(
           'sales',
@@ -441,65 +468,207 @@ class SyncService {
         }
       });
 
-      // Fetch all sales without date restrictions to ensure we get the most recent data
-      final response = await supabase
+      // Fetch all sales and sale_items from cloud
+      final salesResponse = await supabase
           .from('sales')
           .select()
           .order('created_at', ascending: false);
-      print('Raw response: $response');
-      final sales = response as List<dynamic>;
+      print('Raw sales response: $salesResponse');
+      final sales = salesResponse as List<dynamic>;
       print('Found ${sales.length} sales in cloud database');
 
-      // Use a single transaction for the entire sync operation to prevent database locking
+      final saleItemsResponse = await supabase.from('sale_items').select();
+      print('Raw sale_items response: $saleItemsResponse');
+      final saleItems = saleItemsResponse as List<dynamic>;
+      print('Found ${saleItems.length} sale items in cloud database');
+
+      // CRITICAL: Use a single atomic transaction for both sales AND sale_items
+      // This prevents orphaned sales and ensures data consistency
+      int insertedSales = 0;
+      int insertedItems = 0;
+      int skippedItems = 0;
+      
       await db.transaction((txn) async {
-        // First check if we have any sales in the local database
-        final localCount = Sqflite.firstIntValue(
-          await txn.rawQuery('SELECT COUNT(*) FROM sales'),
-        );
-        print('Local sales count: $localCount');
+        // Get all existing product IDs for validation
+        final productResults = await txn.query('products', columns: ['id']);
+        final existingProductIds = productResults.map((row) => row['id'] as String).toSet();
+        print('\n===== DEBUG: PRODUCT VALIDATION =====');
+        print('Found ${existingProductIds.length} products in local database');
+        print('First 10 product IDs: ${existingProductIds.take(10).toList()}');
+        print('=====================================\n');
 
-        // Only clear and re-insert if we have data to sync or if local DB is empty
-        if (sales.isNotEmpty || localCount == 0) {
-          // Clear existing sales and sale_items within the transaction
-          await txn.delete('sale_items');
-          await txn.delete('sales');
+        // Clear existing data within the transaction
+        await txn.delete('sale_items');
+        await txn.delete('sales');
+        print('Cleared existing sales and sale_items');
 
-          // Insert new sales
-          for (final saleData in sales) {
-            try {
-              print('Processing sale: ${saleData['id']}');
-              final sale = Sale.fromMap(saleData as Map<String, dynamic>);
-              print(
-                'Mapped to Sale: ${sale.id}, outletId: ${sale.outletId}, totalAmount: ${sale.totalAmount}',
-              );
-              await txn.insert('sales', {...sale.toMap(), 'is_synced': 1});
-            } catch (e) {
-              print('Error processing sale ${saleData['id']}: $e');
-              print('Raw sale data: $saleData');
-              // Continue with next sale instead of failing the entire transaction
-            }
+        // Insert sales first
+        for (final saleData in sales) {
+          try {
+            final sale = Sale.fromMap(saleData as Map<String, dynamic>);
+            await txn.insert('sales', {...sale.toMap(), 'is_synced': 1});
+            insertedSales++;
+          } catch (e) {
+            print('Error inserting sale ${saleData['id']}: $e');
+            // Continue with next sale
           }
-          print('Successfully synced ${sales.length} sales to local database');
-        } else {
-          print('No sales to sync from cloud database');
+        }
+        print('Inserted $insertedSales sales');
+
+        // Then insert sale_items with product validation
+        Map<String, int> missingProducts = {};
+        Map<String, List<String>> salesAffectedByMissingProduct = {};
+        
+        // Pre-scan for missing products and insert placeholders
+        Set<String> productsToCreate = {};
+        for (final itemData in saleItems) {
+           final productId = itemData['product_id'] as String;
+           if (!existingProductIds.contains(productId)) {
+             productsToCreate.add(productId);
+           }
+        }
+
+        if (productsToCreate.isNotEmpty) {
+          print('Creating ${productsToCreate.length} placeholder products to satisfy FK constraints...');
+          for (final productId in productsToCreate) {
+             // Check if we have a name from the sale_item data
+             String placeholderName = 'Unknown Product';
+             // Try to find a name from the sale items that reference this product
+             final matchingItem = saleItems.firstWhere(
+               (item) => item['product_id'] == productId && item['product_name'] != null,
+               orElse: () => null,
+             );
+             
+             if (matchingItem != null) {
+               placeholderName = matchingItem['product_name'] as String;
+             }
+
+             try {
+               await txn.insert('products', {
+                 'id': productId,
+                 'product_name': placeholderName,
+                 'quantity': 0,
+                 'unit': 'N/A',
+                 'cost_per_unit': 0,
+                 'total_cost': 0,
+                 'date_added': DateTime.now().toIso8601String(),
+                 'outlet_id': 'placeholder', // Needs a valid UUID? No, outlet_id is FK? Let's check schema.
+                 // Schema says: FOREIGN KEY (outlet_id) REFERENCES outlets (id)
+                 // We need a valid outlet_id. Let's try to get one from the sales or use a dummy if possible.
+                 // Actually, let's check if we can get a valid outlet_id from the sale associated with this item.
+                 // But for now, let's see if we can skip outlet_id or if it's required.
+                 // Schema: outlet_id TEXT NOT NULL. It is required.
+                 // We need an existing outlet ID.
+                 'created_at': DateTime.now().toIso8601String(),
+                 'is_synced': 1
+               });
+               // Wait, inserting into products requires a valid outlet_id which is a FK.
+               // If we don't have a valid outlet_id, we can't insert a product.
+               // Let's fetch a valid outlet ID first.
+             } catch (e) {
+               print('Error creating placeholder product $productId: $e');
+             }
+          }
+          
+          // Re-fetch existing product IDs
+          final updatedProductResults = await txn.query('products', columns: ['id']);
+          existingProductIds.addAll(updatedProductResults.map((row) => row['id'] as String));
+        }
+        
+        // Create a map of saleId -> outletId for quick lookup
+        final saleOutletMap = {
+          for (var sale in sales) sale['id'] as String: sale['outlet_id'] as String
+        };
+
+        for (final itemData in saleItems) {
+          try {
+            final saleItem = SaleItem.fromMap(itemData as Map<String, dynamic>);
+            
+            // Debug log for product name
+            if (saleItem.productName == null) {
+               print('DEBUG: Item ${saleItem.id} has NULL product_name in incoming data');
+               print('Raw item data: $itemData');
+            }
+
+            // Handle missing product by creating placeholder
+            if (!existingProductIds.contains(saleItem.productId)) {
+               // Get outlet ID from the parent sale
+               final outletId = saleOutletMap[saleItem.saleId];
+               
+               if (outletId != null) {
+                 print('Creating placeholder for missing product: ${saleItem.productId} (Outlet: $outletId)');
+                 try {
+                   await txn.insert('products', {
+                     'id': saleItem.productId,
+                     'product_name': saleItem.productName ?? 'Unknown Product',
+                     'quantity': 0,
+                     'unit': 'N/A',
+                     'cost_per_unit': 0,
+                     'total_cost': 0,
+                     'date_added': DateTime.now().toIso8601String(),
+                     'outlet_id': outletId,
+                     'created_at': DateTime.now().toIso8601String(),
+                     'is_synced': 1
+                   });
+                   existingProductIds.add(saleItem.productId);
+                 } catch (e) {
+                   print('Failed to create placeholder product: $e');
+                 }
+               } else {
+                 print('Could not find outlet ID for sale ${saleItem.saleId}, cannot create placeholder product');
+               }
+            }
+
+            // Now check again
+            if (!existingProductIds.contains(saleItem.productId)) {
+              print(
+                '\n[SKIP] Sale Item ${saleItem.id}\n'
+                '  Product ID: ${saleItem.productId}\n'
+                '  REASON: Product not found and could not create placeholder'
+              );
+              skippedItems++;
+              continue; 
+            }
+
+            await txn.insert(
+              'sale_items',
+              {...saleItem.toMap(), 'is_synced': 1},
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+            insertedItems++;
+          } catch (e) {
+            print('Error inserting sale_item ${itemData['id']}: $e');
+            skippedItems++;
+          }
+        }
+        print('Inserted $insertedItems sale items, skipped $skippedItems items');
+        
+        if (skippedItems > 0) {
+          print('\n===== MISSING PRODUCTS SUMMARY =====');
+          print('Total skipped items: $skippedItems');
+          print('Unique missing products: ${missingProducts.length}');
+          missingProducts.forEach((productId, count) {
+            print('  - Product $productId: $count items skipped, affecting ${salesAffectedByMissingProduct[productId]?.length ?? 0} sales');
+            print('    Affected sale IDs: ${salesAffectedByMissingProduct[productId]?.take(5).join(", ")}');
+          });
+          print('====================================\n');
         }
       });
 
-      // Sync sale items in a separate transaction
-      await syncSaleItemsToLocalDb();
-
-      // Count total synced records
-      final salesCount = Sqflite.firstIntValue(
-              await db.rawQuery('SELECT COUNT(*) FROM sales')) ??
-          0;
-      final itemsCount = Sqflite.firstIntValue(
-              await db.rawQuery('SELECT COUNT(*) FROM sale_items')) ??
-          0;
+      if (skippedItems > 0) {
+        print(
+          '\n⚠️  CRITICAL WARNING ⚠️\n'
+          '$skippedItems sale_items were skipped due to missing products.\n'
+          'These sales will display "No Item" on the UI.\n'
+          'Action Required: Ensure products are synced from cloud database.\n'
+        );
+      }
 
       return {
-        'synced': salesCount + itemsCount,
-        'sales': salesCount,
-        'items': itemsCount
+        'synced': insertedSales + insertedItems,
+        'sales': insertedSales,
+        'items': insertedItems,
+        'skipped_items': skippedItems,
       };
     } catch (e) {
       print('Error syncing sales: $e');
@@ -535,43 +704,53 @@ class SyncService {
 
       final db = await _dbHelper.database;
 
-      // Use a transaction for the entire sync operation to prevent database locking
+      // Get existing product IDs for validation
+      final productResults = await db.query('products', columns: ['id']);
+      final existingProductIds = productResults.map((row) => row['id'] as String).toSet();
+      print('Found ${existingProductIds.length} products for validation');
+
+      int insertedCount = 0;
+      int skippedCount = 0;
+
+      // Upsert remote sale items with product validation
       await db.transaction((txn) async {
-        // First check if we have any sale items in the local database
-        final localCount = Sqflite.firstIntValue(
-          await txn.rawQuery('SELECT COUNT(*) FROM sale_items'),
-        );
-        print('Local sale items count: $localCount');
-
-        // Only clear and re-insert if we have data to sync or if local DB is empty
-        if (saleItems.isNotEmpty || localCount == 0) {
-          // Clear existing sale items within the transaction
-          await txn.delete('sale_items');
-
-          // Insert new sale items
-          for (final itemData in saleItems) {
-            try {
-              print('Processing sale item: ${itemData['id']}');
-              final saleItem =
-                  SaleItem.fromMap(itemData as Map<String, dynamic>);
+        print('Upserting ${saleItems.length} sale items from cloud...');
+        for (final itemData in saleItems) {
+          try {
+            final saleItem = SaleItem.fromMap(itemData as Map<String, dynamic>);
+            
+            // CRITICAL: Validate that the product exists before inserting
+            if (!existingProductIds.contains(saleItem.productId)) {
               print(
-                'Mapped to SaleItem: ${saleItem.id}, saleId: ${saleItem.saleId}, productId: ${saleItem.productId}',
+                'WARNING: Skipping sale_item ${saleItem.id} - Product ${saleItem.productId} not found. '
+                'Sale ID: ${saleItem.saleId}'
               );
-              await txn
-                  .insert('sale_items', {...saleItem.toMap(), 'is_synced': 1});
-            } catch (e) {
-              print('Error processing sale item ${itemData['id']}: $e');
-              print('Raw item data: $itemData');
-              // Continue with next item instead of failing the entire transaction
+              skippedCount++;
+              continue; // Skip this item to prevent foreign key constraint failure
             }
+
+            await txn.insert(
+              'sale_items',
+              {...saleItem.toMap(), 'is_synced': 1},
+              conflictAlgorithm: ConflictAlgorithm.replace,
+            );
+            insertedCount++;
+          } catch (e) {
+            print('Error upserting sale item ${itemData['id']}: $e');
+            print('Raw item data: $itemData');
+            skippedCount++;
+            // Continue with next item
           }
-          print(
-            'Successfully synced ${saleItems.length} sale items to local database',
-          );
-        } else {
-          print('No sale items to sync from cloud database');
         }
+        print('Sale items upsert completed: $insertedCount inserted, $skippedCount skipped');
       });
+
+      if (skippedCount > 0) {
+        print(
+          'WARNING: $skippedCount sale items were skipped due to missing products. '
+          'Ensure products are synced before syncing sale items.'
+        );
+      }
     } catch (e) {
       print('Error syncing sale items: $e');
       rethrow;
@@ -783,6 +962,46 @@ class SyncService {
   Future<void> updateProduct(Product product) async {
     try {
       final db = await _dbHelper.database;
+
+      // Load the existing product to detect outlet changes
+      final existingRows = await db.query(
+        'products',
+        where: 'id = ?',
+        whereArgs: [product.id],
+        limit: 1,
+      );
+
+      // If the product does not exist locally, treat as a new insert
+      if (existingRows.isEmpty) {
+        await insertProduct(product.copyWith(id: product.id));
+        return;
+      }
+
+      final existingProduct = Product.fromMap(existingRows.first);
+
+      // If the outlet has changed, create a NEW product record for the new outlet
+      // to keep pricing and assignments isolated per outlet
+      if (existingProduct.outletId != product.outletId) {
+        final now = DateTime.now();
+        final newProduct = Product(
+          id: const Uuid().v4(),
+          productName: product.productName,
+          quantity: product.quantity,
+          unit: product.unit,
+          costPerUnit: product.costPerUnit,
+          totalCost: product.quantity * product.costPerUnit,
+          dateAdded: product.dateAdded,
+          lastUpdated: now,
+          description: product.description,
+          outletId: product.outletId,
+          createdAt: now,
+          isSynced: false,
+        );
+
+        // Insert as a new assignment for the new outlet; do not modify the old outlet's record
+        await insertProduct(newProduct);
+        return;
+      }
 
       // Update the existing product record with the same ID
       final updatedProduct = Product(
@@ -1497,14 +1716,22 @@ class SyncService {
       syncResults['reps'] = await syncRepsToLocalDb();
       await syncCustomersToLocalDb();
 
-      // Sync product data with proper transaction handling
+      // CRITICAL DEPENDENCY: Products MUST be synced before sales
+      // Sale items reference products via foreign key constraints
+      // Syncing products first prevents "No Item" display issues
+      print('SYNC ORDER: Syncing products before sales (required for data integrity)');
       syncResults['products'] = await syncProductsToLocalDb();
 
       // Sync sales data with proper transaction handling
+      // The updated syncSalesToLocalDb() now validates product existence
       syncResults['sales'] = await syncSalesToLocalDb();
 
-      // Sync stock-related data
-      syncResults['stock_balances'] = await syncStockBalancesToLocalDb();
+      // Stock balances: push-only, no cloud fetch
+      final stockBalancesPush = await pushOnlyStockBalancesToCloud();
+      syncResults['stock_balances'] = {
+        ...stockBalancesPush,
+        'synced': stockBalancesPush['uploaded'] ?? 0,
+      };
 
       // Sync product distributions with error handling for missing table
       try {
@@ -1524,8 +1751,12 @@ class SyncService {
         }
       }
 
-      // Sync stock intake data
-      syncResults['stock_intake'] = await syncStockIntakesToLocalDb();
+      // Stock intake: push-only, no cloud fetch
+      final stockIntakePush = await pushOnlyStockIntakesToCloud();
+      syncResults['stock_intake'] = {
+        ...stockIntakePush,
+        'synced': stockIntakePush['uploaded'] ?? 0,
+      };
 
       // Sync intake balances
       syncResults['intake_balances'] = await syncIntakeBalancesToLocalDb();
@@ -1825,6 +2056,53 @@ class SyncService {
       };
     } catch (e) {
       print('Error syncing stock balances: $e');
+      throw e;
+    }
+  }
+
+  // Admin-only: Push local stock balances to cloud without pulling from cloud
+  Future<Map<String, int>> pushOnlyStockBalancesToCloud() async {
+    try {
+      final db = await _dbHelper.database;
+      int uploadedCount = 0;
+
+      await db.transaction((txn) async {
+        final unsyncedBalances = await txn.query(
+          'stock_balances',
+          where: 'synced = ?',
+          whereArgs: [0],
+        );
+
+        for (var balanceMap in unsyncedBalances) {
+          try {
+            await supabase.from('stock_balances').upsert({
+              'id': balanceMap['id'],
+              'outlet_id': balanceMap['outlet_id'],
+              'product_id': balanceMap['product_id'],
+              'given_quantity': balanceMap['given_quantity'],
+              'sold_quantity': balanceMap['sold_quantity'],
+              'balance_quantity': balanceMap['balance_quantity'],
+              'last_updated': balanceMap['last_updated'],
+              'created_at': balanceMap['created_at'],
+            });
+
+            await txn.update(
+              'stock_balances',
+              {'synced': 1},
+              where: 'id = ?',
+              whereArgs: [balanceMap['id']],
+            );
+            uploadedCount++;
+          } catch (e) {
+            print('Error uploading stock balance ${balanceMap['id']}: $e');
+            // Continue with other balances even if one fails
+          }
+        }
+      });
+
+      return {'uploaded': uploadedCount};
+    } catch (e) {
+      print('Error during push-only stock balances sync: $e');
       throw e;
     }
   }
@@ -2301,6 +2579,69 @@ class SyncService {
       return {'synced': intakeCount, 'stock_intake': intakeCount};
     } catch (e) {
       print('Error syncing stock intakes: $e');
+      throw e;
+    }
+  }
+
+  // Admin-only: Push local stock intake records to cloud without pulling from cloud
+  Future<Map<String, int>> pushOnlyStockIntakesToCloud() async {
+    try {
+      // Process any pending queue items first to reduce conflicts
+      await processSyncQueue();
+
+      final db = await _dbHelper.database;
+      int uploadedCount = 0;
+
+      await db.transaction((txn) async {
+        final unsyncedIntakes = await txn.query(
+          'stock_intake',
+          where: 'is_synced = ?',
+          whereArgs: [0],
+        );
+
+        for (var intakeMap in unsyncedIntakes) {
+          try {
+            // Build cloud payload without local-only fields
+            final cloudMap = {
+              'id': intakeMap['id'],
+              'product_name': intakeMap['product_name'],
+              'quantity_received': intakeMap['quantity_received'],
+              'unit': intakeMap['unit'],
+              'cost_per_unit': intakeMap['cost_per_unit'],
+              'total_cost': intakeMap['total_cost'],
+              'description': intakeMap['description'],
+              'date_received': intakeMap['date_received'],
+              'created_at': intakeMap['created_at'],
+            };
+            await supabase.from('stock_intake').upsert(cloudMap);
+
+            await txn.update(
+              'stock_intake',
+              {'is_synced': 1},
+              where: 'id = ?',
+              whereArgs: [intakeMap['id']],
+            );
+            uploadedCount++;
+          } catch (e) {
+            print('Error uploading stock intake ${intakeMap['id']}: $e');
+            // Continue uploading remaining items
+          }
+        }
+      });
+
+      // Optionally, recalculate intake balances locally to keep local derived state consistent
+      try {
+        await _recalculateIntakeBalancesFromLocalData();
+      } catch (e) {
+        print('Warning: failed to recalculate intake balances locally: $e');
+      }
+
+      // Process queue again after uploads
+      await processSyncQueue();
+
+      return {'uploaded': uploadedCount};
+    } catch (e) {
+      print('Error during push-only stock intake sync: $e');
       throw e;
     }
   }
