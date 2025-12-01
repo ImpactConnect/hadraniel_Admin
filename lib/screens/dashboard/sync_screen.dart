@@ -781,6 +781,191 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
     }
   }
 
+  Future<void> _clearTable(String tableName, String displayName,
+      {String? warningMessage}) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text('Reset $displayName'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+                'Are you sure you want to clear all local $displayName data? This action cannot be undone.'),
+            if (warningMessage != null) ...[
+              const SizedBox(height: 12),
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(4),
+                  border: Border.all(color: Colors.orange.shade200),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        color: Colors.orange.shade800, size: 20),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        warningMessage,
+                        style: TextStyle(
+                            color: Colors.orange.shade900, fontSize: 13),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            style: TextButton.styleFrom(foregroundColor: Colors.red),
+            child: const Text('Reset'),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        _isSyncing = true;
+      });
+
+      try {
+        switch (tableName) {
+          case 'stock_intake':
+            await _syncService.clearStockIntake();
+            break;
+          case 'intake_balances':
+            await _syncService.clearIntakeBalances();
+            break;
+          case 'product_distributions':
+            await _syncService.clearProductDistributions();
+            break;
+          case 'sales':
+            await _syncService.clearSales();
+            break;
+          case 'stock_balances':
+            await _syncService.clearStockBalances();
+            break;
+        }
+
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('$displayName cleared successfully')),
+          );
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+                content: Text('Error clearing $displayName: $e'),
+                backgroundColor: Colors.red),
+          );
+        }
+      } finally {
+        setState(() {
+          _isSyncing = false;
+        });
+      }
+    }
+  }
+
+  Widget _buildDataManagementSection() {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'Data Management',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
+              ),
+            ),
+            const SizedBox(height: 8),
+            const Text(
+              'Clear local data for specific sections. This does not delete data from the cloud unless you sync empty data back.',
+              style: TextStyle(color: Colors.grey, fontSize: 13),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                _buildResetButton(
+                  'Stock Intake',
+                  () => _clearTable('stock_intake', 'Stock Intake',
+                      warningMessage:
+                          'Clearing this without clearing Product Distributions may result in negative warehouse balances.'),
+                ),
+                _buildResetButton(
+                  'Intake Balances',
+                  () => _clearTable('intake_balances', 'Intake Balances'),
+                ),
+                _buildResetButton(
+                  'Product Distributions',
+                  () =>
+                      _clearTable('product_distributions', 'Product Distributions'),
+                ),
+                _buildResetButton(
+                  'Sales',
+                  () => _clearTable('sales', 'Sales',
+                      warningMessage:
+                          'This will also clear all associated Sale Items.'),
+                ),
+                _buildResetButton(
+                  'Stock Balances',
+                  () => _clearTable('stock_balances', 'Stock Balances',
+                      warningMessage:
+                          'This will set the stock quantity at all outlets to ZERO.'),
+                ),
+              ],
+            ),
+            const Divider(height: 32),
+            SizedBox(
+              width: double.infinity,
+              child: OutlinedButton.icon(
+                onPressed: _isSyncing ? null : _resetDatabase,
+                icon: const Icon(Icons.delete_forever),
+                label: const Text('Reset Entire Database'),
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: Colors.red,
+                  side: const BorderSide(color: Colors.red),
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildResetButton(String label, VoidCallback onPressed) {
+    return OutlinedButton(
+      onPressed: _isSyncing ? null : onPressed,
+      style: OutlinedButton.styleFrom(
+        foregroundColor: Colors.red.shade700,
+        side: BorderSide(color: Colors.red.shade200),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+      ),
+      child: Text(label, style: const TextStyle(fontSize: 13)),
+    );
+  }
+
   Widget _buildSyncSessionCard(List<SyncOperation> sessionOperations) {
     final firstOperation = sessionOperations.first;
     final totalRecords =
@@ -1011,139 +1196,105 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    // Group operations by session
+    final sessionOperations = _groupSyncOperationsBySession();
+
     return DashboardLayout(
-      title: 'Sync Center',
-      child: FadeTransition(
-        opacity: _fadeAnimation,
-        child: Column(
-          children: [
-            _buildSyncHeader(),
-            Expanded(
-              child: Padding(
-                padding: const EdgeInsets.all(20),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    if (_syncError != null)
-                      Container(
-                        margin: const EdgeInsets.only(bottom: 16),
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          borderRadius: BorderRadius.circular(12),
-                          border: Border.all(color: Colors.red.shade200),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(Icons.error_outline,
-                                color: Colors.red.shade600),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Sync Error',
-                                    style: TextStyle(
-                                      color: Colors.red.shade800,
-                                      fontWeight: FontWeight.w600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 4),
-                                  Text(
-                                    _syncError!,
-                                    style: TextStyle(
-                                      color: Colors.red.shade700,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
+      title: 'Sync',
+      child: Column(
+        children: [
+          _buildSyncHeader(),
+          if (_syncError != null)
+            Container(
+              margin: const EdgeInsets.all(16),
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: Colors.red.shade200),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.error_outline, color: Colors.red.shade700),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _syncError!,
+                      style: TextStyle(color: Colors.red.shade900),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          Expanded(
+            child: ListView(
+              padding: const EdgeInsets.only(bottom: 24),
+              children: [
+                _buildDataManagementSection(),
+                if (sessionOperations.isEmpty)
+                  Center(
+                    child: Padding(
+                      padding: const EdgeInsets.all(32),
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.sync_disabled,
+                            size: 64,
+                            color: Colors.grey.shade300,
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            'No sync history',
+                            style: TextStyle(
+                              fontSize: 18,
+                              color: Colors.grey.shade600,
+                              fontWeight: FontWeight.w500,
                             ),
-                          ],
-                        ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Tap "Sync Now" to synchronize data',
+                            style: TextStyle(
+                              color: Colors.grey.shade500,
+                            ),
+                          ),
+                        ],
                       ),
-                    Row(
+                    ),
+                  )
+                else ...[
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+                    child: Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         const Text(
-                          'Recent Sync Operations',
+                          'Sync History',
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
                         ),
-                        Row(
-                          children: [
-                            TextButton.icon(
-                              onPressed: _syncHistory.isEmpty
-                                  ? null
-                                  : _clearSyncHistory,
-                              icon: const Icon(Icons.clear_all, size: 18),
-                              label: const Text('Clear History'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.orange.shade600,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            TextButton.icon(
-                              onPressed: _isSyncing ? null : _resetDatabase,
-                              icon: const Icon(Icons.restore, size: 18),
-                              label: const Text('Reset DB'),
-                              style: TextButton.styleFrom(
-                                foregroundColor: Colors.red.shade600,
-                              ),
-                            ),
-                          ],
+                        TextButton(
+                          onPressed: _clearSyncHistory,
+                          child: const Text('Clear History'),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 16),
-                    Expanded(
-                      child: _syncHistory.isEmpty
-                          ? Center(
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.sync_disabled,
-                                    size: 64,
-                                    color: Colors.grey.shade400,
-                                  ),
-                                  const SizedBox(height: 16),
-                                  Text(
-                                    'No sync operations yet',
-                                    style: TextStyle(
-                                      fontSize: 16,
-                                      color: Colors.grey.shade600,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 8),
-                                  Text(
-                                    'Tap "Sync Now" to start synchronizing data',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      color: Colors.grey.shade500,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            )
-                          : ListView.builder(
-                              itemCount: _groupSyncOperationsBySession().length,
-                              itemBuilder: (context, index) {
-                                final sessionOperations =
-                                    _groupSyncOperationsBySession()[index];
-                                return _buildSyncSessionCard(sessionOperations);
-                              },
-                            ),
-                    ),
-                  ],
-                ),
-              ),
+                  ),
+                  ...sessionOperations.map((session) => FadeTransition(
+                        opacity: _fadeAnimation,
+                        child: GestureDetector(
+                          onTap: () => _showSessionDetails(session),
+                          child: _buildSyncSessionCard(session),
+                        ),
+                      )),
+                ],
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

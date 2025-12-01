@@ -73,8 +73,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadDashboardData();
-    _loadAlertData();
+    
+    // PERFORMANCE OPTIMIZATION: Load data AFTER first frame
+    // This allows the UI to render immediately with skeleton loading state
+    // instead of blocking for 2-3 seconds
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _loadDashboardData();
+        _loadAlertData();
+      }
+    });
+    
     // Load charts lazily - only when needed
     _loadChartsLazily();
     _startAlertTimer();
@@ -112,40 +121,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
         return;
       }
 
-      // Load all data in parallel for better performance
-      final results = await Future.wait([
-        _syncService.getSalesMetrics(),
-        _getSalesRepsCount(),
-        _getOutletsCount(),
-        _getProductsCount(),
-        _getStockValueOptimized(), // Use optimized version
-        _getSalesCount(),
-      ]);
-
-      final salesMetrics = results[0] as Map<String, dynamic>;
-      final salesRepsCount = results[1] as int;
-      final outletsCount = results[2] as int;
-      final productsCount = results[3] as int;
-      final stockValue = results[4] as double;
-      final salesCount = results[5] as int;
-
-      final dashboardData = {
-        'salesRepsCount': salesRepsCount,
-        'outletsCount': outletsCount,
-        'productsCount': productsCount,
-        'totalSales': salesMetrics['total_amount'] ?? 0.0,
-        'stockValue': stockValue,
-        'outstandingPayments': salesMetrics['total_outstanding'] ?? 0.0,
-        'totalItemsSold': salesMetrics['total_items_sold'] ?? 0,
-        'salesCount': salesCount,
-      };
-
-      // Cache the data
-      _cachedDashboardData = Map<String, dynamic>.from(dashboardData);
-      _lastCacheTime = DateTime.now();
+      // PHASE 2 & 3 OPTIMIZATION: Progressive loading with combined queries
+      // Load in priority order for better perceived performance
+      
+      // Priority 1: High-priority metrics (fast counts) - Combined in single query
+      await _loadHighPriorityMetrics();
+      
+      // Priority 2: Medium-priority metrics (values)
+      await _loadMediumPriorityMetrics();
+      
+      // Priority 3: Low-priority metrics (expensive calculations)
+      await _loadLowPriorityMetrics();
 
       setState(() {
-        _dashboardData = dashboardData;
         _isLoading = false;
       });
     } catch (e) {
@@ -153,6 +141,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() {
         _isLoading = false;
       });
+    }
+  }
+
+  // PHASE 3: Combined query for all counts (single database round-trip)
+  Future<void> _loadHighPriorityMetrics() async {
+    try {
+      final db = await DatabaseHelper().database;
+      
+      // Single query for all counts - much faster than multiple queries
+      final result = await db.rawQuery('''
+        SELECT 
+          (SELECT COUNT(*) FROM sales_reps) as sales_reps_count,
+          (SELECT COUNT(*) FROM outlets) as outlets_count,
+          (SELECT COUNT(*) FROM products) as products_count,
+          (SELECT COUNT(*) FROM sales) as sales_count
+      ''');
+
+      if (result.isNotEmpty) {
+        final counts = result.first;
+        setState(() {
+          _dashboardData = {
+            ..._dashboardData,
+            'salesRepsCount': counts['sales_reps_count'] as int,
+            'outletsCount': counts['outlets_count'] as int,
+            'productsCount': counts['products_count'] as int,
+            'salesCount': counts['sales_count'] as int,
+          };
+        });
+      }
+    } catch (e) {
+      print('Error loading high-priority metrics: $e');
+    }
+  }
+
+  // Medium priority: Sales metrics (values)
+  Future<void> _loadMediumPriorityMetrics() async {
+    try {
+      final salesMetrics = await _syncService.getSalesMetrics();
+      
+      setState(() {
+        _dashboardData = {
+          ..._dashboardData,
+          'totalSales': salesMetrics['total_amount'] ?? 0.0,
+          'outstandingPayments': salesMetrics['total_outstanding'] ?? 0.0,
+          'totalItemsSold': salesMetrics['total_items_sold'] ?? 0,
+        };
+      });
+    } catch (e) {
+      print('Error loading medium-priority metrics: $e');
+    }
+  }
+
+  // Low priority: Expensive calculations (stock value)
+  Future<void> _loadLowPriorityMetrics() async {
+    try {
+      final stockValue = await _getStockValueOptimized();
+      
+      setState(() {
+        _dashboardData = {
+          ..._dashboardData,
+          'stockValue': stockValue,
+        };
+      });
+
+      // Cache the complete data
+      _cachedDashboardData = Map<String, dynamic>.from(_dashboardData);
+      _lastCacheTime = DateTime.now();
+    } catch (e) {
+      print('Error loading low-priority metrics: $e');
     }
   }
 

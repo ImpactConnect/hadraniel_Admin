@@ -492,22 +492,24 @@ class _AddProductDialogState extends State<AddProductDialog> {
                     if (formKey.currentState?.validate() ?? false) {
                       formKey.currentState?.save();
                       final now = DateTime.now();
-                      final newProduct = Product(
-                        id: widget.product?.id ?? const Uuid().v4(),
-                        productName: productName,
-                        quantity: quantity,
-                        unit: unit,
-                        costPerUnit: costPerUnit,
-                        totalCost: quantity * costPerUnit,
-                        dateAdded: widget.product?.dateAdded ?? now,
-                        lastUpdated: now,
-                        description: description,
-                        outletId: outletId,
-                        createdAt: widget.product?.createdAt ?? now,
-                      );
-
+                      
                       try {
                         if (widget.product == null) {
+                          // New product - always create new record
+                          final newProduct = Product(
+                            id: const Uuid().v4(),
+                            productName: productName,
+                            quantity: quantity,
+                            unit: unit,
+                            costPerUnit: costPerUnit,
+                            totalCost: quantity * costPerUnit,
+                            dateAdded: now,
+                            lastUpdated: now,
+                            description: description,
+                            outletId: outletId,
+                            createdAt: now,
+                          );
+                          
                           await _syncService.insertProduct(newProduct);
                           if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
@@ -517,15 +519,70 @@ class _AddProductDialogState extends State<AddProductDialog> {
                             );
                           }
                         } else {
-                          await _syncService.updateProduct(newProduct);
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Product updated successfully'),
-                              ),
+                          // Editing existing product
+                          // Check if price or quantity changed
+                          final bool priceChanged = 
+                              widget.product!.costPerUnit != costPerUnit;
+                          final bool quantityChanged = 
+                              widget.product!.quantity != quantity;
+                          
+                          if (priceChanged || quantityChanged) {
+                            // Critical fields changed - create NEW record
+                            // This prevents overwriting prices for other outlets
+                            final newProduct = Product(
+                              id: const Uuid().v4(), // NEW ID!
+                              productName: productName,
+                              quantity: quantity,
+                              unit: unit,
+                              costPerUnit: costPerUnit,
+                              totalCost: quantity * costPerUnit,
+                              dateAdded: now,
+                              lastUpdated: now,
+                              description: description,
+                              outletId: outletId,
+                              createdAt: now,
                             );
+                            
+                            // Delete the old record
+                            await _syncService.deleteProduct(widget.product!.id);
+                            
+                            // Insert new record
+                            await _syncService.insertProduct(newProduct);
+                            
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Product updated with new price/quantity'),
+                                ),
+                              );
+                            }
+                          } else {
+                            // Only description changed - safe to update existing record
+                            final updatedProduct = Product(
+                              id: widget.product!.id, // Keep same ID
+                              productName: productName,
+                              quantity: quantity,
+                              unit: unit,
+                              costPerUnit: costPerUnit,
+                              totalCost: quantity * costPerUnit,
+                              dateAdded: widget.product!.dateAdded,
+                              lastUpdated: now,
+                              description: description,
+                              outletId: outletId,
+                              createdAt: widget.product!.createdAt,
+                            );
+                            
+                            await _syncService.updateProduct(updatedProduct);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Product updated successfully'),
+                                ),
+                              );
+                            }
                           }
                         }
+                        
                         if (mounted) {
                           Navigator.pop(context);
                           widget.onProductSaved();

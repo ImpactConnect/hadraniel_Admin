@@ -639,6 +639,33 @@ class SyncService {
     }
   }
 
+  // Clear specific tables
+  Future<void> clearStockIntake() async {
+    final db = await _dbHelper.database;
+    await db.delete('stock_intake');
+  }
+
+  Future<void> clearIntakeBalances() async {
+    final db = await _dbHelper.database;
+    await db.delete('intake_balances');
+  }
+
+  Future<void> clearProductDistributions() async {
+    final db = await _dbHelper.database;
+    await db.delete('product_distributions');
+  }
+
+  Future<void> clearSales() async {
+    final db = await _dbHelper.database;
+    // Cascading delete handles sale_items
+    await db.delete('sales');
+  }
+
+  Future<void> clearStockBalances() async {
+    final db = await _dbHelper.database;
+    await db.delete('stock_balances');
+  }
+
   // Profiles Sync
   Future<void> syncProfilesToLocalDb() async {
     try {
