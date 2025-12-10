@@ -917,8 +917,8 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
                 ),
                 _buildResetButton(
                   'Product Distributions',
-                  () =>
-                      _clearTable('product_distributions', 'Product Distributions'),
+                  () => _clearTable(
+                      'product_distributions', 'Product Distributions'),
                 ),
                 _buildResetButton(
                   'Sales',

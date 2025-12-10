@@ -520,66 +520,31 @@ class _AddProductDialogState extends State<AddProductDialog> {
                           }
                         } else {
                           // Editing existing product
-                          // Check if price or quantity changed
-                          final bool priceChanged = 
-                              widget.product!.costPerUnit != costPerUnit;
-                          final bool quantityChanged = 
-                              widget.product!.quantity != quantity;
+                          // SIMPLIFIED FIX: Just update the record directly
+                          // The original "multiple outlets same product" issue was actually
+                          // a misunderstanding - each product assignment already has a unique ID
                           
-                          if (priceChanged || quantityChanged) {
-                            // Critical fields changed - create NEW record
-                            // This prevents overwriting prices for other outlets
-                            final newProduct = Product(
-                              id: const Uuid().v4(), // NEW ID!
-                              productName: productName,
-                              quantity: quantity,
-                              unit: unit,
-                              costPerUnit: costPerUnit,
-                              totalCost: quantity * costPerUnit,
-                              dateAdded: now,
-                              lastUpdated: now,
-                              description: description,
-                              outletId: outletId,
-                              createdAt: now,
+                          final updatedProduct = Product(
+                            id: widget.product!.id, // Keep same ID - ALWAYS
+                            productName: productName,
+                            quantity: quantity,
+                            unit: unit,
+                            costPerUnit: costPerUnit, // ← This CAN be updated
+                            totalCost: quantity * costPerUnit,
+                            dateAdded: widget.product!.dateAdded,
+                            lastUpdated: now,
+                            description: description,
+                            outletId: outletId,
+                            createdAt: widget.product!.createdAt,
+                          );
+                          
+                          await _syncService.updateProduct(updatedProduct);
+                          if (mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Product updated successfully'),
+                              ),
                             );
-                            
-                            // Delete the old record
-                            await _syncService.deleteProduct(widget.product!.id);
-                            
-                            // Insert new record
-                            await _syncService.insertProduct(newProduct);
-                            
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Product updated with new price/quantity'),
-                                ),
-                              );
-                            }
-                          } else {
-                            // Only description changed - safe to update existing record
-                            final updatedProduct = Product(
-                              id: widget.product!.id, // Keep same ID
-                              productName: productName,
-                              quantity: quantity,
-                              unit: unit,
-                              costPerUnit: costPerUnit,
-                              totalCost: quantity * costPerUnit,
-                              dateAdded: widget.product!.dateAdded,
-                              lastUpdated: now,
-                              description: description,
-                              outletId: outletId,
-                              createdAt: widget.product!.createdAt,
-                            );
-                            
-                            await _syncService.updateProduct(updatedProduct);
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text('Product updated successfully'),
-                                ),
-                              );
-                            }
                           }
                         }
                         

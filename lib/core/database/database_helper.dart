@@ -425,12 +425,10 @@ class DatabaseHelper {
       }
     }
 
-
     if (oldVersion < 16) {
       // Add product_name to sale_items table
       try {
-        await db.execute(
-            'ALTER TABLE sale_items ADD COLUMN product_name TEXT');
+        await db.execute('ALTER TABLE sale_items ADD COLUMN product_name TEXT');
       } catch (e) {
         // Column might already exist, ignore error
         print('Error adding product_name to sale_items: $e');
