@@ -40,23 +40,23 @@ class StockCountService {
   }
 
   // Get theoretical quantities for products in an outlet
+  // FIXED: Aggregated by product_name for consistency
   Future<Map<String, double>> getTheoreticalQuantities(String outletId) async {
     final db = await _databaseHelper.database;
 
     final result = await db.rawQuery('''
       SELECT 
-        p.id as product_id,
         p.product_name,
-        COALESCE(sb.balance_quantity, 0) as theoretical_quantity
+        SUM(COALESCE(sb.balance_quantity, 0)) as theoretical_quantity
       FROM products p
       LEFT JOIN stock_balances sb ON p.id = sb.product_id AND sb.outlet_id = ?
       WHERE p.outlet_id = ? OR sb.outlet_id = ?
-      GROUP BY p.id, p.product_name
+      GROUP BY p.product_name
     ''', [outletId, outletId, outletId]);
 
     Map<String, double> quantities = {};
     for (var row in result) {
-      quantities[row['product_id'] as String] =
+      quantities[row['product_name'] as String] =
           (row['theoretical_quantity'] as num).toDouble();
     }
 
@@ -64,23 +64,23 @@ class StockCountService {
   }
 
   // Get actual stocked-in quantities (given quantities) for products in an outlet
+  // FIXED: Aggregated by product_name for consistency
   Future<Map<String, double>> getStockedInQuantities(String outletId) async {
     final db = await _databaseHelper.database;
 
     final result = await db.rawQuery('''
       SELECT 
-        p.id as product_id,
         p.product_name,
-        COALESCE(sb.given_quantity, 0) as stocked_in_quantity
+        SUM(COALESCE(sb.given_quantity, 0)) as stocked_in_quantity
       FROM products p
       LEFT JOIN stock_balances sb ON p.id = sb.product_id AND sb.outlet_id = ?
       WHERE p.outlet_id = ? OR sb.outlet_id = ?
-      GROUP BY p.id, p.product_name
+      GROUP BY p.product_name
     ''', [outletId, outletId, outletId]);
 
     Map<String, double> quantities = {};
     for (var row in result) {
-      quantities[row['product_id'] as String] =
+      quantities[row['product_name'] as String] =
           (row['stocked_in_quantity'] as num).toDouble();
     }
 
@@ -88,23 +88,23 @@ class StockCountService {
   }
 
   // Get sold quantities for products in an outlet
+  // FIXED: Aggregated by product_name for consistency
   Future<Map<String, double>> getSoldQuantities(String outletId) async {
     final db = await _databaseHelper.database;
 
     final result = await db.rawQuery('''
       SELECT 
-        p.id as product_id,
         p.product_name,
-        COALESCE(sb.sold_quantity, 0) as sold_quantity
+        SUM(COALESCE(sb.sold_quantity, 0)) as sold_quantity
       FROM products p
       LEFT JOIN stock_balances sb ON p.id = sb.product_id AND sb.outlet_id = ?
       WHERE p.outlet_id = ? OR sb.outlet_id = ?
-      GROUP BY p.id, p.product_name
+      GROUP BY p.product_name
     ''', [outletId, outletId, outletId]);
 
     Map<String, double> quantities = {};
     for (var row in result) {
-      quantities[row['product_id'] as String] =
+      quantities[row['product_name'] as String] =
           (row['sold_quantity'] as num).toDouble();
     }
 
@@ -112,33 +112,42 @@ class StockCountService {
   }
 
   // Initialize stock count items with theoretical quantities
+  // FIXED: Aggregates products by name to avoid duplicates
   Future<List<StockCountItem>> initializeStockCountItems(
       String stockCountId, String outletId) async {
     final db = await _databaseHelper.database;
-    final theoreticalQuantities = await getTheoreticalQuantities(outletId);
 
-    // Get products for the outlet
+    // Get products AGGREGATED by product_name
+    // This ensures "Full Chicken" shows once with combined quantity (12kg + 30kg = 42kg)
     final products = await db.rawQuery('''
-      SELECT DISTINCT p.id, p.product_name, p.cost_per_unit
+      SELECT 
+        MIN(p.id) as id,
+        p.product_name,
+        AVG(p.cost_per_unit) as cost_per_unit,
+        SUM(COALESCE(sb.balance_quantity, 0)) as total_theoretical_quantity
       FROM products p
-      LEFT JOIN stock_balances sb ON p.id = sb.product_id
+      LEFT JOIN stock_balances sb ON p.id = sb.product_id AND sb.outlet_id = ?
       WHERE p.outlet_id = ? OR sb.outlet_id = ?
-    ''', [outletId, outletId]);
+      GROUP BY p.product_name
+      ORDER BY p.product_name ASC
+    ''', [outletId, outletId, outletId]);
 
     List<StockCountItem> items = [];
 
     for (var productData in products) {
       final productId = productData['id'] as String;
-      final theoreticalQty = theoreticalQuantities[productId] ?? 0.0;
+      final productName = productData['product_name'] as String;
+      final theoreticalQty = (productData['total_theoretical_quantity'] as num?)?.toDouble() ?? 0.0;
+      final costPerUnit = (productData['cost_per_unit'] as num?)?.toDouble() ?? 0.0;
 
       final item = StockCountItem(
         id: _uuid.v4(),
         stockCountId: stockCountId,
         productId: productId,
-        productName: productData['product_name'] as String,
+        productName: productName,
         theoreticalQuantity: theoreticalQty,
         actualQuantity: 0.0, // To be filled during count
-        costPerUnit: (productData['cost_per_unit'] as num).toDouble(),
+        costPerUnit: costPerUnit,
         createdAt: DateTime.now(),
       );
 
