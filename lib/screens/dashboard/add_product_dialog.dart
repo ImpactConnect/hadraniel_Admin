@@ -520,31 +520,50 @@ class _AddProductDialogState extends State<AddProductDialog> {
                           }
                         } else {
                           // Editing existing product
-                          // SIMPLIFIED FIX: Just update the record directly
-                          // The original "multiple outlets same product" issue was actually
-                          // a misunderstanding - each product assignment already has a unique ID
+                          final priceChanged = widget.product!.costPerUnit != costPerUnit;
                           
-                          final updatedProduct = Product(
-                            id: widget.product!.id, // Keep same ID - ALWAYS
-                            productName: productName,
-                            quantity: quantity,
-                            unit: unit,
-                            costPerUnit: costPerUnit, // ← This CAN be updated
-                            totalCost: quantity * costPerUnit,
-                            dateAdded: widget.product!.dateAdded,
-                            lastUpdated: now,
-                            description: description,
-                            outletId: outletId,
-                            createdAt: widget.product!.createdAt,
-                          );
-                          
-                          await _syncService.updateProduct(updatedProduct);
-                          if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Product updated successfully'),
-                              ),
+                          if (priceChanged) {
+                            // Price changed - use smart reassignment
+                            await _syncService.changeProductPrice(
+                              product: widget.product!,
+                              newPrice: costPerUnit,
+                              reason: 'Admin price update',
                             );
+                            
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Price updated! New assignment created with remaining stock.',
+                                  ),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+                            }
+                          } else {
+                            // Normal update (quantity or description changed)
+                            final updatedProduct = Product(
+                              id: widget.product!.id,
+                              productName: productName,
+                              quantity: quantity,
+                              unit: unit,
+                              costPerUnit: costPerUnit,
+                              totalCost: quantity * costPerUnit,
+                              dateAdded: widget.product!.dateAdded,
+                              lastUpdated: now,
+                              description: description,
+                              outletId: outletId,
+                              createdAt: widget.product!.createdAt,
+                            );
+                            
+                            await _syncService.updateProduct(updatedProduct);
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text('Product updated successfully'),
+                                ),
+                              );
+                            }
                           }
                         }
                         

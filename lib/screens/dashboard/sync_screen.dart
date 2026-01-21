@@ -425,6 +425,95 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
     }
   }
 
+  /// Downloads stock intake records from the cloud.
+  /// Shows a warning dialog about overwriting local data.
+  Future<void> _downloadStockIntakeFromCloud() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: Colors.orange[700]),
+            const SizedBox(width: 8),
+            const Text('Download Stock Intake'),
+          ],
+        ),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'This will download stock intake records from the cloud and may overwrite your local data.',
+              style: TextStyle(fontWeight: FontWeight.w500),
+            ),
+            SizedBox(height: 16),
+            Text(
+              '⚠️ Important:',
+              style: TextStyle(fontWeight: FontWeight.bold, color: Colors.orange),
+            ),
+            SizedBox(height: 8),
+            Text(
+              '• If you have unsynced stock intake records, click "Sync Now" first to upload them.\n'
+              '• Cloud records will replace matching local records.\n'
+              '• This operation cannot be undone.',
+              style: TextStyle(fontSize: 13),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: const Text('Cancel'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () => Navigator.of(context).pop(true),
+            icon: const Icon(Icons.cloud_download),
+            label: const Text('Download'),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: Colors.blue,
+              foregroundColor: Colors.white,
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() {
+        _isSyncing = true;
+        _syncError = null;
+      });
+
+      try {
+        await _syncService.syncStockIntakesFromSupabase();
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Stock intake records downloaded successfully'),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (e) {
+        setState(() {
+          _syncError = e.toString();
+        });
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error downloading stock intake: $e'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      } finally {
+        setState(() {
+          _isSyncing = false;
+        });
+      }
+    }
+  }
+
   Widget _buildSyncHeader() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -901,40 +990,63 @@ class _SyncScreenState extends State<SyncScreen> with TickerProviderStateMixin {
               style: TextStyle(color: Colors.grey, fontSize: 13),
             ),
             const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildResetButton(
-                  'Stock Intake',
-                  () => _clearTable('stock_intake', 'Stock Intake',
-                      warningMessage:
-                          'Clearing this without clearing Product Distributions may result in negative warehouse balances.'),
+                Expanded(
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _buildResetButton(
+                        'Stock Intake',
+                        () => _clearTable('stock_intake', 'Stock Intake',
+                            warningMessage:
+                                'Clearing this without clearing Product Distributions may result in negative warehouse balances.'),
+                      ),
+                      _buildResetButton(
+                        'Intake Balances',
+                        () => _clearTable('intake_balances', 'Intake Balances'),
+                      ),
+                      _buildResetButton(
+                        'Product Distributions',
+                        () => _clearTable(
+                            'product_distributions', 'Product Distributions'),
+                      ),
+                      _buildResetButton(
+                        'Sales',
+                        () => _clearTable('sales', 'Sales',
+                            warningMessage:
+                                'This will also clear all associated Sale Items.'),
+                      ),
+                      _buildResetButton(
+                        'Stock Balances',
+                        () => _clearTable('stock_balances', 'Stock Balances',
+                            warningMessage:
+                                'This will set the stock quantity at all outlets to ZERO.'),
+                      ),
+                    ],
+                  ),
                 ),
-                _buildResetButton(
-                  'Intake Balances',
-                  () => _clearTable('intake_balances', 'Intake Balances'),
-                ),
-                _buildResetButton(
-                  'Product Distributions',
-                  () => _clearTable(
-                      'product_distributions', 'Product Distributions'),
-                ),
-                _buildResetButton(
-                  'Sales',
-                  () => _clearTable('sales', 'Sales',
-                      warningMessage:
-                          'This will also clear all associated Sale Items.'),
-                ),
-                _buildResetButton(
-                  'Stock Balances',
-                  () => _clearTable('stock_balances', 'Stock Balances',
-                      warningMessage:
-                          'This will set the stock quantity at all outlets to ZERO.'),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: _isSyncing ? null : _downloadStockIntakeFromCloud,
+                  icon: const Icon(Icons.cloud_download, size: 16),
+                  label: const Text('Download Intake', style: TextStyle(fontSize: 13)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue[50],
+                    foregroundColor: Colors.blue[800],
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    elevation: 0,
+                    side: BorderSide(color: Colors.blue[200]!),
+                    minimumSize: Size.zero, 
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
               ],
             ),
             const Divider(height: 32),
+            const SizedBox(height: 12),
             SizedBox(
               width: double.infinity,
               child: OutlinedButton.icon(

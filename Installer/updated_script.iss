@@ -1,5 +1,5 @@
 #define MyAppName "Hadraniel Admin"
-#define MyAppVersion "2.5"
+#define MyAppVersion "2.6"
 #define MyAppPublisher "Hadraniel Solutions"
 #define MyAppURL "https://hadraniel.com"
 #define MyAppExeName "hadraniel_admin.exe"

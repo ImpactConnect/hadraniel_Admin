@@ -67,6 +67,7 @@ class StockCountService {
   // FIXED: Aggregated by product_name for consistency
   Future<Map<String, double>> getStockedInQuantities(String outletId) async {
     final db = await _databaseHelper.database;
+    print('DEBUG: Fetching stocked in quantities for outlet: $outletId');
 
     final result = await db.rawQuery('''
       SELECT 
@@ -74,15 +75,19 @@ class StockCountService {
         SUM(COALESCE(sb.given_quantity, 0)) as stocked_in_quantity
       FROM products p
       LEFT JOIN stock_balances sb ON p.id = sb.product_id AND sb.outlet_id = ?
-      WHERE p.outlet_id = ? OR sb.outlet_id = ?
+      WHERE (p.outlet_id = ? OR sb.outlet_id = ?)
+        AND (p.status IS NULL OR p.status = 'active')
       GROUP BY p.product_name
     ''', [outletId, outletId, outletId]);
+    
+    print('DEBUG: StockedIn Raw Result: $result');
 
     Map<String, double> quantities = {};
     for (var row in result) {
       quantities[row['product_name'] as String] =
           (row['stocked_in_quantity'] as num).toDouble();
     }
+    print('DEBUG: Parsed StockedIn Quantities: $quantities');
 
     return quantities;
   }
@@ -91,6 +96,7 @@ class StockCountService {
   // FIXED: Aggregated by product_name for consistency
   Future<Map<String, double>> getSoldQuantities(String outletId) async {
     final db = await _databaseHelper.database;
+    print('DEBUG: Fetching sold quantities for outlet: $outletId');
 
     final result = await db.rawQuery('''
       SELECT 
@@ -98,15 +104,19 @@ class StockCountService {
         SUM(COALESCE(sb.sold_quantity, 0)) as sold_quantity
       FROM products p
       LEFT JOIN stock_balances sb ON p.id = sb.product_id AND sb.outlet_id = ?
-      WHERE p.outlet_id = ? OR sb.outlet_id = ?
+      WHERE (p.outlet_id = ? OR sb.outlet_id = ?)
+        AND (p.status IS NULL OR p.status = 'active')
       GROUP BY p.product_name
     ''', [outletId, outletId, outletId]);
+
+    print('DEBUG: Sold Raw Result: $result');
 
     Map<String, double> quantities = {};
     for (var row in result) {
       quantities[row['product_name'] as String] =
           (row['sold_quantity'] as num).toDouble();
     }
+    print('DEBUG: Parsed Sold Quantities: $quantities');
 
     return quantities;
   }
@@ -127,7 +137,8 @@ class StockCountService {
         SUM(COALESCE(sb.balance_quantity, 0)) as total_theoretical_quantity
       FROM products p
       LEFT JOIN stock_balances sb ON p.id = sb.product_id AND sb.outlet_id = ?
-      WHERE p.outlet_id = ? OR sb.outlet_id = ?
+      WHERE (p.outlet_id = ? OR sb.outlet_id = ?)
+        AND (p.status IS NULL OR p.status = 'active')
       GROUP BY p.product_name
       ORDER BY p.product_name ASC
     ''', [outletId, outletId, outletId]);

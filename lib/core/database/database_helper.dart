@@ -71,7 +71,7 @@ class DatabaseHelper {
     final database = await dbFactory.openDatabase(
       path,
       options: OpenDatabaseOptions(
-        version: 17,
+        version: 18,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
         onOpen: _onOpen,
@@ -90,7 +90,55 @@ class DatabaseHelper {
     await db.execute('PRAGMA synchronous=NORMAL');
     // Set cache size to 10MB for better performance
     await db.execute('PRAGMA cache_size=10000');
+    // Set busy timeout to 5 seconds to prevent indefinite locks
+    await db.execute('PRAGMA busy_timeout=5000');
     print('Database opened with WAL mode and optimizations enabled');
+    
+    // Auto-migration: Add missing columns for v18 if they don't exist
+    // This ensures seamless migration without user intervention
+    await _ensureV18Columns(db);
+  }
+
+  /// Ensures v18 columns exist (for automatic migration)
+  /// Checks and adds status tracking columns if missing
+  Future<void> _ensureV18Columns(Database db) async {
+    try {
+      // Check if status column exists
+      final result = await db.rawQuery("PRAGMA table_info(products)");
+      final hasStatus = result.any((col) => col['name'] == 'status');
+      
+      if (!hasStatus) {
+        print('Auto-migration: Adding v18 columns to products table...');
+        
+        // Add status column
+        await db.execute(
+          'ALTER TABLE products ADD COLUMN status TEXT DEFAULT "active"'
+        );
+        
+        // Add closed_at column
+        await db.execute(
+          'ALTER TABLE products ADD COLUMN closed_at TEXT'
+        );
+        
+        // Add closed_reason column
+        await db.execute(
+          'ALTER TABLE products ADD COLUMN closed_reason TEXT'
+        );
+        
+        // Set all existing products to active
+        await db.execute(
+          "UPDATE products SET status = 'active' WHERE status IS NULL"
+        );
+        
+        // Update database version
+        await db.execute('PRAGMA user_version = 18');
+        
+        print('✅ Auto-migration completed: v18 columns added');
+      }
+    } catch (e) {
+      print('Auto-migration check: $e (columns may already exist)');
+      // Non-fatal - columns might already exist
+    }
   }
 
   Future<void> _onUpgrade(Database db, int oldVersion, int newVersion) async {
@@ -471,6 +519,35 @@ class DatabaseHelper {
       // 4. Drop backup table
       await db.execute('DROP TABLE sale_items_backup');
     }
+
+    if (oldVersion < 18) {
+      // Add product status tracking for price change history
+      // This allows closing old assignments and creating new ones at different prices
+      try {
+        await db.execute('ALTER TABLE products ADD COLUMN status TEXT DEFAULT "active"');
+        print('Added status column to products table');
+      } catch (e) {
+        print('Error adding status column (may already exist): $e');
+      }
+
+      try {
+        await db.execute('ALTER TABLE products ADD COLUMN closed_at TEXT');
+        print('Added closed_at column to products table');
+      } catch (e) {
+        print('Error adding closed_at column (may already exist): $e');
+      }
+
+      try {
+        await db.execute('ALTER TABLE products ADD COLUMN closed_reason TEXT');
+        print('Added closed_reason column to products table');
+      } catch (e) {
+        print('Error adding closed_reason column (may already exist): $e');
+      }
+
+      // Set all existing products to 'active' status
+      await db.execute("UPDATE products SET status = 'active' WHERE status IS NULL");
+      print('Migration v18: Product status tracking completed');
+    }
   }
 
   Future<void> _onCreate(Database db, int version) async {
@@ -826,6 +903,46 @@ class DatabaseHelper {
       await txn.delete('stock_adjustments');
       await txn.delete('stock_counts');
     });
+  }
+
+  // Check database integrity for corruption detection
+  Future<bool> checkDatabaseIntegrity() async {
+    try {
+      final db = await database;
+      final result = await db.rawQuery('PRAGMA integrity_check');
+      final isOk = result.first['integrity_check'] == 'ok';
+      
+      if (!isOk) {
+        print('Database integrity check failed: ${result.first}');
+      } else {
+        print('Database integrity check passed');
+      }
+      
+      return isOk;
+    } catch (e) {
+      print('Database integrity check error: $e');
+      return false;
+    }
+  }
+
+  // Repair database by closing and reinitializing
+  Future<void> repairDatabase() async {
+    print('Attempting database repair...');
+    try {
+      // Close current connection
+      if (_database != null) {
+        await _database!.close();
+        _database = null;
+      }
+      
+      // Reinitialize (will trigger onCreate/onOpen)
+      _database = await _initDatabase();
+      
+      print('Database repaired successfully');
+    } catch (e) {
+      print('Database repair failed: $e');
+      rethrow;
+    }
   }
 
   Future<void> deleteDatabase() async {

@@ -20,6 +20,7 @@ import 'screens/dashboard/expenditures_screen.dart';
 import 'screens/stock_intake_screen.dart';
 import 'screens/dashboard/stock_count_screen.dart';
 import 'screens/dashboard/marketers_screen.dart';
+import 'core/services/app_health_service.dart';
 
 Future<void> _initializeSupabaseWithRetry({
   required String url,
@@ -130,8 +131,20 @@ void main() async {
       anonKey: dotenv.env['SUPABASE_ANON_KEY'] ?? '',
     );
 
+    // Run startup diagnostics to detect and repair crash-related issues
+    print('Running startup diagnostics...');
+    final AppHealthService healthService = AppHealthService();
+    final AppHealthReport healthReport = await healthService.runStartupDiagnostics();
+    
+    if (!healthReport.isHealthy) {
+      print('App Health Issues: ${healthReport.issues}');
+      print('Auto-fixes Applied: ${healthReport.fixes}');
+    } else {
+      print('App health check: All systems operational');
+    }
+
     print('App initialization completed successfully');
-    runApp(const MyApp());
+    runApp(MyApp(healthReport: healthReport));
   } catch (e, stackTrace) {
     print('Error during app initialization: $e');
     print('Stack trace: $stackTrace');
@@ -176,7 +189,9 @@ void main() async {
 }
 
 class MyApp extends StatefulWidget {
-  const MyApp({super.key});
+  final AppHealthReport? healthReport;
+  
+  const MyApp({super.key, this.healthReport});
 
   @override
   State<MyApp> createState() => _MyAppState();
@@ -214,7 +229,38 @@ class _MyAppState extends State<MyApp> {
       setState(() {
         _isLoading = false;
       });
+      
+      // Show health notification if needed
+      if (widget.healthReport?.needsUserNotification == true) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _showHealthNotification();
+        });
+      }
     }
+  }
+  
+  void _showHealthNotification() {
+    if (!mounted) return;
+    
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.healing, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('App Recovery'),
+          ],
+        ),
+        content: Text(widget.healthReport!.summary),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override

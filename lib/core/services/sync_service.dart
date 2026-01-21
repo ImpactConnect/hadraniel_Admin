@@ -1140,6 +1140,127 @@ class SyncService {
     }
   }
 
+  /// Changes product price by closing old assignment and creating new one
+  /// This preserves historical sales data while allowing price updates
+  Future<void> changeProductPrice({
+    required Product product,
+    required double newPrice,
+    String? reason,
+  }) async {
+    final db = await _dbHelper.database;
+    
+    String? newAssignmentId;
+
+    await db.transaction((txn) async {
+      // 1. Get remaining quantity from stock balance
+      final balanceResult = await txn.query(
+        'stock_balances',
+        where: 'product_id = ? AND outlet_id = ?',
+        whereArgs: [product.id, product.outletId],
+      );
+      
+      final double remainingQty;
+      String? balanceId;
+      
+      if (balanceResult.isNotEmpty) {
+        final balance = balanceResult.first;
+        remainingQty = (balance['balance_quantity'] as num?)?.toDouble() ?? 0.0;
+        balanceId = balance['id'] as String?;
+      } else {
+        // No balance record, use product quantity
+        remainingQty = product.quantity;
+      }
+      
+      print('Price change for ${product.productName}: ${product.costPerUnit} → $newPrice, Remaining: $remainingQty');
+      
+      // 2. If no remaining stock, just update price in place
+      if (remainingQty <= 0) {
+        await txn.update('products', {
+          'cost_per_unit': newPrice,
+          'total_cost': 0.0,
+          'last_updated': DateTime.now().toIso8601String(),
+          'is_synced': 0,
+        }, where: 'id = ?', whereArgs: [product.id]);
+        
+        print('No remaining stock, updated price in place');
+        return;
+      }
+      
+      // 3. Close old assignment
+      final now = DateTime.now();
+      final closedReason = reason ?? 
+          'Price change: ₦${product.costPerUnit.toStringAsFixed(2)} → ₦${newPrice.toStringAsFixed(2)}';
+      
+      await txn.update('products', {
+        'status': 'closed',
+        'closed_at': now.toIso8601String(),
+        'closed_reason': closedReason,
+        'last_updated': now.toIso8601String(),
+        'is_synced': 0,
+      }, where: 'id = ?', whereArgs: [product.id]);
+      
+      print('Closed old assignment: ${product.id}');
+      
+      // 4. Create new assignment with remaining quantity at new price
+      final newProduct = Product(
+        id: const Uuid().v4(),
+        productName: product.productName,
+        quantity: remainingQty,
+        unit: product.unit,
+        costPerUnit: newPrice,
+        totalCost: remainingQty * newPrice,
+        dateAdded: now,
+        lastUpdated: now,
+        description: product.description,
+        outletId: product.outletId,
+        createdAt: now,
+        status: 'active',
+        isSynced: false,
+      );
+      
+      await txn.insert('products', newProduct.toMap());
+      print('Created new assignment: ${newProduct.id} with $remainingQty${product.unit} @ ₦$newPrice');
+      newAssignmentId = newProduct.id;
+      
+      // 5. Update stock balance to point to new product
+      if (balanceId != null) {
+        await txn.update('stock_balances', {
+          'product_id': newProduct.id,
+          'given_quantity': remainingQty,
+          'balance_quantity': remainingQty,
+          'sold_quantity': 0.0,
+          'last_updated': now.toIso8601String(),
+          'synced': 0,
+        }, where: 'id = ?', whereArgs: [balanceId]);
+        
+        print('Updated stock balance to new product');
+      } else {
+        // Create new balance if doesn't exist
+        await txn.insert('stock_balances', {
+          'id': const Uuid().v4(),
+          'product_id': newProduct.id,
+          'outlet_id': product.outletId,
+          'given_quantity': remainingQty,
+          'sold_quantity': 0.0,
+          'balance_quantity': remainingQty,
+          'last_updated': now.toIso8601String(),
+          'created_at': now.toIso8601String(),
+          'synced': 0,
+        });
+        
+        print('Created new stock balance');
+      }
+    });
+
+    // 6. Add to sync queue (outside transaction to avoid deadlocks)
+    await _addToSyncQueue('products', product.id); // Closed or updated product
+    if (newAssignmentId != null) {
+      await _addToSyncQueue('products', newAssignmentId!); // New product
+    }
+    
+    print('✅ Price change completed: ${product.productName} @ ₦$newPrice');
+  }
+
   Future<List<Outlet>> getAllLocalOutlets() async {
     try {
       final db = await _dbHelper.database;

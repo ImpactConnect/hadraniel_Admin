@@ -133,6 +133,9 @@ class Product {
   final String outletId;
   final DateTime createdAt;
   final bool isSynced;
+  final String status; // 'active' or 'closed'
+  final DateTime? closedAt;
+  final String? closedReason;
 
   Product({
     required this.id,
@@ -147,6 +150,9 @@ class Product {
     required this.outletId,
     required this.createdAt,
     this.isSynced = false,
+    this.status = 'active',
+    this.closedAt,
+    this.closedReason,
   });
 
   factory Product.fromMap(Map<String, dynamic> map) {
@@ -184,6 +190,11 @@ class Product {
         }
         return false;
       })(),
+      status: map['status']?.toString() ?? 'active',
+      closedAt: map['closed_at'] != null
+          ? DateTime.parse(map['closed_at'] as String)
+          : null,
+      closedReason: map['closed_reason']?.toString(),
     );
   }
 
@@ -201,6 +212,9 @@ class Product {
       'outlet_id': outletId,
       'created_at': createdAt.toIso8601String(),
       'is_synced': isSynced ? 1 : 0,
+      'status': status,
+      'closed_at': closedAt?.toIso8601String(),
+      'closed_reason': closedReason,
     };
   }
 
@@ -217,6 +231,9 @@ class Product {
     String? outletId,
     DateTime? createdAt,
     bool? isSynced,
+    String? status,
+    DateTime? closedAt,
+    String? closedReason,
   }) {
     return Product(
       id: id ?? this.id,
@@ -231,6 +248,9 @@ class Product {
       outletId: outletId ?? this.outletId,
       createdAt: createdAt ?? this.createdAt,
       isSynced: isSynced ?? this.isSynced,
+      status: status ?? this.status,
+      closedAt: closedAt ?? this.closedAt,
+      closedReason: closedReason ?? this.closedReason,
     );
   }
 

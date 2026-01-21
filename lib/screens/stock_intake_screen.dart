@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:uuid/uuid.dart';
 import 'dart:io';
+import 'dart:convert';
 import 'package:csv/csv.dart';
 import 'package:pdf/pdf.dart';
 import 'package:pdf/widgets.dart' as pw;
@@ -39,6 +40,7 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   List<StockIntake> _stockIntakes = [];
   List<IntakeBalance> _intakeBalances = [];
   bool _isLoading = true;
+  bool _isLoadingProducts = false;
   String _searchQuery = '';
   String _selectedUnit = 'Pcs';
   DateTime? _startDate;
@@ -261,17 +263,41 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
   }
 
   Future<void> _initializeProductsList() async {
-    await _loadCustomProducts();
-    // Combine custom products with base predefined products
-    _predefinedProducts = [
-      ...await _getCustomProducts(),
-      ..._basePredefinedProducts
-    ];
+    setState(() => _isLoadingProducts = true);
+    
+    try {
+      final customProducts = await _getCustomProducts();
+      _predefinedProducts = [...customProducts, ..._basePredefinedProducts];
+    } catch (e) {
+      debugPrint('Error initializing products: $e');
+      // Fallback to base products only
+      _predefinedProducts = _basePredefinedProducts;
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingProducts = false);
+      }
+    }
   }
 
   Future<List<String>> _getCustomProducts() async {
-    final prefs = await SharedPreferences.getInstance();
-    return prefs.getStringList('custom_products') ?? [];
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final products = prefs.getStringList('custom_products');
+      
+      if (products == null) {
+        debugPrint('Warning: custom_products is null, using empty list');
+        return [];
+      }
+      
+      // Validate and filter corrupted entries
+      return products
+          .where((p) => p.isNotEmpty && p.length < 200)
+          .toList();
+    } catch (e) {
+      debugPrint('Error loading custom products: $e');
+      // Attempt to restore from backup
+      return await _restoreCustomProductsFromBackup();
+    }
   }
 
   Future<void> _loadCustomProducts() async {
@@ -291,11 +317,57 @@ class _StockIntakeScreenState extends State<StockIntakeScreen>
       customProducts.insert(0, productName); // Add to the beginning
       await prefs.setStringList('custom_products', customProducts);
 
+      // Auto-backup after save
+      await _backupCustomProducts();
+
       // Update the predefined products list
       setState(() {
         _predefinedProducts = [...customProducts, ..._basePredefinedProducts];
       });
     }
+  }
+
+  Future<void> _backupCustomProducts() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final products = prefs.getStringList('custom_products') ?? [];
+      
+      if (products.isEmpty) return;
+      
+      // Backup to application documents directory
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/custom_products_backup.json');
+      await file.writeAsString(jsonEncode(products));
+      
+      debugPrint('Custom products backed up: ${products.length} items');
+    } catch (e) {
+      debugPrint('Backup failed: $e');
+    }
+  }
+
+  Future<List<String>> _restoreCustomProductsFromBackup() async {
+    try {
+      final directory = await getApplicationDocumentsDirectory();
+      final file = File('${directory.path}/custom_products_backup.json');
+      
+      if (await file.exists()) {
+        final contents = await file.readAsString();
+        final List<dynamic> decoded = jsonDecode(contents);
+        final products = decoded.cast<String>();
+        
+        debugPrint('Restored ${products.length} products from backup');
+        
+        // Restore to SharedPreferences
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setStringList('custom_products', products);
+        
+        return products;
+      }
+    } catch (e) {
+      debugPrint('Restore from backup failed: $e');
+    }
+    
+    return [];
   }
 
   @override

@@ -1307,20 +1307,29 @@ class _StockCountScreenState extends State<StockCountScreen>
                               // Total Stocked-in (Actual Given Quantity)
                               Expanded(
                                 flex: 2,
-                                child: Text(
-                                  (_stockedInQuantities[item.productId] ?? 0.0)
-                                      .toStringAsFixed(3),
-                                  textAlign: TextAlign.center,
-                                  style: const TextStyle(
-                                    fontWeight: FontWeight.w500,
-                                  ),
+                                child: Builder(
+                                  builder: (context) {
+                                    final val = _stockedInQuantities[item.productName] ?? 0.0;
+                                    // Debug only first few items to avoid spam
+                                    if (index < 3) {
+                                      print('DEBUG UI [${item.productName}]: StockedIn Map has key? ${_stockedInQuantities.containsKey(item.productName)} -> Value: $val');
+                                      print('DEBUG UI Keys (first 3): ${_stockedInQuantities.keys.take(3).toList()}');
+                                    }
+                                    return Text(
+                                      val.toStringAsFixed(3),
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        fontWeight: FontWeight.w500,
+                                      ),
+                                    );
+                                  }
                                 ),
                               ),
                               // Total Sold (Actual Sold Quantity)
                               Expanded(
                                 flex: 2,
                                 child: Text(
-                                  (_soldQuantities[item.productId] ?? 0.0)
+                                  (_soldQuantities[item.productName] ?? 0.0)
                                       .toStringAsFixed(3),
                                   textAlign: TextAlign.center,
                                   style: const TextStyle(

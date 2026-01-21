@@ -175,12 +175,26 @@ class Sidebar extends StatelessWidget {
               title: 'Logout',
               colorScheme: colorScheme,
               onTap: () async {
-                await _authService.signOut();
-                if (context.mounted) {
-                  Navigator.of(context).pushNamedAndRemoveUntil(
-                    '/login',
-                    (route) => false, // Clear the entire navigation stack
+                try {
+                  // Add 5-second timeout to prevent indefinite hang
+                  await _authService.signOut().timeout(
+                    const Duration(seconds: 5),
+                    onTimeout: () {
+                      debugPrint('Logout timeout - forcing logout');
+                      return;
+                    },
                   );
+                } catch (e) {
+                  debugPrint('Logout error: $e');
+                  // Continue to logout screen even on error
+                } finally {
+                  // Always navigate to login, regardless of signOut result
+                  if (context.mounted) {
+                    Navigator.of(context).pushNamedAndRemoveUntil(
+                      '/login',
+                      (route) => false, // Clear the entire navigation stack
+                    );
+                  }
                 }
               },
             ),
